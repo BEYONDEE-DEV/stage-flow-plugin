@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+/.stageflow/
+.stageflow/hook-state/
+**/.stageflow/hook-state/
+.test-tmp/
+tests/.tmp/

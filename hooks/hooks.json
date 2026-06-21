@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stageflow_hook.py user_prompt_submit",
+            "timeout": 15,
+            "statusMessage": "Stageflow preflight"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stageflow_hook.py stop",
+            "timeout": 15,
+            "statusMessage": "Stageflow stop check"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stageflow_hook.py subagent_start",
+            "timeout": 15,
+            "statusMessage": "Stageflow subagent start"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/stageflow_hook.py subagent_stop",
+            "timeout": 15,
+            "statusMessage": "Stageflow subagent stop"
+          }
+        ]
+      }
+    ]
+  }
+}

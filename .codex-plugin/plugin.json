@@ -1,0 +1,26 @@
+{
+  "name": "stageflow",
+  "version": "0.1.17",
+  "description": "Standardize Codex planning workflows with durable request artifacts and validation gates.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Stageflow",
+    "shortDescription": "Plan Codex work with validated request artifacts.",
+    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, and proceed from a validated plan.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Planning",
+      "Workflow",
+      "Validation"
+    ],
+    "defaultPrompt": [
+      "Use Stageflow to plan this change before coding.",
+      "Use Stageflow to clarify this request and create a validated plan.",
+      "Resume the current .stageflow workflow request."
+    ]
+  }
+}
