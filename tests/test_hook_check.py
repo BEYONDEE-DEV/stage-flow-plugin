@@ -1,23 +1,32 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_CHECK = ROOT / "scripts" / "stageflow_hook_check.py"
 REQUEST_ID = "20260621-1200-test-request"
-TMP_ROOT = ROOT / "tests" / ".tmp"
+TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(ROOT / "tests" / "tmp")))
 TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def temp_project() -> tempfile.TemporaryDirectory[str]:
-    return tempfile.TemporaryDirectory(dir=TMP_ROOT)
-
+@contextlib.contextmanager
+def temp_project():
+    path = TMP_ROOT / f"case-{uuid.uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=False)
+    try:
+        yield str(path)
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 STAGE_RULE_IDS = {
     "requirements": ["REQ-RULE-001", "REQ-RULE-002", "REQ-RULE-003", "REQ-RULE-004"],
@@ -93,16 +102,21 @@ STAGES = [
 
 
 class HookCheckFourStageTests(unittest.TestCase):
-    def run_hook(self, root: Path, event: str, payload: dict[str, object]) -> dict[str, object]:
+    def run_hook(
+        self,
+        root: Path,
+        event: str,
+        payload: dict[str, object],
+        expected_returncode: int = 0,
+    ) -> dict[str, object]:
         proc = subprocess.run(
             [sys.executable, str(HOOK_CHECK), "--event", event, "--root", str(root)],
             input=json.dumps(payload),
             text=True,
             capture_output=True,
         )
-        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(proc.returncode, expected_returncode, proc.stdout + proc.stderr)
         return json.loads(proc.stdout)
-
     def create_project(self, root: Path, state_phase: str = "requirements") -> None:
         stageflow = root / ".stageflow"
         request_dir = stageflow / "requests" / REQUEST_ID
@@ -242,6 +256,8 @@ Approved.
             result = self.run_hook(Path(tmp), "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "REQUEST_REQUIRED")
             self.assertTrue(result["request_creation_required"])
+            self.assertTrue(result["preflight_required"])
+            self.assertIn("request-required", result["preflight_marker"])
 
     def test_plain_prompt_without_current_prepasses(self) -> None:
         with temp_project() as tmp:
@@ -275,9 +291,71 @@ Approved.
             root = Path(tmp)
             self.create_project(root, "requirements")
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "status answered"})
-            self.assertEqual(result["status"], "WARNING")
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "status answered"},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["decision"], "block")
             self.assertIn("preflight marker", "\n".join(result["warnings"]))
+
+    def test_explicit_workflow_without_current_blocks_stop_if_not_created(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": marker + "\nstatus answered"},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("session current pointer", "\n".join(result["warnings"]))
+
+    def test_pre_tool_use_blocks_non_stageflow_write_before_implementation_plan_passes(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "implementation")
+            approval = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation-plan" / "approval.md"
+            approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["implementation_entry_gate"]["status"], "FAIL")
+
+    def test_pre_tool_use_allows_stageflow_artifact_write_before_implementation_plan_passes(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "requirements")
+            approval = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation-plan" / "approval.md"
+            approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-requirements/requirements.md"},
+                },
+            )
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertTrue(result["stageflow_artifact_write"])
+
+    def test_pre_tool_use_allows_read_only_shell_command(self) -> None:
+        with temp_project() as tmp:
+            result = self.run_hook(
+                Path(tmp),
+                "pre_tool_use",
+                {"session_id": "session-1", "tool_name": "shell_command", "tool_input": {"command": "rg Stageflow"}},
+            )
+            self.assertEqual(result["status"], "PREPASS")
 
     def test_completion_like_stop_runs_all_validation(self) -> None:
         with temp_project() as tmp:

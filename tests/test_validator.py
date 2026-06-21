@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -8,19 +9,25 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_stageflow.py"
 REFERENCE_ROOT = ROOT / "skills" / "stageflow" / "references"
 REQUEST_ID = "20260621-1200-test-request"
-TMP_ROOT = ROOT / "tests" / ".tmp"
+TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(ROOT / "tests" / "tmp")))
 TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
-def temp_project() -> tempfile.TemporaryDirectory[str]:
-    return tempfile.TemporaryDirectory(dir=TMP_ROOT)
-
+@contextlib.contextmanager
+def temp_project():
+    path = TMP_ROOT / f"case-{uuid.uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=False)
+    try:
+        yield str(path)
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 STAGE_RULE_IDS = {
     "requirements": ["REQ-RULE-001", "REQ-RULE-002", "REQ-RULE-003", "REQ-RULE-004"],

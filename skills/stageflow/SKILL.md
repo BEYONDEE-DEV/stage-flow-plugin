@@ -1,6 +1,6 @@
 ---
 name: stageflow
-description: Use when the user explicitly asks to use Stageflow, workflow, stageflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed four-stage loop: requirements, service plan, implementation plan, and implementation; every stage requires a goal handoff, a stage artifact, subagent review, and explicit user approval before the next stage.
+description: "Use when the user explicitly asks to use Stageflow, workflow, stageflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed four-stage loop: requirements, service plan, implementation plan, and implementation; every stage requires a goal handoff, a stage artifact, subagent review, and explicit user approval before the next stage."
 ---
 
 # Stageflow
@@ -128,12 +128,12 @@ The validator is an auditor. Treat failures as the next action to repair.
 
 ## Hooks
 
-Plugin hooks are read-only guards except for runtime records under `.stageflow/hook-state/`.
+Plugin hooks are read-only for durable workflow artifacts except for runtime records under `.stageflow/hook-state/`. They may block premature tool use.
 
+- `PreToolUse` blocks non-Stageflow file edits until `implementation-plan` validates, while allowing `.stageflow/**` artifact creation and repair.
 - `UserPromptSubmit` checks the active stage and emits a preflight marker.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds.
-- `Stop` checks that a required preflight marker appeared in the assistant response.
-- Completion-like responses validate `--phase all`.
+- `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
 - Subagent lifecycle hooks record lightweight observation state only.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.
