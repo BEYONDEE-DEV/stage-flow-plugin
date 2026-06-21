@@ -255,6 +255,8 @@ Approved.
         with temp_project() as tmp:
             result = self.run_hook(Path(tmp), "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "REQUEST_REQUIRED")
+            self.assertEqual(result["turn_start_action"], "create_request")
+            self.assertTrue(result["state_handling_required"])
             self.assertTrue(result["request_creation_required"])
             self.assertTrue(result["preflight_required"])
             self.assertIn("request-required", result["preflight_marker"])
@@ -263,7 +265,23 @@ Approved.
         with temp_project() as tmp:
             result = self.run_hook(Path(tmp), "user_prompt_submit", {"session_id": "session-1", "prompt": "hello"})
             self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["turn_start_action"], "none")
+            self.assertFalse(result["state_handling_required"])
             self.assertFalse(result["preflight_required"])
+
+    def test_invalid_current_requires_pointer_repair(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            current_dir = root / ".stageflow" / "sessions" / "session-1"
+            current_dir.mkdir(parents=True)
+            (current_dir / "current.json").write_text(
+                json.dumps({"request_id": "missing-request", "phase": "requirements"}, indent=2),
+                encoding="utf-8",
+            )
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(result["status"], "INVALID_CURRENT")
+            self.assertEqual(result["turn_start_action"], "repair_current_pointer")
+            self.assertTrue(result["state_handling_required"])
 
     def test_active_request_emits_preflight_marker(self) -> None:
         with temp_project() as tmp:
@@ -271,8 +289,20 @@ Approved.
             self.create_project(root, "requirements")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "OK")
+            self.assertEqual(result["turn_start_action"], "continue_current_stage")
+            self.assertFalse(result["state_handling_required"])
             self.assertTrue(result["preflight_required"])
             self.assertIn("Stageflow preflight", result["preflight_marker"])
+            self.assertEqual(result["validation"]["status"], "PASS")
+
+    def test_completed_current_requires_new_request(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "completed")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(result["status"], "COMPLETED_CURRENT")
+            self.assertEqual(result["turn_start_action"], "start_new_request")
+            self.assertTrue(result["state_handling_required"])
             self.assertEqual(result["validation"]["status"], "PASS")
 
     def test_implementation_prompt_checks_implementation_plan_gate(self) -> None:
@@ -282,7 +312,9 @@ Approved.
             approval = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation-plan" / "approval.md"
             approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow implement"})
-            self.assertEqual(result["status"], "WARNING")
+            self.assertEqual(result["status"], "IMPLEMENTATION_BLOCKED")
+            self.assertEqual(result["turn_start_action"], "repair_implementation_plan_gate")
+            self.assertTrue(result["state_handling_required"])
             self.assertEqual(result["implementation_entry_gate"]["status"], "FAIL")
             self.assertIn("implementation requested before implementation-plan stage passed", result["warnings"])
 

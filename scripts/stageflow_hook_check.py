@@ -181,6 +181,8 @@ def base_result(event: str, root: Path) -> dict[str, Any]:
         "status": "PREPASS",
         "severity": "info",
         "preflight_required": False,
+        "turn_start_action": "none",
+        "state_handling_required": False,
         "warnings": [],
     }
 
@@ -203,6 +205,18 @@ def block_result(result: dict[str, Any], reason: str) -> None:
         warnings.append(reason)
 
 
+def set_turn_start_action(
+    result: dict[str, Any],
+    action: str,
+    instruction: str,
+    *,
+    required: bool = True,
+) -> None:
+    result["turn_start_action"] = action
+    result["turn_start_instruction"] = instruction
+    result["state_handling_required"] = required
+
+
 def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     prompt = extract_prompt(payload)
     explicit = is_explicit_workflow(prompt)
@@ -221,6 +235,11 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
                     "reason": "explicit Stageflow prompt has no session current pointer",
                 }
             )
+            set_turn_start_action(
+                result,
+                "create_request",
+                "Inspect the project, create `.stageflow` request scaffolding, and write the session current pointer before any substantive workflow answer.",
+            )
             write_turn_state(root, payload, result)
         return result
 
@@ -236,6 +255,11 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
                 "preflight_marker": marker_for(request_id or "none", "invalid-current", "FAIL"),
                 "reason": "session current pointer does not reference a valid request",
             }
+        )
+        set_turn_start_action(
+            result,
+            "repair_current_pointer",
+            "Repair or replace the session current pointer so it references an existing `.stageflow/requests/<request-id>` with matching `state.json` before continuing.",
         )
         write_turn_state(root, payload, result)
         return result
@@ -254,15 +278,35 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
                 "reason": "current request phase is not allowed",
             }
         )
+        set_turn_start_action(
+            result,
+            "repair_current_state",
+            "Repair `state.json` and the session current pointer so the phase is one of the allowed Stageflow phases before continuing.",
+        )
         write_turn_state(root, payload, result)
         return result
 
     validation = run_validator(root, validation_phase, payload)
     marker = marker_for(request_id, phase, validation["status"])
+    status = "OK" if validation["status"] == "PASS" else "WARNING"
+    severity = "info" if validation["status"] == "PASS" else "warning"
+    action = "continue_current_stage" if validation["status"] == "PASS" else "repair_current_stage"
+    instruction = (
+        "Continue from the validated current Stageflow stage and do not advance until its goal, artifact, subagent review, and approval gates pass."
+        if validation["status"] == "PASS"
+        else "Repair the current Stageflow stage artifacts until the current-stage validator passes before advancing or answering as if the stage is ready."
+    )
+    if phase == "completed":
+        status = "COMPLETED_CURRENT" if validation["status"] == "PASS" else "WARNING"
+        severity = "warning"
+        action = "start_new_request"
+        instruction = (
+            "The session current pointer references a completed Stageflow request; create or select a non-completed request before doing new workflow work."
+        )
     result.update(
         {
-            "status": "OK" if validation["status"] == "PASS" else "WARNING",
-            "severity": "info" if validation["status"] == "PASS" else "warning",
+            "status": status,
+            "severity": severity,
             "current_request_id": request_id,
             "phase": phase,
             "validation_phase": validation_phase,
@@ -271,6 +315,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
             "preflight_marker": marker,
         }
     )
+    set_turn_start_action(result, action, instruction, required=action != "continue_current_stage")
     if validation["status"] != "PASS":
         result["warnings"].append("current Stageflow stage validation failed")
 
@@ -280,8 +325,13 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         if entry_gate["status"] != "PASS":
             result["warnings"].append("implementation requested before implementation-plan stage passed")
             result["implementation_block_required"] = True
-            result["status"] = "WARNING"
+            result["status"] = "IMPLEMENTATION_BLOCKED"
             result["severity"] = "warning"
+            set_turn_start_action(
+                result,
+                "repair_implementation_plan_gate",
+                "Do not implement. Return to the implementation-plan stage and repair its goal, artifact, subagent review, and approval gates until `--phase implementation-plan` passes.",
+            )
 
     write_turn_state(root, payload, result)
     return result

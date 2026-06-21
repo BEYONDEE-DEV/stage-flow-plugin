@@ -53,11 +53,22 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 
 At the start of every turn using this skill:
 
-1. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all four stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
-2. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
-3. Decide whether the latest user message continues the current request or starts a separate request.
-4. Run the validator for the current stage when artifacts exist.
-5. Continue only from the validated current stage.
+1. Read the latest `UserPromptSubmit` hook result first when it exists under `.stageflow/hook-state/sessions/<session-id>/main/current-turn.json`; fall back to `.stageflow/hook-state/current-turn.json` only when scoped state is unavailable.
+2. Process the hook result by `status` and `turn_start_action` before any substantive answer:
+   - `PREPASS` / `none`: treat the turn as outside Stageflow unless the skill was explicitly invoked.
+   - `REQUEST_REQUIRED` / `create_request`: inspect the project, create a new request folder, scaffold all four stage folders, and write `.stageflow/sessions/<session-id>/current.json` before answering the workflow request.
+   - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
+   - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
+   - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
+   - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
+   - `OK` / `continue_current_stage`: continue only from the validated current stage.
+3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all four stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
+4. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
+5. Decide whether the latest user message continues the current request or starts a separate request.
+6. Run the validator for the current stage when artifacts exist.
+7. Continue only from the validated current stage.
+
+Treat `turn_start_instruction` in the hook result as mandatory next-action guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts first.
 
 Use request IDs in this form:
 
@@ -131,8 +142,8 @@ The validator is an auditor. Treat failures as the next action to repair.
 Plugin hooks are read-only for durable workflow artifacts except for runtime records under `.stageflow/hook-state/`. They may block premature tool use.
 
 - `PreToolUse` blocks non-Stageflow file edits until `implementation-plan` validates, while allowing `.stageflow/**` artifact creation and repair.
-- `UserPromptSubmit` checks the active stage and emits a preflight marker.
-- Implementation-like prompts validate `implementation-plan` before code work proceeds.
+- `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
+- Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
 - Subagent lifecycle hooks record lightweight observation state only.
 

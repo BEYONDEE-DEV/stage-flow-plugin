@@ -31,15 +31,19 @@ The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates t
 
 Behavior:
 
-- Explicit Stageflow prompts without a session current pointer return `REQUEST_REQUIRED`, require a preflight marker, and record turn state for the Stop hook.
-- Non-workflow prompts without a session current pointer return `PREPASS`.
+- Explicit Stageflow prompts without a session current pointer return `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and record turn state for the Stop hook.
+- Non-workflow prompts without a session current pointer return `PREPASS` and `turn_start_action: none`.
+- Invalid or stale current pointers return `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
+- Completed current requests return `COMPLETED_CURRENT` with `turn_start_action: start_new_request` so new workflow work does not continue on terminal state.
 - Active requests return a preflight marker:
 
 ```text
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL>
 ```
 
-- Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, implementation must not proceed.
+- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes, or `repair_current_stage` when the current stage fails validation.
+- Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook returns `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
+- `turn_start_instruction` is mandatory next-action guidance for the main agent.
 
 ## Stop
 
