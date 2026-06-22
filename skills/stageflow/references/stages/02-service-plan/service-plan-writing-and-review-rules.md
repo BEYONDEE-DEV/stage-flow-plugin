@@ -18,6 +18,12 @@ Use the approved request profile from requirements as guidance:
 - Bugfix-heavy items become corrected normal behavior, regression prevention conditions, and failure handling.
 - Mixed items must preserve the problem-to-requirement mapping by explaining how the new normal behavior resolves the current problem.
 
+## Normal Behavior Transformation
+
+The service plan must transform requirements into behavior, not repeat requirements rows under a new heading. It should read like the service's approved operating model: what users do, what the system accepts or rejects, what state changes, what policies apply, what happens on failure, and what must not regress.
+
+For bugfix or mixed requests, every material `Current Problems` row from requirements must appear as a corrected normal behavior, a regression prevention condition, or both. If the service plan cannot explain how the problem is resolved, the stage is not ready.
+
 ## Stage Artifact Format
 
 ```md
@@ -81,6 +87,12 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 | SP-RULE-006 | Define regression prevention for bugfix or mixed requests. | `## Regression Prevention` lists behaviors, invariants, or problem resolutions that must keep working. | Confirm current problems from requirements are addressed as corrected behavior or prevention conditions. | A problem from requirements has no normal-behavior or regression-prevention coverage. |
 | SP-RULE-007 | Define failure, empty, permission, validation, and exception recovery behavior. | `## Failure And Recovery Behavior` covers relevant failure and recovery cases. | Confirm expected non-happy-path behavior is reviewable. | Failure or recovery behavior is omitted for a material policy. |
 | SP-RULE-008 | Do not introduce new requirements or implementation decisions. | Service rules trace back to approved requirement IDs and avoid unapproved product decisions. | Confirm the service plan organizes approved requirements but does not invent scope. | The service plan adds a new user requirement, UX policy, endpoint meaning, or implementation decision not grounded in requirements. |
+
+## Repetition And Regression Review Triggers
+
+FAIL the service-plan review when requirements rows are repeated as a new table without synthesis into `## Normal Behavior Model`, `## User Flow`, `## State And Policy Model`, and `## Regression Prevention`.
+
+FAIL the service-plan review when a bugfix or mixed request lacks an explicit problem resolution model or regression model showing how `Current Problems` are resolved and prevented from recurring.
 
 ## Forbidden Content
 

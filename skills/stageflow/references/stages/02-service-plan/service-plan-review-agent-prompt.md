@@ -27,8 +27,10 @@ Do not review unrelated files. Do not inspect implementation files. Do not add c
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Check that the service plan reorganizes approved requirements into a normal behavior model instead of repeating the requirements list in a new table.
+- Mark `FAIL` when requirements rows are copied into a new table without synthesis into normal behavior, user flow, state and policy, or regression prevention.
 - Check that every material behavior is represented in `## Policy Rules` with condition, policy, response, state/data responsibility, failure/recovery behavior, and source requirement IDs.
 - Check that bugfix or mixed-request problems from requirements are covered by corrected normal behavior and `## Regression Prevention`.
+- Mark `FAIL` when a bugfix or mixed request lacks a problem resolution model or regression model showing how current problems are resolved and prevented from recurring.
 - Check that integration flow stays at service-level data responsibility, not TypeScript/interface design, file edits, or API client implementation.
 - Check that the service plan does not introduce new requirements, UX policy, endpoint meaning, or implementation decisions that were not approved in requirements.
 - Mark a Rule ID `PASS` only when the artifact evidence satisfies the review check and does not trigger the blocking condition.

@@ -39,6 +39,8 @@ STAGE_RULE_IDS = {
         "REQ-RULE-006",
         "REQ-RULE-007",
         "REQ-RULE-008",
+        "REQ-RULE-009",
+        "REQ-RULE-010",
     ],
     "service-plan": [
         "SP-RULE-001",
@@ -92,9 +94,13 @@ STAGES = [
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
         "## Open Questions\n\n"
-        "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
+        "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |\n\n"
+        "## Resolved Decisions\n\n"
+        "| ID | Source Question ID | Answer Source | Decision | Reflected In |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |\n\n"
         "## Requirements\n\n"
         "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
@@ -381,6 +387,11 @@ Approved.
                 "## Current Problems",
                 "## Problem-To-Requirement Mapping",
                 "## Open Questions",
+                "## Resolved Decisions",
+                "## Clarification Loop",
+                "## Blocking Question Criteria",
+                "## Open Question Writing Rules",
+                "## Open Question Resolution Rules",
                 "User-Specified Constraints",
                 "Discovered Constraints",
             ),
@@ -388,8 +399,11 @@ Approved.
                 "## Stage Responsibility",
                 "## Request Type Profiles",
                 "normal behavior model",
+                "## Normal Behavior Transformation",
                 "Regression Prevention",
                 "Integration Flow And Data Responsibilities",
+                "requirements rows are repeated",
+                "problem resolution model",
                 "Do not include implementation file lists",
             ),
             "references/stages/03-implementation-plan/implementation-plan-writing-and-review-rules.md": (
@@ -417,10 +431,15 @@ Approved.
             "references/stages/01-requirements/requirements-review-agent-prompt.md": (
                 "mixed requests connect problems to resolving requirements",
                 "user-specified files, endpoints, commands, screens, or reference systems",
+                "Decision Needed",
+                "vague concern",
+                "User answer to Q-###",
                 "blocking open question remains",
             ),
             "references/stages/02-service-plan/service-plan-review-agent-prompt.md": (
                 "repeating the requirements list",
+                "requirements rows are copied",
+                "problem resolution model or regression model",
                 "Regression Prevention",
                 "does not introduce new requirements",
             ),
@@ -598,9 +617,13 @@ Approved.
                 "## User-Specified Constraints\n\n- None specified.\n\n"
                 "## Discovered Constraints\n\n- None discovered.\n\n"
                 "## Open Questions\n\n"
-                "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
-                "| --- | --- | --- | --- | --- | --- |\n"
-                "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
+                "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
+                "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |\n\n"
+                "## Resolved Decisions\n\n"
+                "| ID | Source Question ID | Answer Source | Decision | Reflected In |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                "| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |\n\n"
                 "## Requirements\n\n"
                 "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
                 "| --- | --- | --- | --- | --- | --- |\n"
@@ -612,6 +635,63 @@ Approved.
             result = self.run_validator(root, "requirements")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Problem-To-Requirement Mapping", result.stdout)
+
+    def test_requirements_rejects_legacy_open_question_columns(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            text = artifact.read_text(encoding="utf-8")
+            text = text.replace(
+                "## Open Questions\n\n"
+                "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
+                "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |\n\n"
+                "## Resolved Decisions",
+                "## Open Questions\n\n"
+                "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
+                "## Resolved Decisions",
+            )
+            artifact.write_text(text, encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Decision Needed", result.stdout)
+            self.assertIn("Resolution Target", result.stdout)
+
+    def test_requirements_rejects_blocking_open_question(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |",
+                    "| Q-001 | Choose the approved flow. | Screen flow is undecided. | Use the existing flow. | Add a new flow. | Changes navigation. | yes | REQ-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("still blocking", result.stdout)
+
+    def test_requirements_requires_resolved_decisions_section(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            text = artifact.read_text(encoding="utf-8")
+            before, remainder = text.split("## Resolved Decisions\n\n", 1)
+            _, after = remainder.split("## Requirements\n\n", 1)
+            artifact.write_text(before + "## Requirements\n\n" + after, encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Resolved Decisions", result.stdout)
+
     def test_service_plan_requires_policy_rules(self) -> None:
         with temp_project() as tmp:
             root = Path(tmp)

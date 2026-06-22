@@ -38,6 +38,8 @@ STAGE_RULE_IDS = {
         "REQ-RULE-006",
         "REQ-RULE-007",
         "REQ-RULE-008",
+        "REQ-RULE-009",
+        "REQ-RULE-010",
     ],
     "service-plan": [
         "SP-RULE-001",
@@ -91,9 +93,13 @@ STAGES = [
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
         "## Open Questions\n\n"
-        "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
+        "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |\n\n"
+        "## Resolved Decisions\n\n"
+        "| ID | Source Question ID | Answer Source | Decision | Reflected In |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |\n\n"
         "## Requirements\n\n"
         "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
         "| --- | --- | --- | --- | --- | --- |\n"

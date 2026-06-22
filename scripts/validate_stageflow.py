@@ -47,6 +47,7 @@ STAGES: tuple[Stage, ...] = (
             "User-Specified Constraints",
             "Discovered Constraints",
             "Open Questions",
+            "Resolved Decisions",
             "Requirements",
             "Acceptance Criteria",
         ),
@@ -62,7 +63,20 @@ STAGES: tuple[Stage, ...] = (
             TableRequirement("Problem-To-Requirement Mapping", ("Problem ID", "Requirement ID", "Resolution")),
             TableRequirement(
                 "Open Questions",
-                ("ID", "Question", "Recommended Option", "Alternatives", "Impact", "Blocking"),
+                (
+                    "ID",
+                    "Decision Needed",
+                    "Context Or Conflict",
+                    "Recommended Option",
+                    "Alternatives",
+                    "Impact",
+                    "Blocking",
+                    "Resolution Target",
+                ),
+            ),
+            TableRequirement(
+                "Resolved Decisions",
+                ("ID", "Source Question ID", "Answer Source", "Decision", "Reflected In"),
             ),
             TableRequirement(
                 "Requirements",
@@ -156,6 +170,7 @@ NO_BLOCKING_RE = re.compile(
     r"\b(no blocking issues|zero blocking issues|none|0|zero)\b",
     re.IGNORECASE,
 )
+BLOCKING_OPEN_QUESTION_RE = re.compile(r"^(yes|true|blocking|block)$", re.IGNORECASE)
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
 
@@ -417,6 +432,20 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str]) ->
             errors.append(f"`{display_path(path)}` must include non-empty `## {section}`")
     for requirement in stage.artifact_tables:
         validate_table_columns(path, text, requirement, errors)
+    if stage.phase == "requirements":
+        validate_requirements_blocking_questions(path, text, errors)
+
+
+def validate_requirements_blocking_questions(path: Path, text: str, errors: list[str]) -> None:
+    table = parse_first_markdown_table(section_text(text, "## Open Questions"))
+    for row in table.rows:
+        blocking_value = row.get("Blocking", "").strip()
+        if BLOCKING_OPEN_QUESTION_RE.fullmatch(blocking_value):
+            question_id = row.get("ID", "").strip() or "<unknown>"
+            errors.append(
+                f"`{display_path(path)}` Open Questions row `{question_id}` is still blocking; "
+                "resolve it before requirements approval"
+            )
 
 
 def validate_table_columns(path: Path, text: str, requirement: TableRequirement, errors: list[str]) -> None:
@@ -732,9 +761,15 @@ Secondary: none
 
 ## Open Questions
 
-| ID | Question | Recommended Option | Alternatives | Impact | Blocking |
-| --- | --- | --- | --- | --- | --- |
-| Q-001 | No open question. | N/A | N/A | N/A | no |
+| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |
+
+## Resolved Decisions
+
+| ID | Source Question ID | Answer Source | Decision | Reflected In |
+| --- | --- | --- | --- | --- |
+| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |
 
 ## Requirements
 
