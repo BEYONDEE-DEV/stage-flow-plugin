@@ -214,15 +214,23 @@ Approval text must contain a positive approval intent such as `approve`, `approv
 
 ## Validator Templates
 
+The validator is bundled with the Stageflow plugin. Run it from the plugin root, and pass `--root <target-project-root>` when validating a target project rather than assuming that project has its own validator script.
+
 The validator can print starter templates:
 
 ```powershell
-python scripts/validate_stageflow.py --print-template stage-tree
-python scripts/validate_stageflow.py --print-template goal
-python scripts/validate_stageflow.py --print-template requirements
-python scripts/validate_stageflow.py --print-template service-plan
-python scripts/validate_stageflow.py --print-template implementation-plan
-python scripts/validate_stageflow.py --print-template implementation
-python scripts/validate_stageflow.py --print-template review
-python scripts/validate_stageflow.py --print-template approval
+python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
+python <plugin-root>/scripts/validate_stageflow.py --print-template goal
+python <plugin-root>/scripts/validate_stageflow.py --print-template requirements
+python <plugin-root>/scripts/validate_stageflow.py --print-template service-plan
+python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
+python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
+python <plugin-root>/scripts/validate_stageflow.py --print-template review
+python <plugin-root>/scripts/validate_stageflow.py --print-template approval
+```
+
+Validate a target project with:
+
+```powershell
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase <phase>
 ```

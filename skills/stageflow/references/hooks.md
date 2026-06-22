@@ -12,7 +12,7 @@ Stageflow ships plugin-provided hooks that audit the four-stage workflow model a
 - `SubagentStart`: `python hooks/stageflow_hook.py subagent_start`
 - `SubagentStop`: `python hooks/stageflow_hook.py subagent_stop`
 
-The wrapper resolves the plugin root from its own location, or from `PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, or `CLAUDE_PLUGIN_ROOT`.
+The wrapper resolves the plugin root from its own location, or from `PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, or `CLAUDE_PLUGIN_ROOT`. `stageflow_hook_check.py` then resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `scripts/validate_stageflow.py`.
 
 ## PreToolUse
 
@@ -22,12 +22,12 @@ Behavior:
 
 - Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired.
 - Non-write tools and read-only shell commands return `PREPASS`.
-- Non-Stageflow file edits are blocked while an active Stageflow request lacks a valid session current pointer or while `scripts/validate_stageflow.py --phase implementation-plan` fails.
+- Non-Stageflow file edits are blocked while an active Stageflow request lacks a valid session current pointer or while the plugin-bundled validator fails `--phase implementation-plan` for the target project root.
 - Completed Stageflow requests do not authorize new file edits; start a new request first.
 
 ## UserPromptSubmit
 
-The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates the current request stage with `scripts/validate_stageflow.py`.
+The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates the current request stage with the plugin-bundled `scripts/validate_stageflow.py` against the target project root.
 
 Behavior:
 
@@ -76,17 +76,17 @@ Do not treat hook-state files as durable workflow artifacts. Durable request sta
 Run a pre-tool edit gate check:
 
 ```powershell
-'{"hook_event_name":"PreToolUse","session_id":"session-1","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}' | python scripts/stageflow_hook_check.py --event pre_tool_use
+'{"hook_event_name":"PreToolUse","session_id":"session-1","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}' | python <plugin-root>/scripts/stageflow_hook_check.py --event pre_tool_use --root <target-project-root>
 ```
 
 Run a prompt check:
 
 ```powershell
-'{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | python scripts/stageflow_hook_check.py --event user_prompt_submit
+'{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | python <plugin-root>/scripts/stageflow_hook_check.py --event user_prompt_submit --root <target-project-root>
 ```
 
 Run a stop check:
 
 ```powershell
-'{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"구현 완료했습니다."}' | python scripts/stageflow_hook_check.py --event stop
+'{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"구현 완료했습니다."}' | python <plugin-root>/scripts/stageflow_hook_check.py --event stop --root <target-project-root>
 ```

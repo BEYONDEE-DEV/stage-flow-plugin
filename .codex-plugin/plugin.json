@@ -1,6 +1,6 @@
 {
   "name": "stageflow",
-  "version": "0.1.17+codex.20260621100842",
+  "version": "0.1.17+codex.20260621135249",
   "description": "Standardize Codex planning workflows with durable request artifacts and validation gates.",
   "author": {
     "name": "Local developer"

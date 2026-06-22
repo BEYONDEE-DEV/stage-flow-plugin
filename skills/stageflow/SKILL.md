@@ -112,27 +112,27 @@ Approval text must contain clear positive intent such as `approve`, `approved`, 
 
 ## Validator
 
-Run the validator from the target project root:
+Run the plugin-bundled validator against the target project root. Do not assume the target project contains its own `scripts/validate_stageflow.py` copy:
 
 ```powershell
-python scripts/validate_stageflow.py --current --session-id <session-id> --phase requirements
-python scripts/validate_stageflow.py --current --session-id <session-id> --phase service-plan
-python scripts/validate_stageflow.py --current --session-id <session-id> --phase implementation-plan
-python scripts/validate_stageflow.py --current --session-id <session-id> --phase implementation
-python scripts/validate_stageflow.py --current --session-id <session-id> --phase all
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase requirements
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase service-plan
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation-plan
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation
+python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase all
 ```
 
 Use `--print-template` to get exact starter files:
 
 ```powershell
-python scripts/validate_stageflow.py --print-template stage-tree
-python scripts/validate_stageflow.py --print-template goal
-python scripts/validate_stageflow.py --print-template requirements
-python scripts/validate_stageflow.py --print-template service-plan
-python scripts/validate_stageflow.py --print-template implementation-plan
-python scripts/validate_stageflow.py --print-template implementation
-python scripts/validate_stageflow.py --print-template review
-python scripts/validate_stageflow.py --print-template approval
+python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
+python <plugin-root>/scripts/validate_stageflow.py --print-template goal
+python <plugin-root>/scripts/validate_stageflow.py --print-template requirements
+python <plugin-root>/scripts/validate_stageflow.py --print-template service-plan
+python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
+python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
+python <plugin-root>/scripts/validate_stageflow.py --print-template review
+python <plugin-root>/scripts/validate_stageflow.py --print-template approval
 ```
 
 The validator is an auditor. Treat failures as the next action to repair.

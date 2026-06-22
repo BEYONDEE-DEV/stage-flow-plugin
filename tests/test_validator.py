@@ -323,6 +323,28 @@ Approved.
             with self.subTest(stage_heading=stage_heading):
                 self.assertNotIn(stage_heading, artifact_text)
 
+    def test_validator_docs_use_plugin_script_and_target_root(self) -> None:
+        skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
+        artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(
+            encoding="utf-8-sig"
+        )
+        hooks_text = (ROOT / "skills" / "stageflow" / "references" / "hooks.md").read_text(encoding="utf-8-sig")
+
+        for name, text in {
+            "SKILL.md": skill_text,
+            "artifact-format.md": artifact_text,
+        }.items():
+            with self.subTest(document=name):
+                self.assertIn("<plugin-root>/scripts/validate_stageflow.py", text)
+                self.assertIn("--root <target-project-root>", text)
+                self.assertNotIn("python scripts/validate_stageflow.py --current", text)
+
+        self.assertIn("<plugin-root>/scripts/stageflow_hook_check.py", hooks_text)
+        self.assertIn("--root <target-project-root>", hooks_text)
+        self.assertIn("__file__", hooks_text)
+        self.assertNotIn("python scripts/stageflow_hook_check.py --event", hooks_text)
+        self.assertNotIn("Run the validator from the target project root:", skill_text)
+
     def test_valid_four_stage_request_passes_all(self) -> None:
         with temp_project() as tmp:
             root = Path(tmp)
