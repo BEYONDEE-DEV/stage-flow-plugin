@@ -29,8 +29,26 @@ def temp_project():
         shutil.rmtree(path, ignore_errors=True)
 
 STAGE_RULE_IDS = {
-    "requirements": ["REQ-RULE-001", "REQ-RULE-002", "REQ-RULE-003", "REQ-RULE-004"],
-    "service-plan": ["SP-RULE-001", "SP-RULE-002", "SP-RULE-003", "SP-RULE-004", "SP-RULE-005"],
+    "requirements": [
+        "REQ-RULE-001",
+        "REQ-RULE-002",
+        "REQ-RULE-003",
+        "REQ-RULE-004",
+        "REQ-RULE-005",
+        "REQ-RULE-006",
+        "REQ-RULE-007",
+        "REQ-RULE-008",
+    ],
+    "service-plan": [
+        "SP-RULE-001",
+        "SP-RULE-002",
+        "SP-RULE-003",
+        "SP-RULE-004",
+        "SP-RULE-005",
+        "SP-RULE-006",
+        "SP-RULE-007",
+        "SP-RULE-008",
+    ],
     "implementation-plan": [
         "IP-RULE-001",
         "IP-RULE-002",
@@ -38,10 +56,18 @@ STAGE_RULE_IDS = {
         "IP-RULE-004",
         "IP-RULE-005",
         "IP-RULE-006",
+        "IP-RULE-007",
+        "IP-RULE-008",
     ],
-    "implementation": ["IMPL-RULE-001", "IMPL-RULE-002", "IMPL-RULE-003", "IMPL-RULE-004", "IMPL-RULE-005"],
+    "implementation": [
+        "IMPL-RULE-001",
+        "IMPL-RULE-002",
+        "IMPL-RULE-003",
+        "IMPL-RULE-004",
+        "IMPL-RULE-005",
+        "IMPL-RULE-006",
+    ],
 }
-
 STAGES = [
     (
         "requirements",
@@ -49,26 +75,47 @@ STAGES = [
         "requirements.md",
         "# Requirements\n\n"
         "## User Goal\n\nGoal based on inspected project context.\n\n"
+        "## Request Profile\n\nPrimary: bugfix\nSecondary: feature-adjustment\n\n"
+        "## Desired Outcomes\n\n"
+        "| ID | Outcome | Source | Success Signal |\n"
+        "| --- | --- | --- | --- |\n"
+        "| OUT-001 | User can complete the corrected behavior. | User request. | Acceptance criteria covers REQ-001. |\n\n"
+        "## Current Problems\n\n"
+        "| ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| PROB-001 | Existing behavior is wrong. | Corrected behavior is available. | Incorrect behavior is present. | Reproduction notes. | User workflow is affected. |\n\n"
+        "## Problem-To-Requirement Mapping\n\n"
+        "| Problem ID | Requirement ID | Resolution |\n"
+        "| --- | --- | --- |\n"
+        "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
+        "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
+        "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Open Questions\n\n"
+        "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
         "## Requirements\n\n"
-        "| ID | Actor | Trigger | Observable Behavior | Acceptance Evidence | Boundary Or Exclusion | Requirement |\n"
-        "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| REQ-001 | User | User requests behavior. | Reviewed behavior is recorded. | Acceptance criteria covers REQ-001. | No unrelated scope. | Requirement. |\n\n"
-        "## Acceptance Criteria\n\n- `REQ-001` is satisfied.\n",
+        "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n\n"
+        "## Acceptance Criteria\n\n- `REQ-001` is satisfied when `OUT-001` is verifiable and `PROB-001` is resolved.\n",
     ),
     (
         "service-plan",
         "02-service-plan",
         "service-plan.md",
         "# Service Plan\n\n"
-        "## User Visible Behavior\n\nUsers see the changed behavior.\n\n"
-        "## Service Behavior\n\nThe service behaves as approved.\n\n"
+        "## Normal Behavior Model\n\nThe service exposes the corrected normal behavior and prevents the reported regression.\n\n"
+        "## User Flow\n\nUsers see the changed behavior in the approved flow.\n\n"
+        "## State And Policy Model\n\nState changes follow the approved policy.\n\n"
         "## Policy Rules\n\n"
-        "| Rule ID | Trigger Or Condition | Policy | User/System Response | Data/State/API Effect | Failure/Exception Behavior | Source Requirement IDs |\n"
+        "| Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |\n"
         "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| SP-001 | User requests behavior. | Follow approved behavior. | User sees the planned response. | No API change. | Errors remain recoverable. | REQ-001 |\n\n"
-        "## Service API Or Data Flow\n\nNo API change.\n\n"
+        "| SP-001 | User requests behavior. | Follow approved behavior. | User sees the planned response. | Required state is updated. | Errors remain recoverable. | REQ-001 |\n\n"
+        "## Integration Flow And Data Responsibilities\n\nNo integration change.\n\n"
         "## Boundaries\n\nOnly approved behavior is included.\n\n"
-        "## Failure And Exception Behavior\n\nErrors remain recoverable.\n",
+        "## Regression Prevention\n\nPROB-001 must not recur.\n\n"
+        "## Failure And Recovery Behavior\n\nErrors remain recoverable.\n",
     ),
     (
         "implementation-plan",
@@ -76,6 +123,7 @@ STAGES = [
         "implementation-plan.md",
         "# Implementation Plan\n\n"
         "## Change Areas\n\nCode and tests.\n\n"
+        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001.\n\n"
         "## Work Items\n\n"
         "| ID | Work Item | Evidence |\n"
         "| --- | --- | --- |\n"
@@ -93,14 +141,13 @@ STAGES = [
         "04-implementation",
         "implementation.md",
         "# Implementation\n\n"
-        "## Work Completed\n\nImplemented as planned; no deviations.\n\n"
-        "## Validation\n\nTests passed.\n\n"
+        "## Work Completed\n\nImplemented as planned.\n\n"
+        "## Plan Compliance And Deviations\n\nNo deviations.\n\n"
+        "## Validation\n\nTests passed and PROB-001 no longer reproduces.\n\n"
         "## Review Result\n\nSubagent review passed with no blocking issues.\n\n"
-        "## Completion Summary\n\nCompleted as approved.\n",
+        "## Completion Summary\n\nCompleted as approved with no residual risk.\n",
     ),
 ]
-
-
 class HookCheckFourStageTests(unittest.TestCase):
     def run_hook(
         self,

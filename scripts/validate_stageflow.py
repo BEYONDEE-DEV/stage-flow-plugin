@@ -38,21 +38,41 @@ STAGES: tuple[Stage, ...] = (
         "01-requirements",
         "requirements.md",
         "Requirements",
-        ("User Goal", "Requirements", "Acceptance Criteria"),
+        (
+            "User Goal",
+            "Request Profile",
+            "Desired Outcomes",
+            "Current Problems",
+            "Problem-To-Requirement Mapping",
+            "User-Specified Constraints",
+            "Discovered Constraints",
+            "Open Questions",
+            "Requirements",
+            "Acceptance Criteria",
+        ),
         "01-requirements",
         "requirements-writing-and-review-rules.md",
         "Requirements Writing And Review Rules",
         (
+            TableRequirement("Desired Outcomes", ("ID", "Outcome", "Source", "Success Signal")),
+            TableRequirement(
+                "Current Problems",
+                ("ID", "Problem", "Expected Behavior", "Actual Behavior", "Evidence Or Reproduction", "Impact"),
+            ),
+            TableRequirement("Problem-To-Requirement Mapping", ("Problem ID", "Requirement ID", "Resolution")),
+            TableRequirement(
+                "Open Questions",
+                ("ID", "Question", "Recommended Option", "Alternatives", "Impact", "Blocking"),
+            ),
             TableRequirement(
                 "Requirements",
                 (
                     "ID",
-                    "Actor",
-                    "Trigger",
-                    "Observable Behavior",
-                    "Acceptance Evidence",
+                    "Type",
+                    "Source",
+                    "Requirement Detail",
                     "Boundary Or Exclusion",
-                    "Requirement",
+                    "Linked Outcomes Or Problems",
                 ),
             ),
         ),
@@ -63,12 +83,14 @@ STAGES: tuple[Stage, ...] = (
         "service-plan.md",
         "Service Plan",
         (
-            "User Visible Behavior",
-            "Service Behavior",
+            "Normal Behavior Model",
+            "User Flow",
+            "State And Policy Model",
             "Policy Rules",
-            "Service API Or Data Flow",
+            "Integration Flow And Data Responsibilities",
             "Boundaries",
-            "Failure And Exception Behavior",
+            "Regression Prevention",
+            "Failure And Recovery Behavior",
         ),
         "02-service-plan",
         "service-plan-writing-and-review-rules.md",
@@ -81,8 +103,8 @@ STAGES: tuple[Stage, ...] = (
                     "Trigger Or Condition",
                     "Policy",
                     "User/System Response",
-                    "Data/State/API Effect",
-                    "Failure/Exception Behavior",
+                    "State/Data Responsibility",
+                    "Failure/Recovery Behavior",
                     "Source Requirement IDs",
                 ),
             ),
@@ -93,7 +115,7 @@ STAGES: tuple[Stage, ...] = (
         "03-implementation-plan",
         "implementation-plan.md",
         "Implementation Plan",
-        ("Change Areas", "Work Items", "Coverage Matrix", "Validation", "Risks", "Constraints"),
+        ("Change Areas", "Cause Or Design Notes", "Work Items", "Coverage Matrix", "Validation", "Risks", "Constraints"),
         "03-implementation-plan",
         "implementation-plan-writing-and-review-rules.md",
         "Implementation Plan Writing And Review Rules",
@@ -110,7 +132,7 @@ STAGES: tuple[Stage, ...] = (
         "04-implementation",
         "implementation.md",
         "Implementation",
-        ("Work Completed", "Validation", "Review Result", "Completion Summary"),
+        ("Work Completed", "Plan Compliance And Deviations", "Validation", "Review Result", "Completion Summary"),
         "04-implementation",
         "implementation-writing-and-review-rules.md",
         "Implementation Writing And Review Rules",
@@ -307,6 +329,12 @@ def validate_stage_rule_document(stage: Stage, errors: list[str]) -> list[str]:
     target = f"Target: `{stage.folder}/{stage.artifact}`"
     if target not in section_text(text, "## Stage Artifact"):
         errors.append(f"`{display_path(path)}` Stage Artifact must record `{target}`")
+
+    for required_reference_section in ("Stage Responsibility", "Request Type Profiles"):
+        if not section_text(text, f"## {required_reference_section}").strip():
+            errors.append(
+                f"`{display_path(path)}` must include non-empty `## {required_reference_section}`"
+            )
 
     artifact_format = fenced_code_block_after_heading(text, "## Stage Artifact Format")
     if not artifact_format.strip():
@@ -671,49 +699,98 @@ Goal status: active
 
 Describe the user's goal in their language.
 
+## Request Profile
+
+Primary: feature
+Secondary: none
+
+## Desired Outcomes
+
+| ID | Outcome | Source | Success Signal |
+| --- | --- | --- | --- |
+| OUT-001 | The requested result is visible or verifiable. | User request. | A reviewer can confirm the outcome. |
+
+## Current Problems
+
+| ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |
+| --- | --- | --- | --- | --- | --- |
+| PROB-001 | No current problem identified. | N/A | N/A | N/A | N/A |
+
+## Problem-To-Requirement Mapping
+
+| Problem ID | Requirement ID | Resolution |
+| --- | --- | --- |
+| PROB-001 | REQ-001 | The requirement resolves or prevents the problem. |
+
+## User-Specified Constraints
+
+- None specified.
+
+## Discovered Constraints
+
+- None discovered.
+
+## Open Questions
+
+| ID | Question | Recommended Option | Alternatives | Impact | Blocking |
+| --- | --- | --- | --- | --- | --- |
+| Q-001 | No open question. | N/A | N/A | N/A | no |
+
 ## Requirements
 
-| ID | Actor | Trigger | Observable Behavior | Acceptance Evidence | Boundary Or Exclusion | Requirement |
-| --- | --- | --- | --- | --- | --- | --- |
-| REQ-001 | User | User asks for the behavior. | The reviewed artifact records the accepted behavior. | `REQ-001` is covered by acceptance criteria. | Out-of-scope behavior is explicit. | One concrete requirement. |
+| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |
+| --- | --- | --- | --- | --- | --- |
+| REQ-001 | feature | User request. | One concrete requirement. | Out-of-scope behavior is explicit. | OUT-001 |
 
 ## Acceptance Criteria
 
-- `REQ-001` is satisfied by the reviewed behavior and evidence.
+- `REQ-001` is satisfied when `OUT-001` is verifiable.
 """,
     "service-plan": """# Service Plan
 
-## User Visible Behavior
+## Normal Behavior Model
 
-Describe what the user will see and how the experience behaves.
+Describe the corrected or desired service behavior as an organized model.
 
-## Service Behavior
+## User Flow
 
-Describe the service or product behavior in natural language.
+Describe what the user or system does, sees, and receives in order.
+
+## State And Policy Model
+
+Describe states, transitions, permissions, validation rules, and product policies.
 
 ## Policy Rules
 
-| Rule ID | Trigger Or Condition | Policy | User/System Response | Data/State/API Effect | Failure/Exception Behavior | Source Requirement IDs |
+| Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
 | --- | --- | --- | --- | --- | --- | --- |
-| SP-001 | A relevant condition occurs. | The service follows the approved behavior. | The user or system sees the planned response. | State, data, or API effects are described. | Failure behavior is described. | REQ-001 |
+| SP-001 | A relevant condition occurs. | The service follows the approved behavior. | The user or system sees the planned response. | State or data responsibility is described. | Recovery behavior is described. | REQ-001 |
 
-## Service API Or Data Flow
+## Integration Flow And Data Responsibilities
 
-Describe API, data, state, source, inventory, or parity flow only when it matters.
+Describe service-level integration sequence and data responsibilities only where needed for behavior.
 
 ## Boundaries
 
 Describe in-scope and out-of-scope behavior.
 
-## Failure And Exception Behavior
+## Regression Prevention
 
-Describe errors, empty states, permissions, and recovery behavior.
+Describe bugfix or mixed-request behaviors that must not regress.
+
+## Failure And Recovery Behavior
+
+Describe errors, empty states, permissions, validation failures, and recovery behavior.
 """,
     "implementation-plan": """# Implementation Plan
 
 ## Change Areas
 
 Describe the code, docs, tests, or assets expected to change.
+
+## Cause Or Design Notes
+
+Record implementation-relevant cause analysis, design constraints, or assumptions grounded in the approved service plan.
 
 ## Work Items
 
@@ -743,7 +820,11 @@ Keep implementation scoped to the approved service plan.
 
 ## Work Completed
 
-Record the actual work completed, including deviations or skipped work.
+Record the actual work completed.
+
+## Plan Compliance And Deviations
+
+Record whether the implementation matched the approved plan, including deviations, skipped work, or incomplete work.
 
 ## Validation
 

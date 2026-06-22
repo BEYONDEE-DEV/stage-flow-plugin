@@ -1,8 +1,20 @@
-# Implementation Writing And Review Rules
+﻿# Implementation Writing And Review Rules
 
 ## Stage Artifact
 
 Target: `04-implementation/implementation.md`
+
+## Stage Responsibility
+
+The implementation stage records what actually changed, how it was validated, and how the result compares with the approved implementation plan. It is evidence, not another planning stage.
+
+## Request Type Profiles
+
+Use the approved request profile only to shape evidence:
+
+- Feature-heavy work records completed behavior and acceptance validation.
+- Bugfix-heavy work records reproduction or regression evidence proving the problem no longer occurs.
+- Mixed work records both completed desired outcomes and resolved current problems.
 
 ## Stage Artifact Format
 
@@ -11,7 +23,11 @@ Target: `04-implementation/implementation.md`
 
 ## Work Completed
 
-Record the actual work completed, including deviations or skipped work.
+Record the actual work completed.
+
+## Plan Compliance And Deviations
+
+Record whether the implementation matched the approved plan, including deviations, skipped work, or incomplete work.
 
 ## Validation
 
@@ -29,6 +45,7 @@ Record the final plan-vs-actual outcome for the user.
 ## Required Artifact Sections
 
 - `## Work Completed`
+- `## Plan Compliance And Deviations`
 - `## Validation`
 - `## Review Result`
 - `## Completion Summary`
@@ -37,8 +54,9 @@ Record the final plan-vs-actual outcome for the user.
 
 | Rule ID | Writing Rule | Required Artifact Evidence | Review Check | Blocking Condition |
 | --- | --- | --- | --- | --- |
-| IMPL-RULE-001 | Implement only the approved implementation plan. | `## Work Completed` references completed work items and any deviations. | Confirm actual work stays within the approved implementation plan. | Work is outside the approved plan without explicit deviation handling. |
-| IMPL-RULE-002 | Record validation commands, checks, and results. | `## Validation` lists commands or checks with outcomes. | Confirm validation evidence supports completion. | Validation is missing, failed without explanation, or not tied to work items. |
-| IMPL-RULE-003 | Record deviations, skipped work, or incomplete work directly. | `## Work Completed` or `## Completion Summary` states deviations or says none. | Confirm the implementation record is honest about plan-vs-actual differences. | Deviations or incomplete work are hidden. |
-| IMPL-RULE-004 | Record the subagent implementation review result. | `## Review Result` states review outcome and blocking issue status. | Confirm review result matches the stage review gate. | Review result is missing or contradicts `review.md`. |
-| IMPL-RULE-005 | Summarize final outcome for user approval. | `## Completion Summary` explains the completed outcome and residual risk. | Confirm the user can approve or reject completion from the summary. | Completion summary is missing or too vague for final approval. |
+| IMPL-RULE-001 | Implement only the approved implementation plan. | `## Work Completed` references completed work items and `## Plan Compliance And Deviations` states whether the plan was followed. | Confirm actual work stays within the approved implementation plan. | Work is outside the approved plan without explicit deviation handling. |
+| IMPL-RULE-002 | Record validation commands, checks, and results. | `## Validation` lists commands or checks with outcomes. | Confirm validation evidence supports completion and covers planned work. | Validation is missing, failed without explanation, or not tied to work items. |
+| IMPL-RULE-003 | Record deviations, skipped work, incomplete work, or no deviations directly. | `## Plan Compliance And Deviations` states deviations or says none. | Confirm the implementation record is honest about plan-vs-actual differences. | Deviations or incomplete work are hidden. |
+| IMPL-RULE-004 | For bugfix or mixed requests, record problem-resolution or regression evidence. | `## Validation` or `## Completion Summary` includes evidence that current problems from requirements are resolved or protected by regression checks. | Confirm bugfix evidence proves the reported problem no longer reproduces or is guarded. | Bugfix/mixed work lacks reproduction, regression, or equivalent problem-resolution evidence. |
+| IMPL-RULE-005 | Record the subagent implementation review result. | `## Review Result` states review outcome and blocking issue status. | Confirm review result matches the stage review gate. | Review result is missing or contradicts `review.md`. |
+| IMPL-RULE-006 | Summarize final outcome for user approval. | `## Completion Summary` explains the completed outcome and residual risk. | Confirm the user can approve or reject completion from the summary. | Completion summary is missing or too vague for final approval. |

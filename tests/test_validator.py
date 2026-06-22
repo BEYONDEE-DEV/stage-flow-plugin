@@ -30,8 +30,26 @@ def temp_project():
         shutil.rmtree(path, ignore_errors=True)
 
 STAGE_RULE_IDS = {
-    "requirements": ["REQ-RULE-001", "REQ-RULE-002", "REQ-RULE-003", "REQ-RULE-004"],
-    "service-plan": ["SP-RULE-001", "SP-RULE-002", "SP-RULE-003", "SP-RULE-004", "SP-RULE-005"],
+    "requirements": [
+        "REQ-RULE-001",
+        "REQ-RULE-002",
+        "REQ-RULE-003",
+        "REQ-RULE-004",
+        "REQ-RULE-005",
+        "REQ-RULE-006",
+        "REQ-RULE-007",
+        "REQ-RULE-008",
+    ],
+    "service-plan": [
+        "SP-RULE-001",
+        "SP-RULE-002",
+        "SP-RULE-003",
+        "SP-RULE-004",
+        "SP-RULE-005",
+        "SP-RULE-006",
+        "SP-RULE-007",
+        "SP-RULE-008",
+    ],
     "implementation-plan": [
         "IP-RULE-001",
         "IP-RULE-002",
@@ -39,10 +57,18 @@ STAGE_RULE_IDS = {
         "IP-RULE-004",
         "IP-RULE-005",
         "IP-RULE-006",
+        "IP-RULE-007",
+        "IP-RULE-008",
     ],
-    "implementation": ["IMPL-RULE-001", "IMPL-RULE-002", "IMPL-RULE-003", "IMPL-RULE-004", "IMPL-RULE-005"],
+    "implementation": [
+        "IMPL-RULE-001",
+        "IMPL-RULE-002",
+        "IMPL-RULE-003",
+        "IMPL-RULE-004",
+        "IMPL-RULE-005",
+        "IMPL-RULE-006",
+    ],
 }
-
 STAGES = [
     (
         "requirements",
@@ -50,26 +76,47 @@ STAGES = [
         "requirements.md",
         "# Requirements\n\n"
         "## User Goal\n\nGoal based on inspected project context.\n\n"
+        "## Request Profile\n\nPrimary: bugfix\nSecondary: feature-adjustment\n\n"
+        "## Desired Outcomes\n\n"
+        "| ID | Outcome | Source | Success Signal |\n"
+        "| --- | --- | --- | --- |\n"
+        "| OUT-001 | User can complete the corrected behavior. | User request. | Acceptance criteria covers REQ-001. |\n\n"
+        "## Current Problems\n\n"
+        "| ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| PROB-001 | Existing behavior is wrong. | Corrected behavior is available. | Incorrect behavior is present. | Reproduction notes. | User workflow is affected. |\n\n"
+        "## Problem-To-Requirement Mapping\n\n"
+        "| Problem ID | Requirement ID | Resolution |\n"
+        "| --- | --- | --- |\n"
+        "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
+        "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
+        "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Open Questions\n\n"
+        "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
         "## Requirements\n\n"
-        "| ID | Actor | Trigger | Observable Behavior | Acceptance Evidence | Boundary Or Exclusion | Requirement |\n"
-        "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| REQ-001 | User | User requests behavior. | Reviewed behavior is recorded. | Acceptance criteria covers REQ-001. | No unrelated scope. | Requirement. |\n\n"
-        "## Acceptance Criteria\n\n- `REQ-001` is satisfied.\n",
+        "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n\n"
+        "## Acceptance Criteria\n\n- `REQ-001` is satisfied when `OUT-001` is verifiable and `PROB-001` is resolved.\n",
     ),
     (
         "service-plan",
         "02-service-plan",
         "service-plan.md",
         "# Service Plan\n\n"
-        "## User Visible Behavior\n\nUsers see the changed behavior.\n\n"
-        "## Service Behavior\n\nThe service behaves as approved.\n\n"
+        "## Normal Behavior Model\n\nThe service exposes the corrected normal behavior and prevents the reported regression.\n\n"
+        "## User Flow\n\nUsers see the changed behavior in the approved flow.\n\n"
+        "## State And Policy Model\n\nState changes follow the approved policy.\n\n"
         "## Policy Rules\n\n"
-        "| Rule ID | Trigger Or Condition | Policy | User/System Response | Data/State/API Effect | Failure/Exception Behavior | Source Requirement IDs |\n"
+        "| Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |\n"
         "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| SP-001 | User requests behavior. | Follow approved behavior. | User sees the planned response. | No API change. | Errors remain recoverable. | REQ-001 |\n\n"
-        "## Service API Or Data Flow\n\nNo API change.\n\n"
+        "| SP-001 | User requests behavior. | Follow approved behavior. | User sees the planned response. | Required state is updated. | Errors remain recoverable. | REQ-001 |\n\n"
+        "## Integration Flow And Data Responsibilities\n\nNo integration change.\n\n"
         "## Boundaries\n\nOnly approved behavior is included.\n\n"
-        "## Failure And Exception Behavior\n\nErrors remain recoverable.\n",
+        "## Regression Prevention\n\nPROB-001 must not recur.\n\n"
+        "## Failure And Recovery Behavior\n\nErrors remain recoverable.\n",
     ),
     (
         "implementation-plan",
@@ -77,6 +124,7 @@ STAGES = [
         "implementation-plan.md",
         "# Implementation Plan\n\n"
         "## Change Areas\n\nCode and tests.\n\n"
+        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001.\n\n"
         "## Work Items\n\n"
         "| ID | Work Item | Evidence |\n"
         "| --- | --- | --- |\n"
@@ -94,10 +142,11 @@ STAGES = [
         "04-implementation",
         "implementation.md",
         "# Implementation\n\n"
-        "## Work Completed\n\nImplemented as planned; no deviations.\n\n"
-        "## Validation\n\nTests passed.\n\n"
+        "## Work Completed\n\nImplemented as planned.\n\n"
+        "## Plan Compliance And Deviations\n\nNo deviations.\n\n"
+        "## Validation\n\nTests passed and PROB-001 no longer reproduces.\n\n"
         "## Review Result\n\nSubagent review passed with no blocking issues.\n\n"
-        "## Completion Summary\n\nCompleted as approved.\n",
+        "## Completion Summary\n\nCompleted as approved with no residual risk.\n",
     ),
 ]
 STAGE_BY_PHASE = {phase: (folder, artifact_name, artifact_text) for phase, folder, artifact_name, artifact_text in STAGES}
@@ -273,10 +322,10 @@ Approved.
     def test_print_template_outputs_four_stage_templates(self) -> None:
         for template, expected in {
             "stage-tree": "01-requirements/goal.md",
-            "requirements": "Observable Behavior",
+            "requirements": "## Request Profile",
             "service-plan": "## Policy Rules",
             "implementation-plan": "## Coverage Matrix",
-            "implementation": "## Completion Summary",
+            "implementation": "## Plan Compliance And Deviations",
             "goal": "Tool: create_goal",
             "review": "Writing And Review Rule Checklist",
             "approval": "Stage approved: yes",
@@ -323,6 +372,73 @@ Approved.
             with self.subTest(stage_heading=stage_heading):
                 self.assertNotIn(stage_heading, artifact_text)
 
+    def test_stage_role_and_profile_guidance_is_documented(self) -> None:
+        rule_expectations = {
+            "references/stages/01-requirements/requirements-writing-and-review-rules.md": (
+                "## Stage Responsibility",
+                "## Request Type Profiles",
+                "## Desired Outcomes",
+                "## Current Problems",
+                "## Problem-To-Requirement Mapping",
+                "## Open Questions",
+                "User-Specified Constraints",
+                "Discovered Constraints",
+            ),
+            "references/stages/02-service-plan/service-plan-writing-and-review-rules.md": (
+                "## Stage Responsibility",
+                "## Request Type Profiles",
+                "normal behavior model",
+                "Regression Prevention",
+                "Integration Flow And Data Responsibilities",
+                "Do not include implementation file lists",
+            ),
+            "references/stages/03-implementation-plan/implementation-plan-writing-and-review-rules.md": (
+                "## Stage Responsibility",
+                "## Request Type Profiles",
+                "Cause Or Design Notes",
+                "Do not create new requirements",
+                "endpoint semantics",
+            ),
+            "references/stages/04-implementation/implementation-writing-and-review-rules.md": (
+                "## Stage Responsibility",
+                "## Request Type Profiles",
+                "Plan Compliance And Deviations",
+                "problem-resolution or regression evidence",
+            ),
+        }
+        for relative, expected_phrases in rule_expectations.items():
+            text = (ROOT / "skills" / "stageflow" / relative).read_text(encoding="utf-8-sig")
+            for phrase in expected_phrases:
+                with self.subTest(relative=relative, phrase=phrase):
+                    self.assertIn(phrase, text)
+
+    def test_review_prompts_block_stage_role_regressions(self) -> None:
+        prompt_expectations = {
+            "references/stages/01-requirements/requirements-review-agent-prompt.md": (
+                "mixed requests connect problems to resolving requirements",
+                "user-specified files, endpoints, commands, screens, or reference systems",
+                "blocking open question remains",
+            ),
+            "references/stages/02-service-plan/service-plan-review-agent-prompt.md": (
+                "repeating the requirements list",
+                "Regression Prevention",
+                "does not introduce new requirements",
+            ),
+            "references/stages/03-implementation-plan/implementation-plan-review-agent-prompt.md": (
+                "does not introduce new requirements",
+                "UX policy",
+                "endpoint semantics",
+            ),
+            "references/stages/04-implementation/implementation-review-agent-prompt.md": (
+                "Plan Compliance And Deviations",
+                "problem-resolution evidence",
+            ),
+        }
+        for relative, expected_phrases in prompt_expectations.items():
+            text = (ROOT / "skills" / "stageflow" / relative).read_text(encoding="utf-8-sig")
+            for phrase in expected_phrases:
+                with self.subTest(relative=relative, phrase=phrase):
+                    self.assertIn(phrase, text)
     def test_validator_docs_use_plugin_script_and_target_root(self) -> None:
         skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
         artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(
@@ -458,8 +574,44 @@ Approved.
             self.refresh_stage_fingerprint(root, "requirements")
             result = self.run_validator(root, "requirements")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Observable Behavior", result.stdout)
+            self.assertIn("Desired Outcomes", result.stdout)
 
+    def test_mixed_requirements_need_problem_to_requirement_mapping(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                "# Requirements\n\n"
+                "## User Goal\n\nFix the current issue and adjust the behavior.\n\n"
+                "## Request Profile\n\nPrimary: bugfix\nSecondary: feature-adjustment\n\n"
+                "## Desired Outcomes\n\n"
+                "| ID | Outcome | Source | Success Signal |\n"
+                "| --- | --- | --- | --- |\n"
+                "| OUT-001 | Corrected behavior exists. | User request. | User can verify it. |\n\n"
+                "## Current Problems\n\n"
+                "| ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| PROB-001 | Current behavior is wrong. | Corrected behavior. | Wrong behavior. | Repro steps. | User blocked. |\n\n"
+                "## Problem-To-Requirement Mapping\n\n"
+                "No mapping recorded.\n\n"
+                "## User-Specified Constraints\n\n- None specified.\n\n"
+                "## Discovered Constraints\n\n- None discovered.\n\n"
+                "## Open Questions\n\n"
+                "| ID | Question | Recommended Option | Alternatives | Impact | Blocking |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| Q-001 | No open question. | N/A | N/A | N/A | no |\n\n"
+                "## Requirements\n\n"
+                "| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |\n"
+                "| --- | --- | --- | --- | --- | --- |\n"
+                "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n\n"
+                "## Acceptance Criteria\n\n- `REQ-001` resolves `PROB-001`.\n",
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Problem-To-Requirement Mapping", result.stdout)
     def test_service_plan_requires_policy_rules(self) -> None:
         with temp_project() as tmp:
             root = Path(tmp)
