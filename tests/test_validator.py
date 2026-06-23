@@ -255,6 +255,16 @@ class ValidatorFourStageTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
+        folder, _, _ = STAGE_BY_PHASE[phase]
+        goal_path = root / ".stageflow" / "requests" / REQUEST_ID / folder / "goal.md"
+        text = goal_path.read_text(encoding="utf-8")
+        text = text.replace(
+            "Goal status: active",
+            "Goal status: completed\n\nGoal completion reason: awaiting user clarification",
+        )
+        goal_path.write_text(text, encoding="utf-8")
+
     @staticmethod
     def goal_text(phase: str, folder: str, artifact_name: str, fingerprint: str) -> str:
         return f"""# Goal
@@ -275,7 +285,7 @@ Invocation result: goal created
 
 ## Goal Objective
 
-Execute this stage.
+Advance this stage artifact to the next user input or approval gate.
 
 ## Goal Tool Status
 
@@ -981,6 +991,28 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("no following clarification round", result.stdout)
 
+
+    def test_pending_clarification_with_active_goal_fails_before_awaiting_user(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| CLAR-001 | Which docs model should requirements capture? | Option 1: docs-wide status; Option 2: per-feature status; 서비스 계획으로 넘어가기 | Option 1 | 서비스 계획으로 넘어가기 | This is a user-facing pending decision. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("Goal status: completed", result.stdout)
+            self.assertIn("awaiting user clarification", result.stdout)
+
     def test_requirements_pending_clarification_batch_returns_awaiting_user(self) -> None:
         with temp_project() as tmp:
             root = Path(tmp)
@@ -998,6 +1030,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "requirements")
+            self.mark_goal_awaiting_user(root, "requirements")
             result = self.run_validator(root, "requirements")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER requirements", result.stdout)
@@ -1021,6 +1054,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "service-plan")
+            self.mark_goal_awaiting_user(root, "service-plan")
             result = self.run_validator(root, "service-plan")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER service-plan", result.stdout)

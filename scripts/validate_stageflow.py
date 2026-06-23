@@ -242,6 +242,8 @@ IMPLEMENTATION_PLAN_TRANSITION_RE = re.compile(
 )
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
 NO_PENDING_STATUS_RE = re.compile(r"^(none|n/a|no|없음)$", re.IGNORECASE)
+AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
+AWAITING_USER_GOAL_REASON = "awaiting user clarification"
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
 
@@ -393,7 +395,7 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     else:
         artifact_fingerprint = None
 
-    validate_goal(stage, goal_path, artifact_fingerprint, errors)
+    validate_goal(stage, goal_path, artifact_fingerprint, errors, bool(pending_messages))
     if pending_messages:
         awaiting.extend(pending_messages)
         return
@@ -746,6 +748,7 @@ def validate_goal(
     path: Path,
     artifact_fingerprint: str | None,
     errors: list[str],
+    has_pending_clarifications: bool = False,
 ) -> None:
     text = read_required_text(path, errors)
     if text is None:
@@ -761,7 +764,17 @@ def validate_goal(
     if "Goal created: yes" not in text:
         errors.append(f"`{display_path(path)}` Goal Tool Status must record `Goal created: yes`")
     status = label_value(text, "Goal status").lower()
-    if status in {"", "pending", "blocked", "failed", "no"}:
+    if has_pending_clarifications:
+        reason = label_value(text, "Goal completion reason").lower()
+        if status not in AWAITING_USER_GOAL_STATUSES:
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications require `Goal status: completed` before AWAITING_USER; close the Codex goal after showing the pending questions"
+            )
+        if AWAITING_USER_GOAL_REASON not in reason:
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications require `Goal completion reason: awaiting user clarification`"
+            )
+    elif status in {"", "pending", "blocked", "failed", "no"}:
         errors.append(f"`{display_path(path)}` Goal Tool Status must record an active or completed goal status")
     validate_fingerprint(path, text, "Artifact Fingerprint", artifact_fingerprint, errors)
 
@@ -997,7 +1010,7 @@ Invocation result: goal created
 
 ## Goal Objective
 
-Execute this stage from the current artifact only. Update the stage artifact, then require subagent review and user approval before advancing.
+Advance this stage artifact to the next required user input or approval gate. If pending clarifications are presented, stop at user-answer waiting instead of continuing review or next-stage work.
 
 ## Goal Tool Status
 

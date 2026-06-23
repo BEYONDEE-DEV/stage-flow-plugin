@@ -117,7 +117,7 @@ Invocation result: goal created
 
 ## Goal Objective
 
-Execute this stage from the current artifact only. Update the stage artifact, then require subagent review and user approval before advancing.
+Advance this stage artifact to the next required user input or approval gate. If pending clarifications are presented, stop at user-answer waiting instead of continuing review or next-stage work.
 
 ## Goal Tool Status
 
@@ -132,6 +132,7 @@ Required values:
 - `Artifact Fingerprint` must be the SHA-256 of the current stage artifact bytes.
 - `Tool: create_goal`, `Invocation recorded: yes`, and `Goal created: yes` are required.
 - `Goal status` must be active, in progress, complete, completed, or another non-pending success state.
+- When `Pending Clarifications` are active, `goal.md` must record `Goal status: completed` and `Goal completion reason: awaiting user clarification`; this means the current Codex goal reached a user-input wait point, not that the stage was approved.
 
 ## review.md
 

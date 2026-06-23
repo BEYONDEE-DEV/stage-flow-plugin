@@ -42,6 +42,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Use the session current pointer at `.stageflow/sessions/<session-id>/current.json` as the active request authority.
 - Run each stage as a goal before writing or revising that stage artifact.
 - Record the goal receipt in that stage's `goal.md`: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
+- When a requirements or service-plan turn presents `Pending Clarifications`, close the Codex goal before the final response and record `Goal status: completed` plus `Goal completion reason: awaiting user clarification`; the stage itself remains unapproved until the user answers and the review/approval gates pass.
 - Review each stage artifact with a subagent. Self-review is allowed only as a private preliminary check and never satisfies the review gate.
 - Record every review in the same stage's `review.md`, including review cycle history, current artifact fingerprint, latest verdict, blocking issues, and final verdict.
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
@@ -60,7 +61,7 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its options, and stop without review, approval, next-stage work, or blocked-goal handling.
+   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its options, and stop without review, approval, next-stage work, or blocked-goal handling. The matching `goal.md` must already be completed with `Goal completion reason: awaiting user clarification`.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all four stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
@@ -146,7 +147,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a requirements or service-plan artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user selects options or asks a follow-up that is answered with the pending choices restated.
+- `AWAITING_USER` means a requirements or service-plan artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user selects options or asks a follow-up that is answered with the pending choices restated. The response must not claim goal/stage completion or next-stage progress.
 - Subagent lifecycle hooks record lightweight observation state only.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

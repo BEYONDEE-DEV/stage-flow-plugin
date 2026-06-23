@@ -40,6 +40,12 @@ IMPLEMENTATION_TOKENS = (
     "\ud328\uce58",
 )
 COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc", "\ub05d")
+AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
+    r"\b(completed|done)\b|완료\s*확인|목표(?:를)?\s*(?:완료|달성)|"
+    r"다음\s*단계(?:로)?\s*(?:진행|이동)|서비스\s*계획(?:을)?\s*(?:작성|진행|시작)|"
+    r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
+    re.IGNORECASE,
+)
 PREFLIGHT_MARKER_PREFIX = "Stageflow preflight:"
 WRITE_TOOL_TOKENS = (
     "edit",
@@ -113,6 +119,35 @@ def looks_like_implementation(prompt: str) -> bool:
 def looks_like_completion(text: str) -> bool:
     lowered = text.lower()
     return any(token in lowered for token in COMPLETION_TOKENS)
+
+
+def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str]]]:
+    requirements: list[tuple[str, list[str]]] = []
+    for line in pending_output.splitlines():
+        if "pending clarification" not in line or "Question: " not in line or " Options: " not in line:
+            continue
+        question = line.split("Question: ", 1)[1].split(" Options: ", 1)[0].strip()
+        options = line.split(" Options: ", 1)[1].split(" Recommended: ", 1)[0].strip()
+        transition = ""
+        if " Transition option: " in line and " Why this matters: " in line:
+            transition = line.split(" Transition option: ", 1)[1].split(" Why this matters: ", 1)[0].strip()
+        option_labels = re.findall(r"(?:^|[;,]\s*)((?:Option\s+\d+|[A-Z])\s*:)", options, flags=re.IGNORECASE)
+        required_parts = [part for part in (question, transition) if part]
+        required_parts.extend(option_labels[:2])
+        requirements.append((question or "pending clarification", required_parts))
+    return requirements
+
+
+def missing_pending_response_parts(last_message: str, pending_output: str) -> list[str]:
+    missing: list[str] = []
+    for question_label, required_parts in pending_output_requirements(pending_output):
+        for part in required_parts:
+            if part and part not in last_message:
+                missing.append(f"{question_label}: {part}")
+    if not missing and pending_output and not pending_output_requirements(pending_output):
+        if "pending clarification" not in last_message.lower() and "대기" not in last_message:
+            missing.append("pending clarification summary")
+    return missing
 
 
 def resolve_root(args: argparse.Namespace, payload: dict[str, Any]) -> Path:
@@ -372,6 +407,19 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
             state = load_json(root / ".stageflow" / "requests" / request_id / "state.json") if request_id else None
             if not request_id or state is None:
                 block_result(result, "Stageflow session current pointer is still invalid")
+
+        if turn.get("status") == "AWAITING_USER":
+            if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
+                block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
+            missing_parts = missing_pending_response_parts(
+                last_message, str(turn.get("pending_clarification_output") or "")
+            )
+            if missing_parts:
+                block_result(
+                    result,
+                    "AWAITING_USER response must restate pending clarification questions and options: "
+                    + "; ".join(missing_parts[:5]),
+                )
 
         if looks_like_completion(last_message):
             validation = run_validator(root, "all", payload)

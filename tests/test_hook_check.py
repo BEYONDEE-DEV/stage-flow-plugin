@@ -248,6 +248,16 @@ class HookCheckFourStageTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
+        folder, _, _ = STAGE_BY_PHASE[phase]
+        goal_path = root / ".stageflow" / "requests" / REQUEST_ID / folder / "goal.md"
+        text = goal_path.read_text(encoding="utf-8")
+        text = text.replace(
+            "Goal status: active",
+            "Goal status: completed\n\nGoal completion reason: awaiting user clarification",
+        )
+        goal_path.write_text(text, encoding="utf-8")
+
     @staticmethod
     def goal_text(phase: str, folder: str, artifact_name: str, fingerprint: str) -> str:
         return f"""# Goal
@@ -268,7 +278,7 @@ Invocation result: goal created
 
 ## Goal Objective
 
-Execute this stage.
+Advance this stage artifact to the next user input or approval gate.
 
 ## Goal Tool Status
 
@@ -502,6 +512,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "service-plan")
+            self.mark_goal_awaiting_user(root, "service-plan")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "AWAITING_USER")
             self.assertEqual(result["turn_start_action"], "await_user_clarification")
@@ -509,6 +520,68 @@ Approved.
             self.assertIn("How should docs sync status", result["pending_clarification_output"])
             self.assertIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
             self.assertNotIn("current Stageflow stage validation failed", result["warnings"])
+
+    def test_awaiting_user_stop_blocks_response_without_pending_questions(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "service-plan")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| SVC-CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered service decision. | pending |",
+                ).replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            self.mark_goal_awaiting_user(root, "service-plan")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("pending clarification questions and options", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_stop_blocks_completion_claim_even_with_questions(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "service-plan")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| SVC-CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered service decision. | pending |",
+                ).replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            self.mark_goal_awaiting_user(root, "service-plan")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            last_message = (
+                marker
+                + "\n질문: How should docs sync status be represented?\n"
+                + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus partial review notes / 구현 계획으로 넘어가기\n"
+                + "목표를 달성했습니다."
+            )
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": last_message},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("must not claim completion", "\n".join(result["warnings"]))
 
 if __name__ == "__main__":
     unittest.main()
