@@ -2,9 +2,9 @@
 
 Stage: implementation
 
-Stage Artifact: `04-implementation/implementation.md`
+Stage Artifact: `03-implementation/implementation.md`
 
-Writing And Review Rule File: `references/stages/04-implementation/implementation-writing-and-review-rules.md`
+Writing And Review Rule File: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
 
 ## Review Mission
 
@@ -14,12 +14,11 @@ You are the Stageflow review subagent for the implementation stage. Review the i
 
 Review only these inputs:
 
-- Current stage artifact: `04-implementation/implementation.md`
+- Current stage artifact: `03-implementation/implementation.md`
 - Current artifact fingerprint: `sha256:<artifact-fingerprint>`
-- Writing and review rule file: `references/stages/04-implementation/implementation-writing-and-review-rules.md`
-- Previous approved artifact: `01-requirements/requirements.md`
-- Previous approved artifact: `02-service-plan/service-plan.md`
-- Previous approved artifact: `03-implementation-plan/implementation-plan.md`
+- Writing and review rule file: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
+- Previous approved artifact: `01-definition/definition.md`
+- Previous approved artifact: `02-implementation-plan/implementation-plan.md`
 - Implementation evidence explicitly provided with the review request, such as changed-file summaries, diffs, command output, or test results
 
 Do not review unrelated files unless the implementation evidence explicitly includes them. Do not implement changes. Do not hide deviations or failed validation. Do not ask the user questions. Self-review never satisfies this gate.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fast hook auditor for the four-stage Stageflow model."""
+"""Fast hook auditor for the three-stage Stageflow model."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from typing import Any
 
 
 PHASE_TO_VALIDATION = {
-    "requirements": "requirements",
-    "service-plan": "service-plan",
+    "definition": "definition",
     "implementation-plan": "implementation-plan",
     "implementation": "implementation",
     "completed": "all",
@@ -425,7 +424,7 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
             validation = run_validator(root, "all", payload)
             result["completion_validation"] = validation
             if validation["status"] != "PASS":
-                block_result(result, "completion-like response but four-stage validation failed")
+                block_result(result, "completion-like response but three-stage validation failed")
 
     return result
 

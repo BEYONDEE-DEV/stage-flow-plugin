@@ -1,6 +1,6 @@
 # Stageflow Artifact Format
 
-Stageflow uses one request folder with four fixed stage folders. This file defines request-level structure and common stage files. Stage-specific artifact formats live in each stage's writing and review rule file.
+Stageflow uses one request folder with three fixed stage folders. This file defines request-level structure and common stage files. Stage-specific artifact formats live in each stage's writing and review rule file.
 
 ## Registry Files
 
@@ -11,9 +11,9 @@ Stageflow uses one request folder with four fixed stage folders. This file defin
   "version": "1",
   "requests": [
     {
-      "id": "20260621-1200-four-stage-workflow",
-      "title": "Four stage workflow",
-      "status": "requirements",
+      "id": "20260621-1200-three-stage-workflow",
+      "title": "Three stage workflow",
+      "status": "definition",
       "created_at": "2026-06-21T03:00:00Z",
       "updated_at": "2026-06-21T03:00:00Z"
     }
@@ -25,8 +25,8 @@ Stageflow uses one request folder with four fixed stage folders. This file defin
 
 ```json
 {
-  "request_id": "20260621-1200-four-stage-workflow",
-  "phase": "requirements",
+  "request_id": "20260621-1200-three-stage-workflow",
+  "phase": "definition",
   "activated_by": "explicit_skill_invocation"
 }
 ```
@@ -35,35 +35,30 @@ Stageflow uses one request folder with four fixed stage folders. This file defin
 
 ```json
 {
-  "request_id": "20260621-1200-four-stage-workflow",
-  "phase": "requirements",
+  "request_id": "20260621-1200-three-stage-workflow",
+  "phase": "definition",
   "last_validated_at": null
 }
 ```
 
-Allowed phases are `requirements`, `service-plan`, `implementation-plan`, `implementation`, and `completed`.
+Allowed phases are `definition`, `implementation-plan`, `implementation`, and `completed`.
 
 ## Request Tree
 
 ```text
 .stageflow/requests/<request-id>/
   state.json
-  01-requirements/
+  01-definition/
     goal.md
-    requirements.md
+    definition.md
     review.md
     approval.md
-  02-service-plan/
-    goal.md
-    service-plan.md
-    review.md
-    approval.md
-  03-implementation-plan/
+  02-implementation-plan/
     goal.md
     implementation-plan.md
     review.md
     approval.md
-  04-implementation/
+  03-implementation/
     goal.md
     implementation.md
     review.md
@@ -76,10 +71,9 @@ Each stage must pass in order. A later stage validation also validates every ear
 
 Before writing or reviewing a stage artifact, read the matching rule file:
 
-- Requirements: `references/stages/01-requirements/requirements-writing-and-review-rules.md`
-- Service plan: `references/stages/02-service-plan/service-plan-writing-and-review-rules.md`
-- Implementation plan: `references/stages/03-implementation-plan/implementation-plan-writing-and-review-rules.md`
-- Implementation: `references/stages/04-implementation/implementation-writing-and-review-rules.md`
+- Definition: `references/stages/01-definition/definition-writing-and-review-rules.md`
+- Implementation plan: `references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md`
+- Implementation: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
 
 Each rule file owns that stage's artifact format, required sections, writing rules, and review checks.
 
@@ -87,10 +81,9 @@ Each rule file owns that stage's artifact format, required sections, writing rul
 
 Before running a review subagent, use the matching prompt file:
 
-- Requirements: `references/stages/01-requirements/requirements-review-agent-prompt.md`
-- Service plan: `references/stages/02-service-plan/service-plan-review-agent-prompt.md`
-- Implementation plan: `references/stages/03-implementation-plan/implementation-plan-review-agent-prompt.md`
-- Implementation: `references/stages/04-implementation/implementation-review-agent-prompt.md`
+- Definition: `references/stages/01-definition/definition-review-agent-prompt.md`
+- Implementation plan: `references/stages/02-implementation-plan/implementation-plan-review-agent-prompt.md`
+- Implementation: `references/stages/03-implementation/implementation-review-agent-prompt.md`
 
 Each prompt file owns the review mission, allowed inputs, forbidden actions, review instructions, and required review output for that stage.
 
@@ -101,9 +94,9 @@ Every stage has its own `goal.md`. It records the goal handoff for that stage ar
 ```md
 # Goal
 
-Stage: requirements
+Stage: definition
 
-Artifact Path: `01-requirements/requirements.md`
+Artifact Path: `01-definition/definition.md`
 
 Artifact Fingerprint: sha256:<artifact-fingerprint>
 
@@ -141,7 +134,7 @@ Every stage has one `review.md`. Use it as a compact review cycle ledger.
 ```md
 # Review
 
-Stage: requirements
+Stage: definition
 
 Reviewed Artifact Fingerprint: sha256:<artifact-fingerprint>
 
@@ -163,7 +156,7 @@ reviewer subagent
 
 | Rule ID | Evidence Read | Verdict | Blocking Issue |
 | --- | --- | --- | --- |
-| REQ-RULE-001 | Project context and requirements were checked. | PASS | None |
+| DEF-RULE-001 | Project context and definition were checked. | PASS | None |
 
 ## Latest Verdict
 
@@ -198,7 +191,7 @@ Every stage has one `approval.md`. It records the user's explicit approval for t
 ```md
 # Approval
 
-Stage: requirements
+Stage: definition
 
 Stage approved: yes
 
@@ -222,8 +215,7 @@ The validator can print starter templates:
 ```powershell
 python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
 python <plugin-root>/scripts/validate_stageflow.py --print-template goal
-python <plugin-root>/scripts/validate_stageflow.py --print-template requirements
-python <plugin-root>/scripts/validate_stageflow.py --print-template service-plan
+python <plugin-root>/scripts/validate_stageflow.py --print-template definition
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
 python <plugin-root>/scripts/validate_stageflow.py --print-template review
