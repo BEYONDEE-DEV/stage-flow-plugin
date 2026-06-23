@@ -93,6 +93,10 @@ STAGES = [
         "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Clarification History\n\n"
+        "| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |\n\n"
         "## Open Questions\n\n"
         "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
         "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
@@ -129,19 +133,22 @@ STAGES = [
         "03-implementation-plan",
         "implementation-plan.md",
         "# Implementation Plan\n\n"
-        "## Change Areas\n\nCode and tests.\n\n"
-        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001.\n\n"
+        "## Technical Approach\n\nExtend the existing validator-driven Stageflow architecture so the same stage metadata and markdown table checks enforce the approved behavior.\n\n"
+        "## Implementation Architecture\n\n`scripts/validate_stageflow.py` validates stage sections and tables, stage rule markdown defines authoring contracts, and subprocess tests verify fixture requests through the public CLI.\n\n"
+        "## Change Areas\n\nValidator metadata, stage rule markdown, review prompts, and test fixtures.\n\n"
+        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001. The technical contract must reject shallow implementation plans before approval.\n\n"
         "## Work Items\n\n"
-        "| ID | Work Item | Evidence |\n"
-        "| --- | --- | --- |\n"
-        "| WORK-001 | Implement behavior. | Tests. |\n\n"
+        "| ID | Implementation Unit | Technical Design | Completion Evidence |\n"
+        "| --- | --- | --- | --- |\n"
+        "| WORK-001 | Implementation-plan validator contract. | Add required technical sections and work-item columns to the stage metadata, then reject generic implementation text. | Validator failure tests and full unittest output. |\n\n"
         "## Coverage Matrix\n\n"
         "| Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |\n"
         "| --- | --- | --- | --- | --- |\n"
-        "| SP-001 | WORK-001 | Code and tests. | Test output. | Stay scoped. |\n\n"
-        "## Validation\n\n- Run tests.\n\n"
-        "## Risks\n\nNone.\n\n"
-        "## Constraints\n\nStay scoped.\n",
+        "| SP-001 | WORK-001 | Validator, rule docs, and tests. | Subprocess validator tests cover accepted detailed plans and rejected shallow plans. | Stay scoped to artifact quality gates. |\n\n"
+        "## Edge Cases And Failure Modes\n\nLegacy plans with missing technical sections or generic work items fail validation before implementation approval.\n\n"
+        "## Validation Strategy\n\nRun `python -m unittest discover -s tests`; targeted negative tests remove technical sections and use shallow work item text.\n\n"
+        "## Risks\n\nExisting in-flight requests may need implementation-plan artifacts refreshed.\n\n"
+        "## Constraints\n\nStay scoped and preserve existing approval, review, and fingerprint gates.\n",
     ),
     (
         "implementation",
@@ -805,6 +812,79 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("phase must be `completed`", result.stdout)
 
+    def test_requirements_requires_clarification_history(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            text = artifact.read_text(encoding="utf-8")
+            before, remainder = text.split("## Clarification History\n\n", 1)
+            _, after = remainder.split("## Open Questions\n\n", 1)
+            artifact.write_text(before + "## Open Questions\n\n" + after, encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Clarification History", result.stdout)
+
+    def test_requirements_requires_service_plan_transition_choice(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard. | User selected first proposal. | no | Continue asking. | REQ-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("service-plan transition", result.stdout)
+
+    def test_implementation_plan_requires_technical_sections(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                "# Implementation Plan\n\n"
+                "## Change Areas\n\nCode.\n\n"
+                "## Cause Or Design Notes\n\nGrounded in SP-001.\n\n"
+                "## Work Items\n\n"
+                "| ID | Implementation Unit | Technical Design | Completion Evidence |\n"
+                "| --- | --- | --- | --- |\n"
+                "| WORK-001 | Validator. | Add checks. | Tests. |\n\n"
+                "## Coverage Matrix\n\n"
+                "| Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |\n"
+                "| --- | --- | --- | --- | --- |\n"
+                "| SP-001 | WORK-001 | Validator. | Tests. | Scoped. |\n\n"
+                "## Risks\n\nNone.\n\n"
+                "## Constraints\n\nScoped.\n",
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Technical Approach", result.stdout)
+
+    def test_implementation_plan_rejects_shallow_work_item_text(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| WORK-001 | Implementation-plan validator contract. | Add required technical sections and work-item columns to the stage metadata, then reject generic implementation text. | Validator failure tests and full unittest output. |",
+                    "| WORK-001 | Code and tests. | Implement behavior. | Run tests. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("too generic", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

@@ -46,6 +46,7 @@ STAGES: tuple[Stage, ...] = (
             "Problem-To-Requirement Mapping",
             "User-Specified Constraints",
             "Discovered Constraints",
+            "Clarification History",
             "Open Questions",
             "Resolved Decisions",
             "Requirements",
@@ -61,6 +62,17 @@ STAGES: tuple[Stage, ...] = (
                 ("ID", "Problem", "Expected Behavior", "Actual Behavior", "Evidence Or Reproduction", "Impact"),
             ),
             TableRequirement("Problem-To-Requirement Mapping", ("Problem ID", "Requirement ID", "Resolution")),
+            TableRequirement(
+                "Clarification History",
+                (
+                    "Round ID",
+                    "Questions Asked",
+                    "User Response",
+                    "Service Plan Option Offered",
+                    "User Transition Signal",
+                    "Reflected In",
+                ),
+            ),
             TableRequirement(
                 "Open Questions",
                 (
@@ -129,12 +141,23 @@ STAGES: tuple[Stage, ...] = (
         "03-implementation-plan",
         "implementation-plan.md",
         "Implementation Plan",
-        ("Change Areas", "Cause Or Design Notes", "Work Items", "Coverage Matrix", "Validation", "Risks", "Constraints"),
+        (
+            "Technical Approach",
+            "Implementation Architecture",
+            "Change Areas",
+            "Cause Or Design Notes",
+            "Work Items",
+            "Coverage Matrix",
+            "Edge Cases And Failure Modes",
+            "Validation Strategy",
+            "Risks",
+            "Constraints",
+        ),
         "03-implementation-plan",
         "implementation-plan-writing-and-review-rules.md",
         "Implementation Plan Writing And Review Rules",
         (
-            TableRequirement("Work Items", ("ID", "Work Item", "Evidence")),
+            TableRequirement("Work Items", ("ID", "Implementation Unit", "Technical Design", "Completion Evidence")),
             TableRequirement(
                 "Coverage Matrix",
                 ("Service Rule ID", "Work Item ID", "Change Area", "Validation Evidence", "Risk/Constraint"),
@@ -171,6 +194,10 @@ NO_BLOCKING_RE = re.compile(
     re.IGNORECASE,
 )
 BLOCKING_OPEN_QUESTION_RE = re.compile(r"^(yes|true|blocking|block)$", re.IGNORECASE)
+SERVICE_PLAN_TRANSITION_RE = re.compile(
+    r"\b(proceed|approved|approval|done|service plan|next stage)\b|승인|진행|서비스\s*계획|다음\s*단계",
+    re.IGNORECASE,
+)
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
 
@@ -434,6 +461,9 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str]) ->
         validate_table_columns(path, text, requirement, errors)
     if stage.phase == "requirements":
         validate_requirements_blocking_questions(path, text, errors)
+        validate_requirements_clarification_history(path, text, errors)
+    if stage.phase == "implementation-plan":
+        validate_implementation_plan_depth(path, text, errors)
 
 
 def validate_requirements_blocking_questions(path: Path, text: str, errors: list[str]) -> None:
@@ -448,6 +478,49 @@ def validate_requirements_blocking_questions(path: Path, text: str, errors: list
             )
 
 
+def validate_requirements_clarification_history(path: Path, text: str, errors: list[str]) -> None:
+    table = parse_first_markdown_table(section_text(text, "## Clarification History"))
+    if not table.rows:
+        return
+    has_transition_signal = False
+    for row in table.rows:
+        offered = row.get("Service Plan Option Offered", "").strip()
+        transition_signal = row.get("User Transition Signal", "").strip()
+        if offered.lower() not in {"yes", "true"} and "서비스 계획" not in offered:
+            round_id = row.get("Round ID", "").strip() or "<unknown>"
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` must record that a service-plan transition option was offered"
+            )
+        if SERVICE_PLAN_TRANSITION_RE.search(transition_signal):
+            has_transition_signal = True
+    if not has_transition_signal:
+        errors.append(
+            f"`{display_path(path)}` Clarification History must record an explicit user choice to move to service-plan before approval"
+        )
+
+
+def validate_implementation_plan_depth(path: Path, text: str, errors: list[str]) -> None:
+    shallow_phrases = (
+        "code and tests",
+        "implement behavior",
+        "implement the reviewed service behavior",
+        "run tests",
+        "target code, docs, tests, or assets",
+    )
+    for section in ("Technical Approach", "Implementation Architecture", "Edge Cases And Failure Modes", "Validation Strategy"):
+        section_body = section_text(text, f"## {section}")
+        if any(phrase in section_body.lower() for phrase in shallow_phrases):
+            errors.append(f"`{display_path(path)}` `## {section}` is too generic for a technical implementation plan")
+
+    work_items = parse_first_markdown_table(section_text(text, "## Work Items"))
+    for row in work_items.rows:
+        work_id = row.get("ID", "").strip() or "<unknown>"
+        combined = " ".join(
+            row.get(column, "")
+            for column in ("Implementation Unit", "Technical Design", "Completion Evidence")
+        ).lower()
+        if any(phrase in combined for phrase in shallow_phrases):
+            errors.append(f"`{display_path(path)}` Work Items row `{work_id}` is too generic for execution")
 def validate_table_columns(path: Path, text: str, requirement: TableRequirement, errors: list[str]) -> None:
     parse_required_table(
         path,
@@ -759,6 +832,12 @@ Secondary: none
 
 - None discovered.
 
+## Clarification History
+
+| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |
+| --- | --- | --- | --- | --- | --- |
+| CLAR-001 | Which concrete direction should requirements capture? Options: Proposal 1, Proposal 2, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |
+
 ## Open Questions
 
 | ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
@@ -819,37 +898,53 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 """,
     "implementation-plan": """# Implementation Plan
 
+## Technical Approach
+
+Use the existing validator-driven Stageflow architecture. Extend the stage metadata and markdown validators instead of adding a separate parser path so the same gate enforces artifact format, review checklist, and approval behavior.
+
+## Implementation Architecture
+
+`scripts/validate_stageflow.py` owns required section and table validation. Stage rule markdown owns authoring/review contracts. Tests create fixture requests that exercise the validator through subprocess, so fixtures must mirror the new artifact contract.
+
 ## Change Areas
 
-Describe the code, docs, tests, or assets expected to change.
+- Stage metadata and validation helpers in `scripts/validate_stageflow.py`.
+- Stage writing and review rules under `skills/stageflow/references/stages/`.
+- Fixture artifacts and regression tests under `tests/`.
 
 ## Cause Or Design Notes
 
-Record implementation-relevant cause analysis, design constraints, or assumptions grounded in the approved service plan.
+The implementation plan must prevent file-list-only plans by requiring architecture, flow, edge-case, and validation evidence before implementation approval.
 
 ## Work Items
 
-| ID | Work Item | Evidence |
-| --- | --- | --- |
-| WORK-001 | Implement the reviewed service behavior. | Changed files and test output. |
+| ID | Implementation Unit | Technical Design | Completion Evidence |
+| --- | --- | --- | --- |
+| WORK-001 | Stage validator contract. | Add required technical sections and table columns to the implementation-plan stage metadata. | Validator rejects artifacts missing technical sections or using legacy work-item columns. |
 
 ## Coverage Matrix
 
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
-| SP-001 | WORK-001 | Target code, docs, tests, or assets. | Test or review evidence. | Relevant risk or constraint. |
+| SP-001 | WORK-001 | Validator, rules, and tests. | `python -m unittest discover -s tests` passes and targeted negative tests fail shallow plans. | Keep behavior scoped to implementation-plan artifact quality. |
 
-## Validation
+## Edge Cases And Failure Modes
 
-- Run the targeted validator or tests.
+Legacy implementation-plan artifacts with only `Change Areas`, `Work Items`, and `Validation` fail validation. Missing technical sections fail before approval. Generic rows such as `Code and tests` or `Implement behavior` are rejected as too shallow.
+
+## Validation Strategy
+
+- Run `python -m unittest discover -s tests` to verify all Stageflow gates.
+- Include negative tests for missing technical sections and shallow work item text.
+- Confirm printed templates include the new technical sections.
 
 ## Risks
 
-None.
+Stricter validation may require existing in-flight Stageflow requests to update implementation-plan artifacts.
 
 ## Constraints
 
-Keep implementation scoped to the approved service plan.
+Do not weaken approval, fingerprint, review, or stage-order gates.
 """,
     "implementation": """# Implementation
 

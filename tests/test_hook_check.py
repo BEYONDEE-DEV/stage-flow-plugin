@@ -92,6 +92,10 @@ STAGES = [
         "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Clarification History\n\n"
+        "| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |\n\n"
         "## Open Questions\n\n"
         "| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |\n"
         "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
@@ -128,19 +132,22 @@ STAGES = [
         "03-implementation-plan",
         "implementation-plan.md",
         "# Implementation Plan\n\n"
-        "## Change Areas\n\nCode and tests.\n\n"
-        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001.\n\n"
+        "## Technical Approach\n\nExtend the existing validator-driven Stageflow architecture so the same stage metadata and markdown table checks enforce the approved behavior.\n\n"
+        "## Implementation Architecture\n\n`scripts/validate_stageflow.py` validates stage sections and tables, stage rule markdown defines authoring contracts, and subprocess tests verify fixture requests through the public CLI.\n\n"
+        "## Change Areas\n\nValidator metadata, stage rule markdown, review prompts, and test fixtures.\n\n"
+        "## Cause Or Design Notes\n\nRoot cause and design notes are grounded in SP-001. The technical contract must reject shallow implementation plans before approval.\n\n"
         "## Work Items\n\n"
-        "| ID | Work Item | Evidence |\n"
-        "| --- | --- | --- |\n"
-        "| WORK-001 | Implement behavior. | Tests. |\n\n"
+        "| ID | Implementation Unit | Technical Design | Completion Evidence |\n"
+        "| --- | --- | --- | --- |\n"
+        "| WORK-001 | Implementation-plan validator contract. | Add required technical sections and work-item columns to the stage metadata, then reject generic implementation text. | Validator failure tests and full unittest output. |\n\n"
         "## Coverage Matrix\n\n"
         "| Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |\n"
         "| --- | --- | --- | --- | --- |\n"
-        "| SP-001 | WORK-001 | Code and tests. | Test output. | Stay scoped. |\n\n"
-        "## Validation\n\n- Run tests.\n\n"
-        "## Risks\n\nNone.\n\n"
-        "## Constraints\n\nStay scoped.\n",
+        "| SP-001 | WORK-001 | Validator, rule docs, and tests. | Subprocess validator tests cover accepted detailed plans and rejected shallow plans. | Stay scoped to artifact quality gates. |\n\n"
+        "## Edge Cases And Failure Modes\n\nLegacy plans with missing technical sections or generic work items fail validation before implementation approval.\n\n"
+        "## Validation Strategy\n\nRun `python -m unittest discover -s tests`; targeted negative tests remove technical sections and use shallow work item text.\n\n"
+        "## Risks\n\nExisting in-flight requests may need implementation-plan artifacts refreshed.\n\n"
+        "## Constraints\n\nStay scoped and preserve existing approval, review, and fingerprint gates.\n",
     ),
     (
         "implementation",

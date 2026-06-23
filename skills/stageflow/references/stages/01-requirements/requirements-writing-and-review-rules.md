@@ -1,4 +1,4 @@
-﻿# Requirements Writing And Review Rules
+# Requirements Writing And Review Rules
 
 ## Stage Artifact
 
@@ -20,9 +20,11 @@ Record request shape as profile tags, not as a single exclusive type. Use `Prima
 
 ## Clarification Loop
 
-When a requirement, problem statement, or constraint is ambiguous enough to change behavior, ask a concrete open question before approval. Keep proposing a recommended option, viable alternatives, the impact of each choice, and the exact artifact area that will be updated after the answer.
+After project inspection, do not close requirements by deciding that the intent is "clear enough" on the agent's own judgment. Keep asking concrete clarification questions that refine user intent, scope, success criteria, constraints, and tradeoffs until the user explicitly chooses to move to service planning.
 
-If the user's answer resolves a question, update the relevant desired outcome, current problem, requirement, constraint, boundary, or acceptance criteria in the same requirements artifact and record the trace in `## Resolved Decisions`.
+Each clarification round must present one or more concrete decision questions. Each question should include at least two meaningful proposal options when alternatives exist, and the round must also include an explicit `서비스 계획으로 넘어가기` option. That option means the user wants to stop requirements questioning and approve the captured intent as the basis for service planning.
+
+If the user selects a proposal option, update the relevant desired outcome, current problem, requirement, constraint, boundary, or acceptance criteria in the same requirements artifact, record the trace in `## Resolved Decisions`, and ask the next useful clarification question. If the user selects `서비스 계획으로 넘어가기`, record that transition choice in `## Clarification History` before asking for requirements approval.
 
 ## Blocking Question Criteria
 
@@ -86,6 +88,12 @@ Secondary: none
 
 - Constraint discovered during project inspection, or `None discovered.`
 
+## Clarification History
+
+| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |
+| --- | --- | --- | --- | --- | --- |
+| CLAR-001 | Which concrete direction should requirements capture? Options: Proposal 1, Proposal 2, 서비스 계획으로 넘어가기. | User selected a proposal or `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | REQ-001 or N/A |
+
 ## Open Questions
 
 | ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
@@ -118,6 +126,7 @@ Secondary: none
 - `## Problem-To-Requirement Mapping`
 - `## User-Specified Constraints`
 - `## Discovered Constraints`
+- `## Clarification History`
 - `## Open Questions`
 - `## Resolved Decisions`
 - `## Requirements`
@@ -133,11 +142,11 @@ Secondary: none
 | REQ-RULE-004 | Link problems to resolving requirements when problems are present. | `## Problem-To-Requirement Mapping` maps each material problem ID to one or more requirement IDs. | Confirm each current problem has a stated required outcome or prevention path. | A material problem has no linked requirement or resolution. |
 | REQ-RULE-005 | Capture each implementation-affecting requirement as a sourced, verifiable row. | `## Requirements` has `ID`, `Type`, `Source`, `Requirement Detail`, `Boundary Or Exclusion`, and `Linked Outcomes Or Problems` columns. | Confirm every requirement has a source, concrete detail, boundary, and trace to outcomes or problems. | A requirement cannot be reviewed because source, detail, boundary, or trace is missing. |
 | REQ-RULE-006 | Keep user-specified and discovered technical constraints visible without inventing implementation decisions. | `## User-Specified Constraints` and `## Discovered Constraints` separate explicit user constraints from project inspection facts. | Confirm files, endpoints, commands, screens, or reference systems are retained when supplied or discovered, and model guesses are not promoted to requirements. | User-specified technical constraints are dropped, or inferred implementation decisions are recorded as requirements without source. |
-| REQ-RULE-007 | Run the clarification loop for ambiguity that changes behavior. | `## Open Questions` lists decision-level questions for screen flow, auth/permission/payment/security/privacy, API/data source, reference parity, scope/exclusions, acceptance criteria, or validation choices. | Confirm every behavior-changing ambiguity is either resolved or represented as an open question with a blocking decision. | A behavior-changing ambiguity is ignored, treated as a vague concern, or left out of open questions. |
+| REQ-RULE-007 | Run user-driven clarification rounds until the user chooses `서비스 계획으로 넘어가기`. | `## Clarification History` records concrete questions asked, proposal options, the service-plan transition option, user responses, transition signal, and reflected artifact areas. | Confirm the agent did not decide requirements were clear enough on its own and that every round offered concrete proposal options plus `서비스 계획으로 넘어가기`. | Clarification history is missing, a round lacks proposal options, the service-plan transition option was not offered, or requirements were closed without a user transition choice. |
 | REQ-RULE-008 | Write open questions as actionable decision records. | `## Open Questions` has `ID`, `Decision Needed`, `Context Or Conflict`, `Recommended Option`, `Alternatives`, `Impact`, `Blocking`, and `Resolution Target` columns. | Confirm each question states the decision, context, recommendation, alternatives, impact, blocking status, and where the answer will be applied. | A question lacks recommendation, alternative, impact, blocking status, or resolution target, or is only a vague concern. |
-| REQ-RULE-009 | Trace resolved user answers into requirements. | `## Resolved Decisions` records answered question IDs, answer source, decision, and reflected artifact area; updated requirement sources include `User answer to Q-###` when applicable. | Confirm user answers are not lost and can be traced to requirements, constraints, boundaries, or acceptance criteria. | A user answer exists but is not represented in `## Resolved Decisions` or a relevant requirement `Source`. |
+| REQ-RULE-009 | Trace resolved user answers into requirements. | `## Resolved Decisions` records answered question or clarification IDs, answer source, decision, and reflected artifact area; updated requirement sources include `User answer to Q-###` or `User answer to CLAR-###` when applicable. | Confirm user answers are not lost and can be traced to requirements, constraints, boundaries, or acceptance criteria. | A user answer exists but is not represented in `## Resolved Decisions`, `## Clarification History`, or a relevant requirement `Source`. |
 | REQ-RULE-010 | Keep acceptance criteria traceable to requirement IDs. | `## Acceptance Criteria` references requirement IDs and linked outcomes or problems. | Confirm acceptance criteria cover the requirement rows. | Acceptance criteria are generic or disconnected from requirement IDs. |
 
 ## Verification Meaning
 
-A requirement is ready for service planning when the reviewer can identify what the user wants, what problem it resolves when applicable, where the requirement came from, what is out of scope, whether user answers were carried forward, and whether any behavior-changing question is still blocking.
+A requirement is ready for service planning when the reviewer can identify what the user wants, what problem it resolves when applicable, where the requirement came from, what is out of scope, whether user answers were carried forward, whether the user chose `서비스 계획으로 넘어가기`, and whether any behavior-changing question is still blocking.
