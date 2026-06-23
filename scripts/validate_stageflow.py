@@ -112,6 +112,7 @@ STAGES: tuple[Stage, ...] = (
             "Normal Behavior Model",
             "User Flow",
             "State And Policy Model",
+            "Clarification History",
             "Policy Rules",
             "Integration Flow And Data Responsibilities",
             "Boundaries",
@@ -122,6 +123,17 @@ STAGES: tuple[Stage, ...] = (
         "service-plan-writing-and-review-rules.md",
         "Service Plan Writing And Review Rules",
         (
+            TableRequirement(
+                "Clarification History",
+                (
+                    "Round ID",
+                    "Questions Asked",
+                    "User Response",
+                    "Implementation Plan Option Offered",
+                    "User Transition Signal",
+                    "Reflected In",
+                ),
+            ),
             TableRequirement(
                 "Policy Rules",
                 (
@@ -196,6 +208,10 @@ NO_BLOCKING_RE = re.compile(
 BLOCKING_OPEN_QUESTION_RE = re.compile(r"^(yes|true|blocking|block)$", re.IGNORECASE)
 SERVICE_PLAN_TRANSITION_RE = re.compile(
     r"\b(proceed|approved|approval|done|service plan|next stage)\b|승인|진행|서비스\s*계획|다음\s*단계",
+    re.IGNORECASE,
+)
+IMPLEMENTATION_PLAN_TRANSITION_RE = re.compile(
+    r"\b(implementation plan|next stage)\b|구현\s*계획|다음\s*단계",
     re.IGNORECASE,
 )
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
@@ -462,6 +478,8 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str]) ->
     if stage.phase == "requirements":
         validate_requirements_blocking_questions(path, text, errors)
         validate_requirements_clarification_history(path, text, errors)
+    if stage.phase == "service-plan":
+        validate_service_plan_clarification_history(path, text, errors)
     if stage.phase == "implementation-plan":
         validate_implementation_plan_depth(path, text, errors)
 
@@ -509,9 +527,12 @@ def validate_requirements_clarification_history(path: Path, text: str, errors: l
         )
 
 
-def has_meaningful_proposal_options(text: str) -> bool:
+def has_meaningful_proposal_options(
+    text: str,
+    transition_terms: tuple[str, ...] = ("서비스 계획", "service plan", "next stage"),
+) -> bool:
     lower = text.lower()
-    if "서비스 계획" not in text and "service plan" not in lower:
+    if not any(term in text or term in lower for term in transition_terms):
         return False
     if "options:" in lower:
         option_text = text[lower.find("options:") + len("options:") :]
@@ -520,9 +541,43 @@ def has_meaningful_proposal_options(text: str) -> bool:
     else:
         return False
     options = [item.strip().lower() for item in re.split(r"[,;/|]", option_text) if item.strip()]
-    proposal_options = [item for item in options if "서비스 계획" not in item and "service plan" not in item and "next stage" not in item]
+    proposal_options = [
+        item
+        for item in options
+        if not any(term.lower() in item for term in transition_terms)
+    ]
     return len(proposal_options) >= 2
 
+
+def validate_service_plan_clarification_history(path: Path, text: str, errors: list[str]) -> None:
+    table = parse_first_markdown_table(section_text(text, "## Clarification History"))
+    if not table.rows:
+        return
+    has_transition_signal = False
+    for index, row in enumerate(table.rows):
+        round_id = row.get("Round ID", "").strip() or "<unknown>"
+        questions = row.get("Questions Asked", "").strip()
+        offered = row.get("Implementation Plan Option Offered", "").strip()
+        transition_signal = row.get("User Transition Signal", "").strip()
+        if offered.lower() not in {"yes", "true"} and "구현 계획" not in offered:
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` must record that an implementation-plan transition option was offered"
+            )
+        if not has_meaningful_proposal_options(questions, ("구현 계획", "implementation plan", "next stage")):
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` must include a concrete service-behavior question with at least two proposal options before the implementation-plan transition option"
+            )
+        is_transition = bool(IMPLEMENTATION_PLAN_TRANSITION_RE.search(transition_signal))
+        if is_transition:
+            has_transition_signal = True
+        elif index == len(table.rows) - 1:
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` records a service proposal answer but no following clarification round or implementation-plan transition"
+            )
+    if not has_transition_signal:
+        errors.append(
+            f"`{display_path(path)}` Clarification History must record an explicit user choice to move to implementation-plan before approval"
+        )
 
 def validate_implementation_plan_depth(path: Path, text: str, errors: list[str]) -> None:
     shallow_phrases = (
@@ -898,6 +953,12 @@ Describe what the user or system does, sees, and receives in order.
 ## State And Policy Model
 
 Describe states, transitions, permissions, validation rules, and product policies.
+
+## Clarification History
+
+| Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
+| --- | --- | --- | --- | --- | --- |
+| SVC-CLAR-001 | Which service behavior should the plan capture? Options: Proposal 1, Proposal 2, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |
 
 ## Policy Rules
 

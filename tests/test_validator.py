@@ -51,6 +51,7 @@ STAGE_RULE_IDS = {
         "SP-RULE-006",
         "SP-RULE-007",
         "SP-RULE-008",
+        "SP-RULE-009",
     ],
     "implementation-plan": [
         "IP-RULE-001",
@@ -119,6 +120,10 @@ STAGES = [
         "## Normal Behavior Model\n\nThe service exposes the corrected normal behavior and prevents the reported regression.\n\n"
         "## User Flow\n\nUsers see the changed behavior in the approved flow.\n\n"
         "## State And Policy Model\n\nState changes follow the approved policy.\n\n"
+        "## Clarification History\n\n"
+        "| Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |\n\n"
         "## Policy Rules\n\n"
         "| Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |\n"
         "| --- | --- | --- | --- | --- | --- | --- |\n"
@@ -917,6 +922,54 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "requirements")
             result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no following clarification round", result.stdout)
+
+    def test_service_plan_requires_clarification_history(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            text = artifact.read_text(encoding="utf-8")
+            before, remainder = text.split("## Clarification History\n\n", 1)
+            _, after = remainder.split("## Policy Rules\n\n", 1)
+            artifact.write_text(before + "## Policy Rules\n\n" + after, encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "service-plan")
+            result = self.run_validator(root, "service-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Clarification History", result.stdout)
+
+    def test_service_plan_rejects_implementation_plan_only_clarification_round(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-001 | Move to implementation planning? Options: 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            result = self.run_validator(root, "service-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("at least two proposal options", result.stdout)
+
+    def test_service_plan_proposal_answer_requires_following_clarification_round(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected preserve current service flow. | yes | not yet | SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            result = self.run_validator(root, "service-plan")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("no following clarification round", result.stdout)
 
