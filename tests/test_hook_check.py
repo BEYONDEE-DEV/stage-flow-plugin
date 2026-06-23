@@ -93,6 +93,10 @@ STAGES = [
         "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Pending Clarifications\n\n"
+        "| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |\n\n"
         "## Clarification History\n\n"
         "| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
@@ -119,6 +123,10 @@ STAGES = [
         "## Normal Behavior Model\n\nThe service exposes the corrected normal behavior and prevents the reported regression.\n\n"
         "## User Flow\n\nUsers see the changed behavior in the approved flow.\n\n"
         "## State And Policy Model\n\nState changes follow the approved policy.\n\n"
+        "## Pending Clarifications\n\n"
+        "| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |\n\n"
         "## Clarification History\n\n"
         "| Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
@@ -166,6 +174,9 @@ STAGES = [
         "## Completion Summary\n\nCompleted as approved with no residual risk.\n",
     ),
 ]
+STAGE_BY_PHASE = {phase: (folder, artifact_name, artifact_text) for phase, folder, artifact_name, artifact_text in STAGES}
+
+
 class HookCheckFourStageTests(unittest.TestCase):
     def run_hook(
         self,
@@ -225,6 +236,17 @@ class HookCheckFourStageTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (stage_dir / "approval.md").write_text(self.approval_text(phase), encoding="utf-8")
+
+    def refresh_stage_fingerprint(self, root: Path, phase: str) -> None:
+        folder, artifact_name, _ = STAGE_BY_PHASE[phase]
+        stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / folder
+        artifact_path = stage_dir / artifact_name
+        fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
+        (stage_dir / "review.md").write_text(
+            self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]),
+            encoding="utf-8",
+        )
 
     @staticmethod
     def goal_text(phase: str, folder: str, artifact_name: str, fingerprint: str) -> str:
@@ -463,6 +485,30 @@ Approved.
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\ncompleted"})
             self.assertEqual(result["completion_validation"]["status"], "PASS")
 
+
+    def test_pending_clarification_returns_awaiting_user_action(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, "service-plan")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| SVC-CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered service decision. | pending |",
+                ).replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(result["status"], "AWAITING_USER")
+            self.assertEqual(result["turn_start_action"], "await_user_clarification")
+            self.assertEqual(result["validation"]["status"], "AWAITING_USER")
+            self.assertIn("How should docs sync status", result["pending_clarification_output"])
+            self.assertIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
+            self.assertNotIn("current Stageflow stage validation failed", result["warnings"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -166,11 +166,18 @@ def run_validator(root: Path, phase: str, payload: dict[str, Any]) -> dict[str, 
     if session_id:
         command.extend(["--session-id", session_id])
     proc = subprocess.run(command, text=True, capture_output=True)
+    output = (proc.stdout + proc.stderr).strip()
+    if proc.returncode == 0:
+        status = "PASS"
+    elif proc.returncode == 3 or output.startswith("AWAITING_USER"):
+        status = "AWAITING_USER"
+    else:
+        status = "FAIL"
     return {
         "phase": phase,
-        "status": "PASS" if proc.returncode == 0 else "FAIL",
+        "status": status,
         "returncode": proc.returncode,
-        "output": (proc.stdout + proc.stderr).strip(),
+        "output": output,
     }
 
 
@@ -288,14 +295,23 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
 
     validation = run_validator(root, validation_phase, payload)
     marker = marker_for(request_id, phase, validation["status"])
-    status = "OK" if validation["status"] == "PASS" else "WARNING"
-    severity = "info" if validation["status"] == "PASS" else "warning"
-    action = "continue_current_stage" if validation["status"] == "PASS" else "repair_current_stage"
-    instruction = (
-        "Continue from the validated current Stageflow stage and do not advance until its goal, artifact, subagent review, and approval gates pass."
-        if validation["status"] == "PASS"
-        else "Repair the current Stageflow stage artifacts until the current-stage validator passes before advancing or answering as if the stage is ready."
-    )
+    if validation["status"] == "PASS":
+        status = "OK"
+        severity = "info"
+        action = "continue_current_stage"
+        instruction = "Continue from the validated current Stageflow stage and do not advance until its goal, artifact, subagent review, and approval gates pass."
+    elif validation["status"] == "AWAITING_USER":
+        status = "AWAITING_USER"
+        severity = "info"
+        action = "await_user_clarification"
+        instruction = (
+            "The current Stageflow stage is waiting for user clarification. Answer any user follow-up, then restate every pending clarification question with its options and stop; do not run review, approval, or next-stage work until the user selects an option."
+        )
+    else:
+        status = "WARNING"
+        severity = "warning"
+        action = "repair_current_stage"
+        instruction = "Repair the current Stageflow stage artifacts until the current-stage validator passes before advancing or answering as if the stage is ready."
     if phase == "completed":
         status = "COMPLETED_CURRENT" if validation["status"] == "PASS" else "WARNING"
         severity = "warning"
@@ -316,8 +332,10 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         }
     )
     set_turn_start_action(result, action, instruction, required=action != "continue_current_stage")
-    if validation["status"] != "PASS":
+    if validation["status"] == "FAIL":
         result["warnings"].append("current Stageflow stage validation failed")
+    elif validation["status"] == "AWAITING_USER":
+        result["pending_clarification_output"] = validation.get("output", "")
 
     if looks_like_implementation(prompt):
         entry_gate = run_validator(root, "implementation-plan", payload)

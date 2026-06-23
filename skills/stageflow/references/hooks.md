@@ -41,7 +41,8 @@ Behavior:
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL>
 ```
 
-- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes, or `repair_current_stage` when the current stage fails validation.
+- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes, `await_user_clarification` when the current requirements/service-plan stage has pending questions, or `repair_current_stage` when the current stage fails validation.
+- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The assistant should answer follow-up questions, restate all pending questions/options, and stop.
 - Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook returns `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
 - `turn_start_instruction` is mandatory next-action guidance for the main agent.
 

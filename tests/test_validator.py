@@ -94,6 +94,10 @@ STAGES = [
         "| PROB-001 | REQ-001 | REQ-001 defines the corrected behavior. |\n\n"
         "## User-Specified Constraints\n\n- User supplied constraint.\n\n"
         "## Discovered Constraints\n\n- Project inspection constraint.\n\n"
+        "## Pending Clarifications\n\n"
+        "| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |\n\n"
         "## Clarification History\n\n"
         "| Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
@@ -120,6 +124,10 @@ STAGES = [
         "## Normal Behavior Model\n\nThe service exposes the corrected normal behavior and prevents the reported regression.\n\n"
         "## User Flow\n\nUsers see the changed behavior in the approved flow.\n\n"
         "## State And Policy Model\n\nState changes follow the approved policy.\n\n"
+        "## Pending Clarifications\n\n"
+        "| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |\n\n"
         "## Clarification History\n\n"
         "| Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
@@ -972,6 +980,70 @@ Approved.
             result = self.run_validator(root, "service-plan")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("no following clarification round", result.stdout)
+
+    def test_requirements_pending_clarification_batch_returns_awaiting_user(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| CLAR-001 | Which docs source-tracking model should requirements capture? | Option 1: docs-wide reviewed commit only; Option 2: docs-wide commit plus review-session metadata; 서비스 계획으로 넘어가기 | Option 1 | 서비스 계획으로 넘어가기 | This changes the approved metadata boundary. | pending |\n"
+                    "| CLAR-002 | Which scope should be excluded from the first pass? | Option 1: exclude per-document source hashes; Option 2: exclude all hash tracking; 서비스 계획으로 넘어가기 | Option 1 | 서비스 계획으로 넘어가기 | This prevents the service plan from designing the wrong sync model. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER requirements", result.stdout)
+            self.assertIn("Which docs source-tracking model", result.stdout)
+            self.assertIn("Which scope should be excluded", result.stdout)
+            self.assertIn("서비스 계획으로 넘어가기", result.stdout)
+
+    def test_service_plan_partial_answer_can_leave_remaining_pending_question(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root, state_phase="service-plan")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-service-plan" / "service-plan.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| SVC-CLAR-002 | How should partial review state be represented? | Option 1: session-level note only; Option 2: feature-area review status; 구현 계획으로 넘어가기 | Option 1 | 구현 계획으로 넘어가기 | This keeps remaining service behavior visible after a partial answer. | pending |",
+                ).replace(
+                    "| SVC-CLAR-001 | Which service behavior should the plan capture? Options: preserve current service flow, add explicit regression recovery, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |",
+                    "| SVC-CLAR-001 | Which sync baseline should the service plan use? Options: docs-wide baseline only, docs-wide baseline plus session metadata, 구현 계획으로 넘어가기. | User selected docs-wide baseline only. | yes | not yet | SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "service-plan")
+            result = self.run_validator(root, "service-plan")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER service-plan", result.stdout)
+            self.assertIn("How should partial review state", result.stdout)
+            self.assertIn("구현 계획으로 넘어가기", result.stdout)
+
+    def test_pending_clarification_missing_user_answerable_fields_fails(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| CLAR-001 | Which boundary should requirements capture? | N/A | Option 1 | 서비스 계획으로 넘어가기 | This changes scope. | pending |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing user-answerable fields", result.stdout)
+            self.assertIn("Options", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

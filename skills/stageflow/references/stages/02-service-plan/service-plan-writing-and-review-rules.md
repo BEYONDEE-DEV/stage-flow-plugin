@@ -25,11 +25,13 @@ The service plan must transform requirements into behavior, not repeat requireme
 For bugfix or mixed requests, every material `Current Problems` row from requirements must appear as a corrected normal behavior, a regression prevention condition, or both. If the service plan cannot explain how the problem is resolved, the stage is not ready.
 ## Service Clarification Loop
 
-After reading approved requirements, do not close the service plan by deciding that the behavior model is "clear enough" on the agent's own judgment. Keep asking concrete service-behavior questions that refine normal behavior, user/system flow, state and policy, integration responsibility, boundaries, regression prevention, and failure recovery until the user explicitly chooses to move to implementation planning.
+After reading approved requirements, do not close the service plan by deciding that the behavior model is "clear enough" on the agent's own judgment. Ask concrete service-behavior questions that refine normal behavior, user/system flow, state and policy, integration responsibility, boundaries, regression prevention, and failure recovery until the user explicitly chooses to move to implementation planning.
 
-Each service clarification round must present one or more concrete service-behavior decision questions first, then at least two meaningful proposal options, and then an explicit `구현 계획으로 넘어가기` option. The implementation-plan option is a transition option, not the question itself; a round that only asks the user to move to implementation planning is invalid.
+A service clarification round may contain one question or a batch of multiple questions. Record unanswered active questions in `## Pending Clarifications`; each pending row must include a concrete service-behavior question, at least two meaningful proposal options, a recommended option, the explicit `구현 계획으로 넘어가기` transition option, why the answer matters, and Status `pending` or `awaiting`. After presenting a pending clarification batch, stop and wait for the user. Do not run review, approval, next-stage work, or mark the goal blocked merely because the user has not answered yet.
 
-If the user selects a proposal option, update the relevant normal behavior model, user flow, state/policy model, policy rule, integration responsibility, boundary, regression prevention, or failure recovery section, record the trace in `## Clarification History`, and ask another concrete service clarification question in the next round. If the user selects `구현 계획으로 넘어가기`, record that transition choice in `## Clarification History` before asking for service-plan approval.
+If the user asks a follow-up about a pending option, answer that follow-up first, then restate every still-pending service question with its options and stop again. Do not create a new question ID just to repeat the same pending question.
+
+If the user answers only part of a batch, update the relevant normal behavior model, user flow, state/policy model, policy rule, integration responsibility, boundary, regression prevention, or failure recovery section for the answered items, move those answers into `## Clarification History`, and keep the unanswered items in `## Pending Clarifications`. If the user selects `구현 계획으로 넘어가기` while pending questions remain, explicitly confirm whether the user wants to proceed with the current documented defaults for the remaining questions; the transition option must not silently adopt a proposal.
 
 ## Stage Artifact Format
 
@@ -47,6 +49,12 @@ Describe what the user or system does, sees, and receives in order.
 ## State And Policy Model
 
 Describe states, transitions, permissions, validation rules, and product policies.
+
+## Pending Clarifications
+
+| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
 
 ## Clarification History
 
@@ -82,6 +90,7 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 - `## Normal Behavior Model`
 - `## User Flow`
 - `## State And Policy Model`
+- `## Pending Clarifications`
 - `## Clarification History`
 - `## Policy Rules`
 - `## Integration Flow And Data Responsibilities`
@@ -96,7 +105,7 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 | SP-RULE-001 | Reorganize approved requirements into a normal behavior model instead of repeating the requirements list. | `## Normal Behavior Model` explains corrected or desired behavior in service terms. | Confirm the artifact has a coherent model that a service/product reviewer can understand. | The artifact mostly repeats requirements rows without a normal behavior model. |
 | SP-RULE-002 | Describe the user or system flow at behavior level. | `## User Flow` states visible states, actions, and outcomes. | Confirm user-facing behavior is understandable without code-level instructions. | User-visible behavior is missing or hidden behind implementation terms. |
 | SP-RULE-003 | Convert meaningful behavior into explicit policy rules. | `## Policy Rules` table has `Rule ID`, `Trigger Or Condition`, `Policy`, `User/System Response`, `State/Data Responsibility`, `Failure/Recovery Behavior`, and `Source Requirement IDs` columns. | Confirm every material behavior has a policy, response, state/data responsibility, recovery behavior, and requirement trace. | A behavior is described without a concrete policy rule. |
-| SP-RULE-004 | Run user-driven service clarification rounds until the user chooses `구현 계획으로 넘어가기`. | `## Clarification History` records concrete service-behavior questions, at least two proposal options, the implementation-plan transition option, user responses, transition signal, and reflected artifact areas. | Confirm the agent did not decide the service model was clear enough on its own and that every round offered concrete proposal options plus `구현 계획으로 넘어가기`. | Clarification history is missing, a round lacks a concrete service question, a round lacks at least two proposal options, the implementation-plan transition option is the only option, a proposal answer is not followed by another service clarification round, or service planning was closed without a user transition choice. |
+| SP-RULE-004 | Manage service clarification batches without losing pending questions. | `## Pending Clarifications` records unanswered service questions with concrete questions, proposal options, recommended option, transition option, rationale, and status; `## Clarification History` records answered items and transition choices. | Confirm the agent stops after asking, answers follow-up questions by restating still-pending questions/options, does not repeat the same pending question as a new round, and does not close service planning without a user transition choice. | Pending service clarifications are missing their question/options, the agent keeps running review/approval while waiting for an answer, a follow-up answer omits the still-pending choices, a pending question is duplicated as a new round, a proposal answer is not reflected, or service planning is closed without a user transition choice. |
 | SP-RULE-005 | Keep integration flow and data responsibilities at service level. | `## Integration Flow And Data Responsibilities` describes relevant sequence and data responsibilities without file lists, type definitions, or code edits. | Confirm the plan explains how behavior moves through integrations only where needed. | Flow is absent when required, or it contains implementation file/type instructions. |
 | SP-RULE-006 | Define boundaries and exclusions. | `## Boundaries` states in-scope and out-of-scope behavior. | Confirm the service plan prevents scope expansion during implementation planning. | Boundaries are missing or conflict with approved requirements. |
 | SP-RULE-007 | Define regression prevention for bugfix or mixed requests. | `## Regression Prevention` lists behaviors, invariants, or problem resolutions that must keep working. | Confirm current problems from requirements are addressed as corrected behavior or prevention conditions. | A problem from requirements has no normal-behavior or regression-prevention coverage. |

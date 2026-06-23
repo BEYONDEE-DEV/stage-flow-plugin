@@ -60,13 +60,14 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
+   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its options, and stop without review, approval, next-stage work, or blocked-goal handling.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all four stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
 4. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
 5. Decide whether the latest user message continues the current request or starts a separate request.
 6. Run the validator for the current stage when artifacts exist.
-7. Continue only from the validated current stage.
+7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; show the pending question text and options, then wait for the user.
 
 Treat `turn_start_instruction` in the hook result as mandatory next-action guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts first.
 
@@ -145,6 +146,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
+- `AWAITING_USER` means a requirements or service-plan artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user selects options or asks a follow-up that is answered with the pending choices restated.
 - Subagent lifecycle hooks record lightweight observation state only.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

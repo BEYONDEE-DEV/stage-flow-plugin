@@ -46,6 +46,7 @@ STAGES: tuple[Stage, ...] = (
             "Problem-To-Requirement Mapping",
             "User-Specified Constraints",
             "Discovered Constraints",
+            "Pending Clarifications",
             "Clarification History",
             "Open Questions",
             "Resolved Decisions",
@@ -62,6 +63,18 @@ STAGES: tuple[Stage, ...] = (
                 ("ID", "Problem", "Expected Behavior", "Actual Behavior", "Evidence Or Reproduction", "Impact"),
             ),
             TableRequirement("Problem-To-Requirement Mapping", ("Problem ID", "Requirement ID", "Resolution")),
+            TableRequirement(
+                "Pending Clarifications",
+                (
+                    "ID",
+                    "Question",
+                    "Options",
+                    "Recommended Option",
+                    "Transition Option",
+                    "Why This Matters",
+                    "Status",
+                ),
+            ),
             TableRequirement(
                 "Clarification History",
                 (
@@ -112,6 +125,7 @@ STAGES: tuple[Stage, ...] = (
             "Normal Behavior Model",
             "User Flow",
             "State And Policy Model",
+            "Pending Clarifications",
             "Clarification History",
             "Policy Rules",
             "Integration Flow And Data Responsibilities",
@@ -123,6 +137,18 @@ STAGES: tuple[Stage, ...] = (
         "service-plan-writing-and-review-rules.md",
         "Service Plan Writing And Review Rules",
         (
+            TableRequirement(
+                "Pending Clarifications",
+                (
+                    "ID",
+                    "Question",
+                    "Options",
+                    "Recommended Option",
+                    "Transition Option",
+                    "Why This Matters",
+                    "Status",
+                ),
+            ),
             TableRequirement(
                 "Clarification History",
                 (
@@ -214,6 +240,8 @@ IMPLEMENTATION_PLAN_TRANSITION_RE = re.compile(
     r"\b(implementation plan|next stage)\b|구현\s*계획|다음\s*단계",
     re.IGNORECASE,
 )
+PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
+NO_PENDING_STATUS_RE = re.compile(r"^(none|n/a|no|없음)$", re.IGNORECASE)
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
 
@@ -337,14 +365,16 @@ def stages_for_phase(phase: str) -> tuple[Stage, ...]:
     return STAGES[: index + 1]
 
 
-def validate_phase(context: ValidationContext, phase: str, errors: list[str]) -> None:
+def validate_phase(context: ValidationContext, phase: str, errors: list[str]) -> list[str]:
+    awaiting: list[str] = []
     for stage in stages_for_phase(phase):
-        validate_stage(context, stage, errors)
+        validate_stage(context, stage, errors, awaiting)
     if phase == "all" and string_value(context.state, "phase") != "completed":
         errors.append("`state.json` phase must be `completed` for `--phase all`")
+    return awaiting
 
 
-def validate_stage(context: ValidationContext, stage: Stage, errors: list[str]) -> None:
+def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], awaiting: list[str]) -> None:
     stage_dir = context.request_dir / stage.folder
     artifact_path = stage_dir / stage.artifact
     goal_path = stage_dir / "goal.md"
@@ -355,13 +385,18 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str]) 
     validate_stage_review_agent_prompt(stage, errors)
 
     artifact_text = read_required_text(artifact_path, errors)
+    pending_messages: list[str] = []
     if artifact_text is not None:
-        validate_artifact(stage, artifact_text, artifact_path, errors)
+        pending_messages = pending_clarification_messages(stage, artifact_text, artifact_path, errors)
+        validate_artifact(stage, artifact_text, artifact_path, errors, bool(pending_messages))
         artifact_fingerprint = sha256_file(artifact_path)
     else:
         artifact_fingerprint = None
 
     validate_goal(stage, goal_path, artifact_fingerprint, errors)
+    if pending_messages:
+        awaiting.extend(pending_messages)
+        return
     validate_review(stage, review_path, artifact_fingerprint, rule_ids, errors)
     validate_approval(stage, approval_path, errors)
 
@@ -467,7 +502,7 @@ def validate_stage_review_agent_prompt(stage: Stage, errors: list[str]) -> None:
             errors.append(f"`{display_path(path)}` Required Output must include `{marker}`")
 
 
-def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str]) -> None:
+def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str], has_pending_clarifications: bool = False) -> None:
     if f"# {stage.title}" not in text:
         errors.append(f"`{display_path(path)}` must start with or include `# {stage.title}`")
     for section in stage.required_sections:
@@ -477,12 +512,103 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str]) ->
         validate_table_columns(path, text, requirement, errors)
     if stage.phase == "requirements":
         validate_requirements_blocking_questions(path, text, errors)
-        validate_requirements_clarification_history(path, text, errors)
+        validate_requirements_clarification_history(path, text, errors, has_pending_clarifications)
     if stage.phase == "service-plan":
-        validate_service_plan_clarification_history(path, text, errors)
+        validate_service_plan_clarification_history(path, text, errors, has_pending_clarifications)
     if stage.phase == "implementation-plan":
         validate_implementation_plan_depth(path, text, errors)
 
+
+
+def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: list[str]) -> list[str]:
+    if stage.phase not in {"requirements", "service-plan"}:
+        return []
+    table = parse_first_markdown_table(section_text(text, "## Pending Clarifications"))
+    if not table.rows:
+        return []
+
+    if stage.phase == "requirements":
+        transition_re = SERVICE_PLAN_TRANSITION_RE
+        transition_terms = ("서비스 계획", "service plan", "next stage")
+    else:
+        transition_re = IMPLEMENTATION_PLAN_TRANSITION_RE
+        transition_terms = ("구현 계획", "implementation plan", "next stage")
+
+    messages: list[str] = []
+    seen_ids: set[str] = set()
+    for row in table.rows:
+        status = row.get("Status", "").strip()
+        if not status or NO_PENDING_STATUS_RE.fullmatch(status):
+            continue
+        pending_id = row.get("ID", "").strip() or "<unknown>"
+        if pending_id in seen_ids:
+            errors.append(f"`{display_path(path)}` Pending Clarifications repeats pending ID `{pending_id}`")
+            continue
+        seen_ids.add(pending_id)
+        if not PENDING_STATUS_RE.fullmatch(status):
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must use Status `pending`/`awaiting` or `none`"
+            )
+            continue
+
+        question = row.get("Question", "").strip()
+        options = row.get("Options", "").strip()
+        recommended = row.get("Recommended Option", "").strip()
+        transition = row.get("Transition Option", "").strip()
+        why = row.get("Why This Matters", "").strip()
+        missing = [
+            name
+            for name, value in (
+                ("Question", question),
+                ("Options", options),
+                ("Recommended Option", recommended),
+                ("Transition Option", transition),
+                ("Why This Matters", why),
+            )
+            if not value or value.lower() in {"n/a", "none"}
+        ]
+        if missing:
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` is missing user-answerable fields: {', '.join(missing)}"
+            )
+            continue
+        if not transition_re.search(transition):
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include the next-stage transition option text"
+            )
+        if not has_at_least_two_proposals(options, transition_terms):
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two proposal options plus the transition option"
+            )
+        if transition and transition not in options:
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Options must include its Transition Option"
+            )
+        messages.append(
+            f"`{display_path(path)}` pending clarification `{pending_id}`: Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
+        )
+    return messages
+
+
+def has_at_least_two_proposals(text: str, transition_terms: tuple[str, ...]) -> bool:
+    lower = text.lower()
+    if not any(term in text or term in lower for term in transition_terms):
+        return False
+    items = [item.strip().lower() for item in re.split(r"(?:<br\s*/?>|[,;\n/|])", text, flags=re.IGNORECASE) if item.strip()]
+    proposal_items = [item for item in items if not any(term.lower() in item for term in transition_terms)]
+    return len(proposal_items) >= 2
+
+
+def is_empty_clarification_history_row(row: dict[str, str]) -> bool:
+    values = [value.strip().lower() for value in row.values()]
+    if not values:
+        return True
+    joined = " ".join(values)
+    return (
+        "no completed clarification" in joined
+        or "no clarification" in joined
+        or all(value in {"", "n/a", "none", "없음"} for value in values)
+    )
 
 def validate_requirements_blocking_questions(path: Path, text: str, errors: list[str]) -> None:
     table = parse_first_markdown_table(section_text(text, "## Open Questions"))
@@ -496,12 +622,14 @@ def validate_requirements_blocking_questions(path: Path, text: str, errors: list
             )
 
 
-def validate_requirements_clarification_history(path: Path, text: str, errors: list[str]) -> None:
+def validate_requirements_clarification_history(path: Path, text: str, errors: list[str], has_pending_clarifications: bool) -> None:
     table = parse_first_markdown_table(section_text(text, "## Clarification History"))
     if not table.rows:
         return
     has_transition_signal = False
     for index, row in enumerate(table.rows):
+        if is_empty_clarification_history_row(row):
+            continue
         round_id = row.get("Round ID", "").strip() or "<unknown>"
         questions = row.get("Questions Asked", "").strip()
         offered = row.get("Service Plan Option Offered", "").strip()
@@ -517,11 +645,11 @@ def validate_requirements_clarification_history(path: Path, text: str, errors: l
         is_transition = bool(SERVICE_PLAN_TRANSITION_RE.search(transition_signal))
         if is_transition:
             has_transition_signal = True
-        elif index == len(table.rows) - 1:
+        elif index == len(table.rows) - 1 and not has_pending_clarifications:
             errors.append(
                 f"`{display_path(path)}` Clarification History row `{round_id}` records a proposal answer but no following clarification round or service-plan transition"
             )
-    if not has_transition_signal:
+    if not has_transition_signal and not has_pending_clarifications:
         errors.append(
             f"`{display_path(path)}` Clarification History must record an explicit user choice to move to service-plan before approval"
         )
@@ -549,12 +677,14 @@ def has_meaningful_proposal_options(
     return len(proposal_options) >= 2
 
 
-def validate_service_plan_clarification_history(path: Path, text: str, errors: list[str]) -> None:
+def validate_service_plan_clarification_history(path: Path, text: str, errors: list[str], has_pending_clarifications: bool) -> None:
     table = parse_first_markdown_table(section_text(text, "## Clarification History"))
     if not table.rows:
         return
     has_transition_signal = False
     for index, row in enumerate(table.rows):
+        if is_empty_clarification_history_row(row):
+            continue
         round_id = row.get("Round ID", "").strip() or "<unknown>"
         questions = row.get("Questions Asked", "").strip()
         offered = row.get("Implementation Plan Option Offered", "").strip()
@@ -570,11 +700,11 @@ def validate_service_plan_clarification_history(path: Path, text: str, errors: l
         is_transition = bool(IMPLEMENTATION_PLAN_TRANSITION_RE.search(transition_signal))
         if is_transition:
             has_transition_signal = True
-        elif index == len(table.rows) - 1:
+        elif index == len(table.rows) - 1 and not has_pending_clarifications:
             errors.append(
                 f"`{display_path(path)}` Clarification History row `{round_id}` records a service proposal answer but no following clarification round or implementation-plan transition"
             )
-    if not has_transition_signal:
+    if not has_transition_signal and not has_pending_clarifications:
         errors.append(
             f"`{display_path(path)}` Clarification History must record an explicit user choice to move to implementation-plan before approval"
         )
@@ -912,6 +1042,12 @@ Secondary: none
 
 - None discovered.
 
+## Pending Clarifications
+
+| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
+
 ## Clarification History
 
 | Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |
@@ -953,6 +1089,12 @@ Describe what the user or system does, sees, and receives in order.
 ## State And Policy Model
 
 Describe states, transitions, permissions, validation rules, and product policies.
+
+## Pending Clarifications
+
+| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
 
 ## Clarification History
 
@@ -1129,16 +1271,23 @@ def main() -> None:
         return
 
     errors: list[str] = []
+    awaiting: list[str] = []
     root = Path(args.root).resolve()
     context = load_context(root, args.current, args.request, args.session_id, errors)
     if context is not None:
-        validate_phase(context, args.phase, errors)
+        awaiting = validate_phase(context, args.phase, errors)
 
     if errors:
         print(f"FAIL {args.phase}:")
         for error in errors:
             print(f"- {error}")
         raise SystemExit(1)
+
+    if awaiting:
+        print(f"AWAITING_USER {args.phase}:")
+        for item in awaiting:
+            print(f"- {item}")
+        raise SystemExit(3)
 
     print(f"PASS {args.phase}: {context.request_id if context else root}")
 

@@ -20,11 +20,13 @@ Record request shape as profile tags, not as a single exclusive type. Use `Prima
 
 ## Clarification Loop
 
-After project inspection, do not close requirements by deciding that the intent is "clear enough" on the agent's own judgment. Keep asking concrete clarification questions that refine user intent, scope, success criteria, constraints, and tradeoffs until the user explicitly chooses to move to service planning.
+After project inspection, do not close requirements by deciding that the intent is "clear enough" on the agent's own judgment. Ask concrete clarification questions that refine user intent, scope, success criteria, constraints, and tradeoffs until the user explicitly chooses to move to service planning.
 
-Each clarification round must present one or more concrete decision questions first, then at least two meaningful proposal options, and then an explicit `서비스 계획으로 넘어가기` option. The service-plan option is a transition option, not the question itself; a round that only asks the user to move to service planning is invalid.
+A clarification round may contain one question or a batch of multiple questions. Record unanswered active questions in `## Pending Clarifications`; each pending row must include a concrete question, at least two meaningful proposal options, a recommended option, the explicit `서비스 계획으로 넘어가기` transition option, why the answer matters, and Status `pending` or `awaiting`. After presenting a pending clarification batch, stop and wait for the user. Do not run review, approval, next-stage work, or mark the goal blocked merely because the user has not answered yet.
 
-If the user selects a proposal option, update the relevant desired outcome, current problem, requirement, constraint, boundary, or acceptance criteria in the same requirements artifact, record the trace in `## Resolved Decisions`, and ask another concrete clarification question in the next round. If the user selects `서비스 계획으로 넘어가기`, record that transition choice in `## Clarification History` before asking for requirements approval.
+If the user asks a follow-up about a pending option, answer that follow-up first, then restate every still-pending question with its options and stop again. Do not create a new question ID just to repeat the same pending question.
+
+If the user answers only part of a batch, update the relevant desired outcome, current problem, requirement, constraint, boundary, or acceptance criteria for the answered items, move those answers into `## Clarification History` and `## Resolved Decisions`, and keep the unanswered items in `## Pending Clarifications`. If the user selects `서비스 계획으로 넘어가기` while pending questions remain, explicitly confirm whether the user wants to proceed with the current documented defaults for the remaining questions; the transition option must not silently adopt a proposal.
 
 ## Blocking Question Criteria
 
@@ -88,6 +90,12 @@ Secondary: none
 
 - Constraint discovered during project inspection, or `None discovered.`
 
+## Pending Clarifications
+
+| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
+
 ## Clarification History
 
 | Round ID | Questions Asked | User Response | Service Plan Option Offered | User Transition Signal | Reflected In |
@@ -126,6 +134,7 @@ Secondary: none
 - `## Problem-To-Requirement Mapping`
 - `## User-Specified Constraints`
 - `## Discovered Constraints`
+- `## Pending Clarifications`
 - `## Clarification History`
 - `## Open Questions`
 - `## Resolved Decisions`
@@ -142,7 +151,7 @@ Secondary: none
 | REQ-RULE-004 | Link problems to resolving requirements when problems are present. | `## Problem-To-Requirement Mapping` maps each material problem ID to one or more requirement IDs. | Confirm each current problem has a stated required outcome or prevention path. | A material problem has no linked requirement or resolution. |
 | REQ-RULE-005 | Capture each implementation-affecting requirement as a sourced, verifiable row. | `## Requirements` has `ID`, `Type`, `Source`, `Requirement Detail`, `Boundary Or Exclusion`, and `Linked Outcomes Or Problems` columns. | Confirm every requirement has a source, concrete detail, boundary, and trace to outcomes or problems. | A requirement cannot be reviewed because source, detail, boundary, or trace is missing. |
 | REQ-RULE-006 | Keep user-specified and discovered technical constraints visible without inventing implementation decisions. | `## User-Specified Constraints` and `## Discovered Constraints` separate explicit user constraints from project inspection facts. | Confirm files, endpoints, commands, screens, or reference systems are retained when supplied or discovered, and model guesses are not promoted to requirements. | User-specified technical constraints are dropped, or inferred implementation decisions are recorded as requirements without source. |
-| REQ-RULE-007 | Run user-driven clarification rounds until the user chooses `서비스 계획으로 넘어가기`. | `## Clarification History` records concrete questions asked, at least two proposal options, the service-plan transition option, user responses, transition signal, and reflected artifact areas. | Confirm the agent did not decide requirements were clear enough on its own and that every round offered concrete proposal options plus `서비스 계획으로 넘어가기`. | Clarification history is missing, a round lacks a concrete question, a round lacks at least two proposal options, the service-plan transition option is the only option, a proposal answer is not followed by another clarification round, or requirements were closed without a user transition choice. |
+| REQ-RULE-007 | Manage clarification batches without losing pending questions. | `## Pending Clarifications` records unanswered question batches with concrete questions, proposal options, recommended option, transition option, rationale, and status; `## Clarification History` records answered items and transition choices. | Confirm the agent stops after asking, answers follow-up questions by restating still-pending questions/options, does not repeat the same pending question as a new round, and does not close requirements without a user transition choice. | Pending clarifications are missing their question/options, the agent keeps running review/approval while waiting for an answer, a follow-up answer omits the still-pending choices, a pending question is duplicated as a new round, a proposal answer is not reflected, or requirements are closed without a user transition choice. |
 | REQ-RULE-008 | Write open questions as actionable decision records. | `## Open Questions` has `ID`, `Decision Needed`, `Context Or Conflict`, `Recommended Option`, `Alternatives`, `Impact`, `Blocking`, and `Resolution Target` columns. | Confirm each question states the decision, context, recommendation, alternatives, impact, blocking status, and where the answer will be applied. | A question lacks recommendation, alternative, impact, blocking status, or resolution target, or is only a vague concern. |
 | REQ-RULE-009 | Trace resolved user answers into requirements. | `## Resolved Decisions` records answered question or clarification IDs, answer source, decision, and reflected artifact area; updated requirement sources include `User answer to Q-###` or `User answer to CLAR-###` when applicable. | Confirm user answers are not lost and can be traced to requirements, constraints, boundaries, or acceptance criteria. | A user answer exists but is not represented in `## Resolved Decisions`, `## Clarification History`, or a relevant requirement `Source`. |
 | REQ-RULE-010 | Keep acceptance criteria traceable to requirement IDs. | `## Acceptance Criteria` references requirement IDs and linked outcomes or problems. | Confirm acceptance criteria cover the requirement rows. | Acceptance criteria are generic or disconnected from requirement IDs. |
