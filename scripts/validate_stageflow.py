@@ -483,20 +483,45 @@ def validate_requirements_clarification_history(path: Path, text: str, errors: l
     if not table.rows:
         return
     has_transition_signal = False
-    for row in table.rows:
+    for index, row in enumerate(table.rows):
+        round_id = row.get("Round ID", "").strip() or "<unknown>"
+        questions = row.get("Questions Asked", "").strip()
         offered = row.get("Service Plan Option Offered", "").strip()
         transition_signal = row.get("User Transition Signal", "").strip()
         if offered.lower() not in {"yes", "true"} and "서비스 계획" not in offered:
-            round_id = row.get("Round ID", "").strip() or "<unknown>"
             errors.append(
                 f"`{display_path(path)}` Clarification History row `{round_id}` must record that a service-plan transition option was offered"
             )
-        if SERVICE_PLAN_TRANSITION_RE.search(transition_signal):
+        if not has_meaningful_proposal_options(questions):
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` must include a concrete question with at least two proposal options before the service-plan transition option"
+            )
+        is_transition = bool(SERVICE_PLAN_TRANSITION_RE.search(transition_signal))
+        if is_transition:
             has_transition_signal = True
+        elif index == len(table.rows) - 1:
+            errors.append(
+                f"`{display_path(path)}` Clarification History row `{round_id}` records a proposal answer but no following clarification round or service-plan transition"
+            )
     if not has_transition_signal:
         errors.append(
             f"`{display_path(path)}` Clarification History must record an explicit user choice to move to service-plan before approval"
         )
+
+
+def has_meaningful_proposal_options(text: str) -> bool:
+    lower = text.lower()
+    if "서비스 계획" not in text and "service plan" not in lower:
+        return False
+    if "options:" in lower:
+        option_text = text[lower.find("options:") + len("options:") :]
+    elif "선택지:" in text:
+        option_text = text[text.find("선택지:") + len("선택지:") :]
+    else:
+        return False
+    options = [item.strip().lower() for item in re.split(r"[,;/|]", option_text) if item.strip()]
+    proposal_options = [item for item in options if "서비스 계획" not in item and "service plan" not in item and "next stage" not in item]
+    return len(proposal_options) >= 2
 
 
 def validate_implementation_plan_depth(path: Path, text: str, errors: list[str]) -> None:

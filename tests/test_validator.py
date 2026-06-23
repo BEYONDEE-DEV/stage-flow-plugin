@@ -886,5 +886,39 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("too generic", result.stdout)
 
+    def test_requirements_rejects_service_plan_only_clarification_round(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                    "| CLAR-001 | Move to service planning? Options: 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("at least two proposal options", result.stdout)
+
+    def test_requirements_proposal_answer_requires_following_clarification_round(self) -> None:
+        with temp_project() as tmp:
+            root = Path(tmp)
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-requirements" / "requirements.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected `서비스 계획으로 넘어가기`. | yes | 서비스 계획으로 넘어가기 | N/A |",
+                    "| CLAR-001 | Which correction boundary should requirements capture? Options: fix only reported behavior, include adjacent regression guard, 서비스 계획으로 넘어가기. | User selected fix only reported behavior. | yes | not yet | REQ-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "requirements")
+            result = self.run_validator(root, "requirements")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no following clarification round", result.stdout)
+
 if __name__ == "__main__":
     unittest.main()
