@@ -1,6 +1,6 @@
 ---
 name: stageflow
-description: "Use when the user explicitly asks to use Stageflow, workflow, stageflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; every stage requires a goal handoff, a stage artifact, subagent review, and explicit user approval before the next stage."
+description: "Use when the user explicitly asks to use Stageflow, workflow, stageflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
 ---
 
 # Stageflow
@@ -15,7 +15,16 @@ Every request always moves through three stage folders:
 2. `02-implementation-plan`: implementation plan -> subagent review -> user approval
 3. `03-implementation`: implementation evidence -> subagent review -> user approval/completion
 
-Each stage contains exactly these required files:
+Definition contains exactly these required files:
+
+```text
+.stageflow/requests/<request-id>/01-definition/
+  definition.md
+  review.md
+  approval.md
+```
+
+Implementation-plan and implementation contain exactly these required files:
 
 ```text
 .stageflow/requests/<request-id>/<stage-folder>/
@@ -38,9 +47,10 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Inspect the project before asking definition questions.
 - Keep every request in its own `.stageflow/requests/<request-id>/` folder.
 - Use the session current pointer at `.stageflow/sessions/<session-id>/current.json` as the active request authority.
-- Run each stage as a goal before writing or revising that stage artifact.
-- Record the goal receipt in that stage's `goal.md`: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
-- When a definition turn presents `Pending Clarifications`, close the Codex goal before the final response and record `Goal status: completed` plus `Goal completion reason: awaiting user clarification`; the stage itself remains unapproved until the user answers and the review/approval gates pass.
+- Do not use `create_goal` or require `goal.md` for the `definition` stage; definition is a clarification loop driven by `definition.md`.
+- Run `implementation-plan` and `implementation` as goals before writing or revising those stage artifacts.
+- Record the goal receipt in those later stage `goal.md` files: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
+- When a definition turn presents `Pending Clarifications`, record an active batch of 1-5 questions in `definition.md`, return the full batch to the user, and stop; the stage itself remains unapproved until the user answers and the review/approval gates pass.
 - Review each stage artifact with a subagent. Self-review is allowed only as a private preliminary check and never satisfies the review gate.
 - Record every review in the same stage's `review.md`, including review cycle history, current artifact fingerprint, latest verdict, blocking issues, and final verdict.
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
@@ -48,9 +58,20 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
 - During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop.
-- After every user answer in `definition`, reflect the answer into `definition.md`, create the next concrete clarification question, keep it active in `Pending Clarifications`, and stop for the user.
+- After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
 - Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`.
 - Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
+- Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
+- Classify each pending question by `Question Depth`: `broad`, `mid`, or `detail`. Start with `broad` batches, keep asking `broad` while broad ambiguities remain, and move to `mid`/`detail` only when clarification history or resolved decisions show the previous depth has been sufficiently covered.
+- During user-answer waiting, use a question-generation subagent to prepare optional `01-definition/question-backlog.md` candidates. When the user answers, reuse unaffected backlog questions, revise partially affected questions, or regenerate the backlog when the answer invalidates it.
+
+## Definition Question Depth Criteria
+
+Use answer impact to classify pending clarification questions:
+
+- `broad`: the answer can change request identity, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
+- `mid`: the answer stays inside the approved broad scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
+- `detail`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
 
 ## Implementation Feedback And Redefinition
 
@@ -75,14 +96,14 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its options, and stop without review, approval, next-stage work, or blocked-goal handling. The matching `goal.md` must already be completed with `Goal completion reason: awaiting user clarification`.
+   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its explicit labeled options, and stop without review, approval, next-stage work, or blocked-goal handling. No definition `goal.md` is required for this wait state.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
 4. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
 5. Decide whether the latest user message continues the current request or starts a separate request.
 6. Run the validator for the current stage when artifacts exist.
-7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; show the pending question text and options, then wait for the user.
+7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; show every pending question in the batch with its explicit labeled options, then wait for the user.
 
 Treat `turn_start_instruction` in the hook result as mandatory next-action guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts first.
 
@@ -139,7 +160,7 @@ Use `--print-template` to get exact starter files:
 
 ```powershell
 python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
-python <plugin-root>/scripts/validate_stageflow.py --print-template goal
+python <plugin-root>/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
 python <plugin-root>/scripts/validate_stageflow.py --print-template definition
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
@@ -157,7 +178,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a definition artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user answers the pending question, asks a follow-up that is answered with the pending choices restated, or explicitly gives a stop signal. The response must not claim goal/stage completion or next-stage progress.
+- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch; the assistant must not continue review/approval until the user answers the batch, asks a follow-up that is answered with all pending labeled choices restated, or explicitly gives a stop signal. The response must not claim goal/stage completion or next-stage progress.
 - Subagent lifecycle hooks record lightweight observation state only.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

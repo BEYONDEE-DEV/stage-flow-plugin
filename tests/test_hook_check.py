@@ -1,4 +1,4 @@
-
+﻿
 from __future__ import annotations
 
 import contextlib
@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 import unittest
 from pathlib import Path
@@ -15,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_CHECK = ROOT / "scripts" / "stageflow_hook_check.py"
 REQUEST_ID = "20260621-1200-test-request"
-TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(ROOT / "tests" / "tmp")))
+TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(Path(tempfile.gettempdir()) / "stageflow-plugin-tests")))
 TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
@@ -74,9 +75,9 @@ Secondary: feature-adjustment
 
 ## Pending Clarifications
 
-| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
+| ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |
 
 ## Clarification History
 
@@ -267,7 +268,8 @@ class HookCheckThreeStageTests(unittest.TestCase):
             artifact_path = stage_dir / artifact_name
             artifact_path.write_text(artifact_text, encoding="utf-8")
             fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-            (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
+            if phase != "definition":
+                (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
             (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
             (stage_dir / "approval.md").write_text(self.approval_text(phase), encoding="utf-8")
 
@@ -276,7 +278,8 @@ class HookCheckThreeStageTests(unittest.TestCase):
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / folder
         artifact_path = stage_dir / artifact_name
         fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-        (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
+        if phase != "definition":
+            (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
 
     def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
@@ -483,8 +486,8 @@ Approved.
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
-                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -492,12 +495,13 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
-            self.mark_goal_awaiting_user(root, "definition")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "AWAITING_USER")
             self.assertEqual(result["turn_start_action"], "await_user_clarification")
             self.assertEqual(result["validation"]["status"], "AWAITING_USER")
             self.assertIn("How should docs sync status", result["pending_clarification_output"])
+            self.assertIn("Which validation boundary", result["pending_clarification_output"])
+            self.assertIn("Option 3: docs-wide status plus hook metadata", result["pending_clarification_output"])
             self.assertNotIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
 
     def test_awaiting_user_stop_blocks_response_without_pending_questions(self) -> None:
@@ -506,8 +510,8 @@ Approved.
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
-                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -515,12 +519,67 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
-            self.mark_goal_awaiting_user(root, "definition")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=2)
             self.assertEqual(result["status"], "BLOCKED")
-            self.assertIn("pending clarification questions and options", "\n".join(result["warnings"]))
+            self.assertIn("pending clarification questions and labeled options", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_stop_blocks_single_suggestion_without_labeled_options(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            last_message = (
+                marker
+                + "\n질문: How should docs sync status be represented?\n"
+                + "제안: docs-wide status plus partial review notes로 가겠습니다.\n"
+                + "질문: Which validation detail should be clarified with it?\n"
+                + "제안: status text only로 가겠습니다."
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("Option 1: docs-wide status only", "\n".join(result["warnings"]))
+            self.assertIn("Option 3: docs-wide status plus hook metadata", "\n".join(result["warnings"]))
+
+
+    def test_awaiting_user_stop_blocks_missing_third_option(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            last_message = (
+                marker
+                + "\n질문: How broad should docs sync status be?\n"
+                + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("Option 3: docs-wide status plus hook metadata", "\n".join(result["warnings"]))
 
     def test_awaiting_user_stop_blocks_completion_claim_even_with_questions(self) -> None:
         with temp_project() as root:
@@ -528,8 +587,8 @@ Approved.
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
-                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -537,7 +596,6 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
-            self.mark_goal_awaiting_user(root, "definition")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (

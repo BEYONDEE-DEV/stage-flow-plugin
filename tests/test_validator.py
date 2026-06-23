@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 import unittest
 from pathlib import Path
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_stageflow.py"
 REFERENCE_ROOT = ROOT / "skills" / "stageflow" / "references"
 REQUEST_ID = "20260621-1200-test-request"
-TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(ROOT / "tests" / "tmp")))
+TMP_ROOT = Path(os.environ.get("STAGEFLOW_TEST_TMP", str(Path(tempfile.gettempdir()) / "stageflow-plugin-tests")))
 TMP_ROOT.mkdir(parents=True, exist_ok=True)
 
 
@@ -75,9 +76,9 @@ Secondary: feature-adjustment
 
 ## Pending Clarifications
 
-| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
+| ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |
 
 ## Clarification History
 
@@ -286,7 +287,8 @@ class ValidatorThreeStageTests(unittest.TestCase):
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / folder
         artifact_path = stage_dir / artifact_name
         fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-        (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
+        if phase != "definition":
+            (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
 
     def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
@@ -390,7 +392,7 @@ Approved.
 
     def test_print_template_outputs_three_stage_templates(self) -> None:
         expectations = {
-            "stage-tree": "01-definition/goal.md",
+            "stage-tree": "01-definition/definition.md",
             "definition": "PENDING-001",
             "implementation-plan": "## Coverage Matrix",
             "implementation": "## Plan Compliance And Deviations",
@@ -407,7 +409,13 @@ Approved.
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(expected, result.stdout)
+                if template == "stage-tree":
+                    self.assertNotIn("01-definition/goal.md", result.stdout)
                 if template == "definition":
+                    self.assertIn("Question Depth", result.stdout)
+                    self.assertIn("broad", result.stdout)
+                    self.assertIn("Option 3:", result.stdout)
+                    self.assertNotIn("PENDING-006", result.stdout)
                     self.assertIn("No completed clarification yet", result.stdout)
                     self.assertNotIn("User selected `구현 계획으로 넘어가기`", result.stdout)
 
@@ -462,6 +470,9 @@ Approved.
         implementation_plan_rules = (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         implementation_rules = (REFERENCE_ROOT / "stages" / "03-implementation" / "implementation-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         for text, phrase in (
+            (skill_text, "Do not use `create_goal` or require `goal.md` for the `definition` stage"),
+            (skill_text, "Question Depth"),
+            (skill_text, "question-backlog.md"),
             (skill_text, "Implementation Feedback And Redefinition"),
             (skill_text, "Use selective rework instead of blanket invalidation"),
             (implementation_plan_rules, "## Selective Rework After Definition Changes"),
@@ -591,8 +602,8 @@ Approved.
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 DEFINITION_TEXT.replace(
-                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | Which model? | Option 1: A; Option 2: B; 구현 계획으로 넘어가기 | Option 1 | N/A | This changes scope. | pending |",
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | Which model? | Option 1: A; Option 2: B; 구현 계획으로 넘어가기 | Option 1 | N/A | This changes scope. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -600,19 +611,45 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
-            self.mark_goal_awaiting_user(root, "definition")
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not include the user stop signal as a question option", result.stdout)
 
-    def test_definition_pending_clarification_returns_awaiting_user(self) -> None:
+    def test_pending_clarification_rejects_more_than_five_questions(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            pending_rows = (
+                "| PENDING-001 | broad | Which model? | Option 1: A; Option 2: B | Option 1 | N/A | This changes scope. | pending |\n"
+                "| PENDING-002 | broad | Which outcome? | Option 1: C; Option 2: D | Option 1 | N/A | This clarifies outcome. | pending |\n"
+                "| PENDING-003 | broad | Which behavior? | Option 1: E; Option 2: F | Option 1 | N/A | This clarifies behavior. | pending |\n"
+                "| PENDING-004 | broad | Which policy? | Option 1: G; Option 2: H | Option 1 | N/A | This clarifies policy. | pending |\n"
+                "| PENDING-005 | broad | Which validation? | Option 1: I; Option 2: J | Option 1 | N/A | This clarifies validation. | pending |\n"
+                "| PENDING-006 | broad | Which boundary? | Option 1: K; Option 2: L | Option 1 | N/A | This exceeds the batch limit. | pending |"
+            )
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    pending_rows,
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("no more than five active questions", result.stdout)
+
+    def test_pending_clarification_requires_labeled_options(self) -> None:
         with temp_project() as root:
             self.create_project(root)
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 DEFINITION_TEXT.replace(
-                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | Which docs source-tracking model should definition capture? | Option 1: docs-wide reviewed commit only; Option 2: docs-wide commit plus review-session metadata | Option 1 | N/A | This changes the approved metadata boundary. | pending |",
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | Which model? | A; B | A | N/A | This changes scope. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -620,21 +657,83 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
-            self.mark_goal_awaiting_user(root, "definition")
             result = self.run_validator(root, "definition")
-            self.assertEqual(result.returncode, 3, result.stdout)
-            self.assertIn("AWAITING_USER definition", result.stdout)
-            self.assertNotIn("구현 계획으로 넘어가기", result.stdout)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("explicit labeled proposal options", result.stdout)
 
-    def test_pending_clarification_requires_closed_goal(self) -> None:
+    def test_pending_clarification_requires_valid_question_depth(self) -> None:
         with temp_project() as root:
             self.create_project(root)
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
-            artifact.write_text(DEFINITION_TEXT.replace("| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |", "| PENDING-001 | Which model? | Option 1: A; Option 2: B | Option 1 | N/A | This changes scope. | pending |"), encoding="utf-8")
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | unclear | Which validation? | Option 1: A; Option 2: B | Option 1 | N/A | This uses an invalid depth. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
             self.refresh_stage_fingerprint(root, "definition")
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Goal status: completed", result.stdout)
+            self.assertIn("Question Depth must be one of", result.stdout)
+
+    def test_definition_pending_clarification_returns_awaiting_user(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            pending_rows = (
+                "| PENDING-001 | broad | Which docs source boundary should definition capture? | Option 1: docs-wide reviewed commit only; Option 2: docs-wide commit plus review-session metadata; Option 3: docs plus hook metadata | Option 1 | N/A | Start with the broad documentation scope. | pending |\n"
+                "| PENDING-002 | broad | Which outcome should the docs workflow prioritize? | Option 1: reviewed status clarity; Option 2: review-session traceability | Option 1 | N/A | Outcomes shape later behavior questions. | pending |\n"
+                "| PENDING-003 | broad | Which normal docs sync behavior should be clarified? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | Broad behavior surface should be settled before detail. | pending |\n"
+                "| PENDING-004 | broad | Which metadata responsibility should definition capture? | Option 1: commit metadata only; Option 2: commit plus reviewer metadata | Option 1 | N/A | Data responsibility narrows the policy layer. | pending |\n"
+                "| PENDING-005 | broad | Which validation boundary should definition capture? | Option 1: validate docs-only behavior; Option 2: validate docs plus hook behavior | Option 1 | N/A | Validation boundary affects later checks. | pending |"
+            )
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    pending_rows,
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER definition", result.stdout)
+            self.assertIn("Option 3: docs plus hook metadata", result.stdout)
+            self.assertNotIn("구현 계획으로 넘어가기", result.stdout)
+
+    def test_definition_goal_file_is_not_required(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            goal = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "goal.md"
+            self.assertFalse(goal.exists())
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_definition_pending_clarification_does_not_require_goal(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | Which model scope? | Option 1: A; Option 2: B | Option 1 | N/A | This changes scope. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER definition", result.stdout)
 
     def test_implementation_plan_rejects_shallow_work_items(self) -> None:
         with temp_project() as root:

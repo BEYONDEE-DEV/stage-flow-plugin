@@ -49,8 +49,8 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
 .stageflow/requests/<request-id>/
   state.json
   01-definition/
-    goal.md
     definition.md
+    question-backlog.md  (optional helper)
     review.md
     approval.md
   02-implementation-plan/
@@ -87,16 +87,20 @@ Before running a review subagent, use the matching prompt file:
 
 Each prompt file owns the review mission, allowed inputs, forbidden actions, review instructions, and required review output for that stage.
 
+## Optional Definition Question Backlog
+
+`01-definition/question-backlog.md` may be created by a question-generation subagent while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review.md`, or `approval.md`, and it is not required for validation. Use it to record candidate next questions, question depth (`broad`, `mid`, `detail`), labeled options, affected definition areas, and invalidation triggers.
+
 ## goal.md
 
-Every stage has its own `goal.md`. It records the goal handoff for that stage artifact, not the whole request.
+`goal.md` is required only for `02-implementation-plan` and `03-implementation`. The `01-definition` stage does not use `create_goal`; it stays lightweight so the agent can keep asking clarification questions until the user explicitly stops. For later stages, `goal.md` records the goal handoff for that stage artifact, not the whole request.
 
 ```md
 # Goal
 
-Stage: definition
+Stage: implementation-plan
 
-Artifact Path: `01-definition/definition.md`
+Artifact Path: `02-implementation-plan/implementation-plan.md`
 
 Artifact Fingerprint: sha256:<artifact-fingerprint>
 
@@ -110,7 +114,7 @@ Invocation result: goal created
 
 ## Goal Objective
 
-Advance this stage artifact to the next required user input or approval gate. If pending clarifications are presented, stop at user-answer waiting instead of continuing review or next-stage work.
+Advance this later-stage artifact to the next required approval gate.
 
 ## Goal Tool Status
 
@@ -125,7 +129,6 @@ Required values:
 - `Artifact Fingerprint` must be the SHA-256 of the current stage artifact bytes.
 - `Tool: create_goal`, `Invocation recorded: yes`, and `Goal created: yes` are required.
 - `Goal status` must be active, in progress, complete, completed, or another non-pending success state.
-- When `Pending Clarifications` are active, `goal.md` must record `Goal status: completed` and `Goal completion reason: awaiting user clarification`; this means the current Codex goal reached a user-input wait point, not that the stage was approved.
 
 ## review.md
 
@@ -214,7 +217,7 @@ The validator can print starter templates:
 
 ```powershell
 python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
-python <plugin-root>/scripts/validate_stageflow.py --print-template goal
+python <plugin-root>/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
 python <plugin-root>/scripts/validate_stageflow.py --print-template definition
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
 python <plugin-root>/scripts/validate_stageflow.py --print-template implementation

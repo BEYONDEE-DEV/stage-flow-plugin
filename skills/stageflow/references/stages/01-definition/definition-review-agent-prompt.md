@@ -27,10 +27,10 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Evaluate every Rule ID in that table.
 - Check that desired outcomes and current problems are separated, and that mixed requests connect problems to resolving requirements and service behavior.
 - Check that user-specified files, endpoints, commands, screens, or reference systems are preserved as constraints instead of becoming unsourced implementation decisions.
-- Check that each completed clarification round records a concrete question, at least two proposal options, the user response, and the artifact area updated from that response.
+- Check that each completed clarification round records 1-5 concrete questions, valid `Question Depth` (`broad`, `mid`, or `detail`), at least two explicit labeled proposal options per question, the user response, and the artifact area updated from that response.
 - Check that `구현 계획으로 넘어가기` and equivalent stop signals are recorded only as user stop signals, not as pending question options.
 - Mark `FAIL` when the agent closed definition because it judged the request or behavior model "clear enough", `충분함`, or complete without a user stop signal.
-- Mark `FAIL` when the latest user answer has no following active pending clarification and no explicit user stop signal.
+- Mark `FAIL` when the latest user answer has no following active pending clarification batch, when the batch has more than five active questions, when a question has invalid depth or fewer than two labeled options, when the agent moves from broad to mid/detail without recorded basis, or when there is no explicit user stop signal.
 - Check that the definition reorganizes requirements into normal behavior, user flow, state/policy model, policy rules, regression prevention, and failure recovery instead of merely repeating the requirements list.
 - Check that policy rules trace back to requirement IDs and that the definition does not introduce file changes, TypeScript/interface design, test commands, or other implementation decisions.
 - Mark a Rule ID `PASS` only when the artifact evidence satisfies the review check and does not trigger the blocking condition.

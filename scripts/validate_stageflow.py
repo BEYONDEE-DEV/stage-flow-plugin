@@ -75,6 +75,7 @@ STAGES: tuple[Stage, ...] = (
                 "Pending Clarifications",
                 (
                     "ID",
+                    "Question Depth",
                     "Question",
                     "Options",
                     "Recommended Option",
@@ -199,6 +200,8 @@ USER_STOP_SIGNAL_RE = re.compile(
     re.IGNORECASE,
 )
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
+OPTION_LABEL_RE = re.compile(r"^(?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
+PENDING_DEPTHS = ("broad", "mid", "detail")
 NO_PENDING_STATUS_RE = re.compile(r"^(none|n/a|no|없음)$", re.IGNORECASE)
 AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
 AWAITING_USER_GOAL_REASON = "awaiting user clarification"
@@ -353,7 +356,8 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     else:
         artifact_fingerprint = None
 
-    validate_goal(stage, goal_path, artifact_fingerprint, errors, bool(pending_messages))
+    if stage.phase != "definition":
+        validate_goal(stage, goal_path, artifact_fingerprint, errors, bool(pending_messages))
     if pending_messages:
         awaiting.extend(pending_messages)
         return
@@ -488,6 +492,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
     stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
 
     messages: list[str] = []
+    depths: list[str] = []
     seen_ids: set[str] = set()
     for row in table.rows:
         status = row.get("Status", "").strip()
@@ -504,6 +509,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
             )
             continue
 
+        depth = row.get("Question Depth", "").strip()
         question = row.get("Question", "").strip()
         options = row.get("Options", "").strip()
         recommended = row.get("Recommended Option", "").strip()
@@ -512,6 +518,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
         missing = [
             name
             for name, value in (
+                ("Question Depth", depth),
                 ("Question", question),
                 ("Options", options),
                 ("Recommended Option", recommended),
@@ -524,25 +531,45 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` is missing user-answerable fields: {', '.join(missing)}"
             )
             continue
-        if not has_at_least_two_proposals(options):
+        depths.append(depth)
+        if depth not in PENDING_DEPTHS:
             errors.append(
-                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two proposal options"
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Question Depth must be one of {', '.join(PENDING_DEPTHS)}"
+            )
+        labeled_options = labeled_proposal_options(options)
+        if len(labeled_options) < 2:
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two explicit labeled proposal options such as `Option 1:` and `Option 2:`"
             )
         if any(term.lower() in options.lower() for term in stop_terms):
             errors.append(
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
             )
         messages.append(
-            f"`{display_path(path)}` pending clarification `{pending_id}`: Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
+            f"`{display_path(path)}` pending clarification `{pending_id}`: Depth: {depth} Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
+        )
+    if len(messages) > 5:
+        errors.append(
+            f"`{display_path(path)}` Pending Clarifications must ask no more than five active questions per batch before the user explicitly stops"
         )
     return messages
 
 
-def has_at_least_two_proposals(text: str) -> bool:
-    items = [item.strip().lower() for item in re.split(r"(?:<br\s*/?>|[,;\n/|])", text, flags=re.IGNORECASE) if item.strip()]
+def labeled_proposal_options(text: str) -> list[str]:
     stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
-    proposal_items = [item for item in items if not any(term.lower() in item for term in stop_terms)]
-    return len(proposal_items) >= 2
+    items = [item.strip() for item in re.split(r"(?:<br\s*/?>|[;\n|])", text, flags=re.IGNORECASE) if item.strip()]
+    labeled: list[str] = []
+    for item in items:
+        lower = item.lower()
+        if any(term.lower() in lower for term in stop_terms):
+            continue
+        if OPTION_LABEL_RE.match(item) and OPTION_LABEL_RE.sub("", item).strip():
+            labeled.append(item)
+    return labeled
+
+
+def has_at_least_two_proposals(text: str) -> bool:
+    return len(labeled_proposal_options(text)) >= 2
 
 
 def is_empty_clarification_history_row(row: dict[str, str]) -> bool:
@@ -857,11 +884,18 @@ def is_separator_row(cells: list[str]) -> bool:
 
 
 def render_stage_tree() -> str:
-    return "\n".join(
-        f"- `{stage.folder}/goal.md`, `{stage.folder}/{stage.artifact}`, "
-        f"`{stage.folder}/review.md`, `{stage.folder}/approval.md`"
-        for stage in STAGES
-    )
+    rows: list[str] = []
+    for stage in STAGES:
+        parts = []
+        if stage.phase != "definition":
+            parts.append(f"`{stage.folder}/goal.md`")
+        parts.extend([
+            f"`{stage.folder}/{stage.artifact}`",
+            f"`{stage.folder}/review.md`",
+            f"`{stage.folder}/approval.md`",
+        ])
+        rows.append("- " + ", ".join(parts))
+    return "\n".join(rows)
 
 
 VALIDATOR_TEMPLATES: dict[str, str] = {
@@ -892,9 +926,9 @@ VALIDATOR_TEMPLATES: dict[str, str] = {
 """,
     "goal": """# Goal
 
-Stage: definition
+Stage: implementation-plan
 
-Artifact Path: `01-definition/definition.md`
+Artifact Path: `02-implementation-plan/implementation-plan.md`
 
 Artifact Fingerprint: sha256:<artifact-fingerprint>
 
@@ -955,9 +989,11 @@ Secondary: none
 
 ## Pending Clarifications
 
-| ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | Which concrete definition detail should be clarified next? | Option 1: narrow the scope; Option 2: expand the behavior model | Option 1 | N/A | Stageflow keeps asking until the user explicitly stops. | pending |
+| ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PENDING-001 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
+| PENDING-002 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
+| PENDING-003 | broad | Which top-level success outcome should be prioritized? | Option 1: resolve the current problem; Option 2: preserve extensibility for follow-up changes | Option 1 | N/A | Broad outcomes decide which mid-level behavior questions matter. | pending |
 
 ## Clarification History
 

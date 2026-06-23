@@ -41,8 +41,8 @@ Behavior:
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL|AWAITING_USER>
 ```
 
-- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes, `await_user_clarification` when the current definition stage has pending questions, or `repair_current_stage` when the current stage fails validation.
-- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The assistant should answer follow-up questions, restate all pending questions/options, and stop. `goal.md` must be completed with `Goal completion reason: awaiting user clarification` before this status is valid.
+- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes, `await_user_clarification` when the current definition stage has a pending question batch, or `repair_current_stage` when the current stage fails validation.
+- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The assistant should answer follow-up questions, restate all pending questions/labeled options, and stop. While waiting, a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates for the next batch. Definition does not require `goal.md` for this status.
 - Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook returns `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
 - `turn_start_instruction` is mandatory next-action guidance for the main agent.
 
@@ -53,7 +53,7 @@ The stop hook reads the previous turn state from `.stageflow/hook-state/`.
 Behavior:
 
 - If a preflight marker was required, the assistant response must include it.
-- `AWAITING_USER` responses must include the pending question text and options and must not claim completion or next-stage progress before the user answers.
+- `AWAITING_USER` responses must include every pending question in the batch with its explicit labeled options and must not claim completion or next-stage progress before the user answers.
 - Completion-like responses validate `--phase all`.
 - Missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion validation failures return a block decision instead of silently warning.
 

@@ -39,6 +39,7 @@ IMPLEMENTATION_TOKENS = (
     "\ud328\uce58",
 )
 COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc", "\ub05d")
+OPTION_ITEM_RE = re.compile(r"(?:^|[;\n|]\s*)((?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:[^;\n|]+)", re.IGNORECASE)
 AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"\b(completed|done)\b|완료\s*확인|목표(?:를)?\s*(?:완료|달성)|"
     r"다음\s*단계(?:로)?\s*(?:진행|이동)|서비스\s*계획(?:을)?\s*(?:작성|진행|시작)|"
@@ -130,11 +131,13 @@ def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str
         transition = ""
         if " Transition option: " in line and " Why this matters: " in line:
             transition = line.split(" Transition option: ", 1)[1].split(" Why this matters: ", 1)[0].strip()
-        option_labels = re.findall(r"(?:^|[;,]\s*)((?:Option\s+\d+|[A-Z])\s*:)", options, flags=re.IGNORECASE)
+        option_items = [item.strip() for item in OPTION_ITEM_RE.findall(options)]
         if transition.lower() in {"n/a", "none", "없음"}:
             transition = ""
         required_parts = [part for part in (question, transition) if part]
-        required_parts.extend(option_labels[:2])
+        required_parts.extend(option_items)
+        if len(option_items) < 2:
+            required_parts.append("at least two explicit option labels such as Option 1: and Option 2:")
         requirements.append((question or "pending clarification", required_parts))
     return requirements
 
@@ -335,13 +338,13 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         status = "OK"
         severity = "info"
         action = "continue_current_stage"
-        instruction = "Continue from the validated current Stageflow stage and do not advance until its goal, artifact, subagent review, and approval gates pass."
+        instruction = "Continue from the validated current Stageflow stage and do not advance until its required artifact, subagent review, and approval gates pass. Goal gates apply only after definition."
     elif validation["status"] == "AWAITING_USER":
         status = "AWAITING_USER"
         severity = "info"
         action = "await_user_clarification"
         instruction = (
-            "The current Stageflow stage is waiting for user clarification. Answer any user follow-up, then restate every pending clarification question with its options and stop; do not run review, approval, or next-stage work until the user selects an option."
+            "The current Stageflow stage is waiting for user clarification. Answer any user follow-up, then restate every pending clarification question with its options and stop; do not run review, approval, or next-stage work until the user answers the pending batch or explicitly stops clarification."
         )
     else:
         status = "WARNING"
@@ -418,8 +421,8 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
             if missing_parts:
                 block_result(
                     result,
-                    "AWAITING_USER response must restate pending clarification questions and options: "
-                    + "; ".join(missing_parts[:5]),
+                    "AWAITING_USER response must restate pending clarification questions and labeled options: "
+                    + "; ".join(missing_parts[:20]),
                 )
 
         if looks_like_completion(last_message):
