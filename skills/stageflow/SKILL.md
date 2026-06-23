@@ -47,6 +47,10 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
+- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop.
+- After every user answer in `definition`, reflect the answer into `definition.md`, create the next concrete clarification question, keep it active in `Pending Clarifications`, and stop for the user.
+- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`.
+- Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
 
 ## Implementation Feedback And Redefinition
 
@@ -153,7 +157,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a definition artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user selects options or asks a follow-up that is answered with the pending choices restated. The response must not claim goal/stage completion or next-stage progress.
+- `AWAITING_USER` means a definition artifact has active `Pending Clarifications`; the assistant must not continue review/approval until the user answers the pending question, asks a follow-up that is answered with the pending choices restated, or explicitly gives a stop signal. The response must not claim goal/stage completion or next-stage progress.
 - Subagent lifecycle hooks record lightweight observation state only.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

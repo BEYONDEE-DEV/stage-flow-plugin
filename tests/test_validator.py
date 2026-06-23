@@ -83,7 +83,7 @@ Secondary: feature-adjustment
 
 | Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
 | --- | --- | --- | --- | --- | --- |
-| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |
+| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |
 
 ## Open Questions
 
@@ -391,7 +391,7 @@ Approved.
     def test_print_template_outputs_three_stage_templates(self) -> None:
         expectations = {
             "stage-tree": "01-definition/goal.md",
-            "definition": "## Normal Behavior Model",
+            "definition": "PENDING-001",
             "implementation-plan": "## Coverage Matrix",
             "implementation": "## Plan Compliance And Deviations",
             "goal": "Tool: create_goal",
@@ -407,6 +407,9 @@ Approved.
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(expected, result.stdout)
+                if template == "definition":
+                    self.assertIn("No completed clarification yet", result.stdout)
+                    self.assertNotIn("User selected `구현 계획으로 넘어가기`", result.stdout)
 
     def test_old_stage_templates_are_removed(self) -> None:
         for template in ("requirements", "service-plan"):
@@ -553,15 +556,54 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("still blocking", result.stdout)
 
-    def test_definition_requires_implementation_plan_transition_choice(self) -> None:
+    def test_definition_rejects_agent_clear_enough_closure(self) -> None:
         with temp_project() as root:
             self.create_project(root)
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
-            artifact.write_text(DEFINITION_TEXT.replace("User selected `구현 계획으로 넘어가기`", "User selected first proposal").replace("| yes | 구현 계획으로 넘어가기 |", "| no | Continue asking |"), encoding="utf-8")
+            artifact.write_text(
+                DEFINITION_TEXT.replace("User said `질문 그만, 구현 계획으로 넘어가기`", "Agent judged the definition clear enough")
+                .replace("| no | 질문 그만, 구현 계획으로 넘어가기 |", "| no | N/A |"),
+                encoding="utf-8",
+            )
             self.refresh_stage_fingerprint(root, "definition")
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("implementation-plan transition", result.stdout)
+            self.assertIn("explicit user stop signal", result.stdout)
+            self.assertIn("cannot decide the definition is clear enough", result.stdout)
+
+    def test_definition_user_answer_without_stop_requires_next_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace("User said `질문 그만, 구현 계획으로 넘어가기`", "User selected the second proposal")
+                .replace("| no | 질문 그만, 구현 계획으로 넘어가기 |", "| no | N/A |"),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("keep asking until the user explicitly stops", result.stdout)
+
+    def test_pending_clarification_must_not_include_stop_signal_option(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | Which model? | Option 1: A; Option 2: B; 구현 계획으로 넘어가기 | Option 1 | N/A | This changes scope. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.mark_goal_awaiting_user(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not include the user stop signal as a question option", result.stdout)
 
     def test_definition_pending_clarification_returns_awaiting_user(self) -> None:
         with temp_project() as root:
@@ -570,10 +612,10 @@ Approved.
             artifact.write_text(
                 DEFINITION_TEXT.replace(
                     "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| CLAR-001 | Which docs source-tracking model should definition capture? | Option 1: docs-wide reviewed commit only; Option 2: docs-wide commit plus review-session metadata; 구현 계획으로 넘어가기 | Option 1 | 구현 계획으로 넘어가기 | This changes the approved metadata boundary. | pending |",
+                    "| PENDING-001 | Which docs source-tracking model should definition capture? | Option 1: docs-wide reviewed commit only; Option 2: docs-wide commit plus review-session metadata | Option 1 | N/A | This changes the approved metadata boundary. | pending |",
                 ).replace(
-                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
-                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
                 ),
                 encoding="utf-8",
             )
@@ -582,13 +624,13 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
-            self.assertIn("구현 계획으로 넘어가기", result.stdout)
+            self.assertNotIn("구현 계획으로 넘어가기", result.stdout)
 
     def test_pending_clarification_requires_closed_goal(self) -> None:
         with temp_project() as root:
             self.create_project(root)
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
-            artifact.write_text(DEFINITION_TEXT.replace("| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |", "| CLAR-001 | Which model? | Option 1: A; Option 2: B; 구현 계획으로 넘어가기 | Option 1 | 구현 계획으로 넘어가기 | This changes scope. | pending |"), encoding="utf-8")
+            artifact.write_text(DEFINITION_TEXT.replace("| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |", "| PENDING-001 | Which model? | Option 1: A; Option 2: B | Option 1 | N/A | This changes scope. | pending |"), encoding="utf-8")
             self.refresh_stage_fingerprint(root, "definition")
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)

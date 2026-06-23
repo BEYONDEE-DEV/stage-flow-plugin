@@ -193,8 +193,9 @@ NO_BLOCKING_RE = re.compile(
     re.IGNORECASE,
 )
 BLOCKING_OPEN_QUESTION_RE = re.compile(r"^(yes|true|blocking|block)$", re.IGNORECASE)
-IMPLEMENTATION_PLAN_TRANSITION_RE = re.compile(
-    r"\b(implementation plan|next stage)\b|구현\s*계획|다음\s*단계",
+USER_STOP_SIGNAL_RE = re.compile(
+    r"\b(implementation plan|proceed|go ahead|approve|approved|yes|stop asking|enough)\b"
+    r"|구현\s*계획|질문\s*그만|충분|진행|승인",
     re.IGNORECASE,
 )
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
@@ -484,8 +485,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
     if not table.rows:
         return []
 
-    transition_re = IMPLEMENTATION_PLAN_TRANSITION_RE
-    transition_terms = ("구현 계획", "implementation plan", "next stage")
+    stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
 
     messages: list[str] = []
     seen_ids: set[str] = set()
@@ -515,7 +515,6 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
                 ("Question", question),
                 ("Options", options),
                 ("Recommended Option", recommended),
-                ("Transition Option", transition),
                 ("Why This Matters", why),
             )
             if not value or value.lower() in {"n/a", "none"}
@@ -525,17 +524,13 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` is missing user-answerable fields: {', '.join(missing)}"
             )
             continue
-        if not transition_re.search(transition):
+        if not has_at_least_two_proposals(options):
             errors.append(
-                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include the next-stage transition option text"
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two proposal options"
             )
-        if not has_at_least_two_proposals(options, transition_terms):
+        if any(term.lower() in options.lower() for term in stop_terms):
             errors.append(
-                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two proposal options plus the transition option"
-            )
-        if transition and transition not in options:
-            errors.append(
-                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Options must include its Transition Option"
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
             )
         messages.append(
             f"`{display_path(path)}` pending clarification `{pending_id}`: Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
@@ -543,12 +538,10 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
     return messages
 
 
-def has_at_least_two_proposals(text: str, transition_terms: tuple[str, ...]) -> bool:
-    lower = text.lower()
-    if not any(term in text or term in lower for term in transition_terms):
-        return False
+def has_at_least_two_proposals(text: str) -> bool:
     items = [item.strip().lower() for item in re.split(r"(?:<br\s*/?>|[,;\n/|])", text, flags=re.IGNORECASE) if item.strip()]
-    proposal_items = [item for item in items if not any(term.lower() in item for term in transition_terms)]
+    stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
+    proposal_items = [item for item in items if not any(term.lower() in item for term in stop_terms)]
     return len(proposal_items) >= 2
 
 
@@ -585,36 +578,26 @@ def validate_definition_clarification_history(path: Path, text: str, errors: lis
             continue
         round_id = row.get("Round ID", "").strip() or "<unknown>"
         questions = row.get("Questions Asked", "").strip()
-        offered = row.get("Implementation Plan Option Offered", "").strip()
         transition_signal = row.get("User Transition Signal", "").strip()
-        if offered.lower() not in {"yes", "true"} and "구현 계획" not in offered:
-            errors.append(
-                f"`{display_path(path)}` Clarification History row `{round_id}` must record that an implementation-plan transition option was offered"
-            )
         if not has_meaningful_proposal_options(questions):
             errors.append(
-                f"`{display_path(path)}` Clarification History row `{round_id}` must include a concrete question with at least two proposal options before the implementation-plan transition option"
+                f"`{display_path(path)}` Clarification History row `{round_id}` must include a concrete question with at least two proposal options"
             )
-        is_transition = bool(IMPLEMENTATION_PLAN_TRANSITION_RE.search(transition_signal))
+        is_transition = bool(USER_STOP_SIGNAL_RE.search(transition_signal))
         if is_transition:
             has_transition_signal = True
         elif index == len(table.rows) - 1 and not has_pending_clarifications:
             errors.append(
-                f"`{display_path(path)}` Clarification History row `{round_id}` records a proposal answer but no following clarification round or implementation-plan transition"
+                f"`{display_path(path)}` Clarification History row `{round_id}` records a user answer but no following clarification round or user stop signal; keep asking until the user explicitly stops"
             )
     if not has_transition_signal and not has_pending_clarifications:
         errors.append(
-            f"`{display_path(path)}` Clarification History must record an explicit user choice to move to implementation-plan before approval"
+            f"`{display_path(path)}` Clarification History must record an explicit user stop signal before approval; the agent cannot decide the definition is clear enough"
         )
 
 
-def has_meaningful_proposal_options(
-    text: str,
-    transition_terms: tuple[str, ...] = ("구현 계획", "implementation plan", "next stage"),
-) -> bool:
+def has_meaningful_proposal_options(text: str) -> bool:
     lower = text.lower()
-    if not any(term in text or term in lower for term in transition_terms):
-        return False
     if "options:" in lower:
         option_text = text[lower.find("options:") + len("options:") :]
     elif "선택지:" in text:
@@ -622,11 +605,7 @@ def has_meaningful_proposal_options(
     else:
         return False
     options = [item.strip().lower() for item in re.split(r"[,;/|]", option_text) if item.strip()]
-    proposal_options = [
-        item
-        for item in options
-        if not any(term.lower() in item for term in transition_terms)
-    ]
+    proposal_options = [item for item in options if item not in {"n/a", "none", "없음"}]
     return len(proposal_options) >= 2
 
 
@@ -978,13 +957,13 @@ Secondary: none
 
 | ID | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |
+| PENDING-001 | Which concrete definition detail should be clarified next? | Option 1: narrow the scope; Option 2: expand the behavior model | Option 1 | N/A | Stageflow keeps asking until the user explicitly stops. | pending |
 
 ## Clarification History
 
 | Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
 | --- | --- | --- | --- | --- | --- |
-| CLAR-001 | Which concrete definition should this request use? Options: Proposal 1, Proposal 2, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | N/A |
+| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |
 
 ## Open Questions
 

@@ -131,6 +131,8 @@ def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str
         if " Transition option: " in line and " Why this matters: " in line:
             transition = line.split(" Transition option: ", 1)[1].split(" Why this matters: ", 1)[0].strip()
         option_labels = re.findall(r"(?:^|[;,]\s*)((?:Option\s+\d+|[A-Z])\s*:)", options, flags=re.IGNORECASE)
+        if transition.lower() in {"n/a", "none", "없음"}:
+            transition = ""
         required_parts = [part for part in (question, transition) if part]
         required_parts.extend(option_labels[:2])
         requirements.append((question or "pending clarification", required_parts))

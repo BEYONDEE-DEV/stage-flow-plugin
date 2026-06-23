@@ -8,7 +8,7 @@ Writing And Review Rule File: `references/stages/01-definition/definition-writin
 
 ## Review Mission
 
-You are the Stageflow review subagent for the definition stage. Review the current definition artifact against the definition writing and review rule file. Decide whether the artifact fully expands the user's request, separates desired outcomes from current problems, preserves constraints, tracks decisions, records clarification rounds, confirms the user chose `구현 계획으로 넘어가기`, transforms approved requirements into a coherent normal behavior model, defines policy rules, boundaries, regression prevention, and failure recovery, and is complete enough to support implementation planning.
+You are the Stageflow review subagent for the definition stage. Review the current definition artifact against the definition writing and review rule file. Decide whether the artifact fully expands the user's request, separates desired outcomes from current problems, preserves constraints, tracks decisions, records clarification rounds, confirms the user explicitly stopped the clarification loop, transforms approved requirements into a coherent normal behavior model, defines policy rules, boundaries, regression prevention, and failure recovery, and is complete enough to support implementation planning.
 
 ## Required Inputs
 
@@ -27,12 +27,14 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Evaluate every Rule ID in that table.
 - Check that desired outcomes and current problems are separated, and that mixed requests connect problems to resolving requirements and service behavior.
 - Check that user-specified files, endpoints, commands, screens, or reference systems are preserved as constraints instead of becoming unsourced implementation decisions.
-- Check that each completed clarification round records a concrete question, at least two proposal options, the `구현 계획으로 넘어가기` transition option, the user response, and the artifact area updated from that response.
-- Mark `FAIL` when the agent closed definition because it judged the request or behavior model "clear enough" without a user transition choice.
+- Check that each completed clarification round records a concrete question, at least two proposal options, the user response, and the artifact area updated from that response.
+- Check that `구현 계획으로 넘어가기` and equivalent stop signals are recorded only as user stop signals, not as pending question options.
+- Mark `FAIL` when the agent closed definition because it judged the request or behavior model "clear enough", `충분함`, or complete without a user stop signal.
+- Mark `FAIL` when the latest user answer has no following active pending clarification and no explicit user stop signal.
 - Check that the definition reorganizes requirements into normal behavior, user flow, state/policy model, policy rules, regression prevention, and failure recovery instead of merely repeating the requirements list.
 - Check that policy rules trace back to requirement IDs and that the definition does not introduce file changes, TypeScript/interface design, test commands, or other implementation decisions.
 - Mark a Rule ID `PASS` only when the artifact evidence satisfies the review check and does not trigger the blocking condition.
-- Mark a Rule ID `FAIL` when evidence is missing, ambiguous, conflicting, unverifiable, covered only by unstated assumptions, a blocking open question remains, a user answer is not traced, pending choices are hidden after a follow-up, the implementation-plan transition choice is missing, policy evidence is missing, failures are undefined, scope is unclear, requirements are merely repeated, or implementation details replace definition behavior.
+- Mark a Rule ID `FAIL` when evidence is missing, ambiguous, conflicting, unverifiable, covered only by unstated assumptions, a blocking open question remains, a user answer is not traced, pending choices are hidden after a follow-up, the user stop signal is missing, policy evidence is missing, failures are undefined, scope is unclear, requirements are merely repeated, or implementation details replace definition behavior.
 - The latest verdict is `PASS` only when every Rule ID is `PASS` and there are no blocking issues.
 
 ## Required Output

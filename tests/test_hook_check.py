@@ -82,7 +82,7 @@ Secondary: feature-adjustment
 
 | Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
 | --- | --- | --- | --- | --- | --- |
-| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |
+| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |
 
 ## Open Questions
 
@@ -484,10 +484,10 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
                 ).replace(
-                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
-                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
                 ),
                 encoding="utf-8",
             )
@@ -498,7 +498,7 @@ Approved.
             self.assertEqual(result["turn_start_action"], "await_user_clarification")
             self.assertEqual(result["validation"]["status"], "AWAITING_USER")
             self.assertIn("How should docs sync status", result["pending_clarification_output"])
-            self.assertIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
+            self.assertNotIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
 
     def test_awaiting_user_stop_blocks_response_without_pending_questions(self) -> None:
         with temp_project() as root:
@@ -507,10 +507,10 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
                 ).replace(
-                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
-                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
                 ),
                 encoding="utf-8",
             )
@@ -529,10 +529,10 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| CLAR-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes; 구현 계획으로 넘어가기 | Option 2 | 구현 계획으로 넘어가기 | This is the current unanswered definition decision. | pending |",
+                    "| PENDING-001 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered definition decision. | pending |",
                 ).replace(
-                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard, 구현 계획으로 넘어가기. | User selected `구현 계획으로 넘어가기`. | yes | 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
-                    "| CLAR-000 | No completed clarification yet. | N/A | N/A | N/A | N/A |",
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
                 ),
                 encoding="utf-8",
             )
@@ -543,7 +543,7 @@ Approved.
             last_message = (
                 marker
                 + "\n질문: How should docs sync status be represented?\n"
-                + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus partial review notes / 구현 계획으로 넘어가기\n"
+                + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus partial review notes\n"
                 + "목표를 달성했습니다."
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
