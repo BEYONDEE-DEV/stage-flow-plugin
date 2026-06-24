@@ -31,7 +31,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 16)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
 }
@@ -274,7 +274,9 @@ class HookCheckThreeStageTests(unittest.TestCase):
             artifact_path = stage_dir / artifact_name
             artifact_path.write_text(artifact_text, encoding="utf-8")
             fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-            if phase != "definition":
+            if phase == "definition":
+                self.write_transition_risk_files(root, fingerprint)
+            else:
                 (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
             (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
             (stage_dir / "approval.md").write_text(self.approval_text(phase), encoding="utf-8")
@@ -284,7 +286,9 @@ class HookCheckThreeStageTests(unittest.TestCase):
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / folder
         artifact_path = stage_dir / artifact_name
         fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-        if phase != "definition":
+        if phase == "definition":
+            self.write_transition_risk_files(root, fingerprint)
+        else:
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
 
@@ -302,6 +306,71 @@ class HookCheckThreeStageTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.refresh_stage_fingerprint(root, "definition")
+
+    def write_transition_risk_files(self, root: Path, fingerprint: str | None = None) -> None:
+        stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+        if fingerprint is None:
+            fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+        (stage_dir / "transition-risk-goal.md").write_text(self.transition_risk_goal_text(fingerprint), encoding="utf-8")
+        (stage_dir / "transition-risk.md").write_text(self.transition_risk_text(), encoding="utf-8")
+
+    @staticmethod
+    def transition_risk_goal_text(fingerprint: str) -> str:
+        return f"""# Transition Risk Goal
+
+Stage: definition
+
+Purpose: transition-risk
+
+Artifact Path: `01-definition/transition-risk.md`
+
+Definition Artifact Fingerprint: sha256:{fingerprint}
+
+## Goal Invocation
+
+Tool: create_goal
+
+Invocation recorded: yes
+
+Invocation result: goal created
+
+## Goal Objective
+
+Generate transition risk cases before implementation planning and collect user confirmation before definition approval.
+
+## Goal Tool Status
+
+Goal created: yes
+
+Goal status: completed
+"""
+
+    @staticmethod
+    def transition_risk_text() -> str:
+        return """# Transition Risk
+
+## Risk Generation Basis
+
+Generated after the user stop signal using the current definition artifact, with no automatic requirement changes before user confirmation.
+
+## Generated Risk Cases
+
+| ID | Category | Risk Case | Affected Definition Area | Suggested Handling | User Confirmation | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| RISK-001 | implementation-readiness | No material transition risks found. | Requirements, Acceptance Criteria, Policy Rules, Boundaries, Failure And Recovery Behavior, Regression Prevention | Proceed after user confirmation. | User confirmed no material risks. | not-applicable |
+
+## Suggested Definition Updates
+
+No definition updates required.
+
+## User Confirmation
+
+User confirmed generated transition risk disposition before definition approval.
+
+## Final Disposition
+
+All generated risk cases are confirmed and no follow-up clarification is required.
+"""
 
     def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
         folder, _, _ = STAGE_BY_PHASE[phase]
@@ -543,10 +612,53 @@ Approved.
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "질문 그만, 구현 계획으로 넘어가기"})
             self.assertEqual(prompt_result["status"], "AWAITING_USER")
             self.assertEqual(prompt_result["awaiting_user_prompt_kind"], "stop_signal")
-            self.assertEqual(prompt_result["turn_start_action"], "record_definition_stop_signal")
+            self.assertEqual(prompt_result["turn_start_action"], "run_definition_transition_risk_goal")
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\nClarification History에 종료 신호를 기록하겠습니다."})
             self.assertEqual(result["status"], "PREPASS")
+
+    def test_stop_signal_allows_only_transition_risk_writes_before_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "질문 그만, 구현 계획으로 넘어가기"})
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/transition-risk.md"},
+                },
+            )
+            self.assertTrue(allowed["transition_risk_gate_write"])
+            blocked = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/02-implementation-plan/implementation-plan.md"},
+                },
+                expected_returncode=2,
+            )
+            self.assertIn("transition-risk", "\n".join(blocked["warnings"]))
+
+
+    def test_stop_signal_blocks_definition_approval_claim_before_transition_risk(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "질문 그만, 구현 계획으로 넘어가기"})
+            marker = str(prompt_result["preflight_marker"])
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": marker + "\ndefinition approved"},
+                expected_returncode=2,
+            )
+            self.assertIn("must not claim completion or next-stage progress", "\n".join(result["warnings"]))
+
 
     def test_awaiting_user_allows_question_generation_subagent(self) -> None:
         with temp_project() as root:

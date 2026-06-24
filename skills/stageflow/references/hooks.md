@@ -20,7 +20,7 @@ The hook inspects write-like tools before they run.
 
 Behavior:
 
-- Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired.
+- Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired, except that after an `AWAITING_USER` stop signal the main agent is limited to `01-definition/definition.md`, `01-definition/transition-risk-goal.md`, and `01-definition/transition-risk.md` until transition risk confirmation is handled.
 - Non-write tools and read-only shell commands return `PREPASS`.
 - Non-Stageflow file edits are blocked while an active Stageflow request lacks a valid session current pointer or while the plugin-bundled validator fails `--phase implementation-plan` for the target project root.
 - Completed Stageflow requests do not authorize new file edits; start a new request first.
@@ -41,8 +41,8 @@ Behavior:
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL|AWAITING_USER>
 ```
 
-- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes; `answer_follow_up_and_restate_pending`, `apply_user_clarification_answer`, or `record_definition_stop_signal` for `AWAITING_USER` definition turns; or `repair_current_stage` when the current stage fails validation.
-- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook classifies the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Pending-answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns may record the stop and proceed only to definition review/approval. Definition does not require `goal.md` for this status.
+- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes; `answer_follow_up_and_restate_pending`, `apply_user_clarification_answer`, or `run_definition_transition_risk_goal` for `AWAITING_USER` definition turns; or `repair_current_stage` when the current stage fails validation.
+- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook classifies the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Pending-answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns must record the stop, run the definition transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, and ask the user to confirm risk cases before definition review/approval. Definition still does not use `01-definition/goal.md` for this status.
 - Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook returns `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
 - `turn_start_instruction` is mandatory next-action guidance for the main agent.
 
@@ -53,7 +53,7 @@ The stop hook reads the previous turn state from `.stageflow/hook-state/`.
 Behavior:
 
 - If a preflight marker was required, the assistant response must include it.
-- `AWAITING_USER` follow-up responses must include every pending question in the batch with its explicit labeled options and must not claim completion or next-stage progress. Pending-answer and stop-signal turns are not forced to restate the old batch.
+- `AWAITING_USER` follow-up responses must include every pending question in the batch with its explicit labeled options and must not claim completion or next-stage progress. Pending-answer and stop-signal turns are not forced to restate the old batch, but stop-signal turns must not claim definition approval or implementation-plan start before the transition-risk files and user confirmations satisfy validation.
 - Completion-like responses validate `--phase all`.
 - Missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion validation failures return a block decision instead of silently warning.
 

@@ -204,6 +204,25 @@ USER_STOP_SIGNAL_RE = re.compile(
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
 OPTION_LABEL_RE = re.compile(r"^(?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
 PENDING_DEPTHS = ("broad", "mid", "detail")
+TRANSITION_RISK_CATEGORIES = {
+    "scope",
+    "acceptance",
+    "policy-data",
+    "failure-recovery",
+    "regression",
+    "integration",
+    "user-flow",
+    "security-privacy",
+    "implementation-readiness",
+}
+TRANSITION_RISK_DISPOSITIONS = {
+    "apply-to-definition",
+    "ask-follow-up",
+    "out-of-scope",
+    "accepted-risk",
+    "duplicate",
+    "not-applicable",
+}
 PURPOSE_CONFIDENCES = {"confirmed", "inferred", "unknown"}
 PURPOSE_KEYWORD_RE = re.compile(
     r"\b(purpose|why|intent|value|goal|outcome|success)\b|목적|왜|의도|가치|목표|성과|성공",
@@ -363,6 +382,8 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     else:
         artifact_fingerprint = None
 
+    if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
+        validate_transition_risk_gate(stage_dir, artifact_text, artifact_fingerprint, errors, bool(pending_messages))
     if stage.phase != "definition":
         validate_goal(stage, goal_path, artifact_fingerprint, errors, bool(pending_messages))
     if pending_messages:
@@ -764,6 +785,103 @@ def validate_table_columns(path: Path, text: str, requirement: TableRequirement,
     )
 
 
+def transition_risk_file_present(stage_dir: Path) -> bool:
+    return (stage_dir / "transition-risk.md").is_file() or (stage_dir / "transition-risk-goal.md").is_file()
+
+
+def validate_transition_risk_goal(path: Path, definition_fingerprint: str, errors: list[str]) -> None:
+    text = read_required_text(path, errors)
+    if text is None:
+        return
+    if "# Transition Risk Goal" not in text and "# Goal" not in text:
+        errors.append(f"`{display_path(path)}` must include `# Transition Risk Goal` or `# Goal`")
+    if label_value(text, "Stage") != "definition":
+        errors.append(f"`{display_path(path)}` must record `Stage: definition`")
+    if label_value(text, "Purpose") != "transition-risk":
+        errors.append(f"`{display_path(path)}` must record `Purpose: transition-risk`")
+    artifact_path = label_value(text, "Artifact Path").strip("`")
+    if artifact_path != "01-definition/transition-risk.md":
+        errors.append(f"`{display_path(path)}` must record `Artifact Path: 01-definition/transition-risk.md`")
+    if "Tool: create_goal" not in text:
+        errors.append(f"`{display_path(path)}` Goal Invocation must record `Tool: create_goal`")
+    if "Invocation recorded: yes" not in text:
+        errors.append(f"`{display_path(path)}` Goal Invocation must record `Invocation recorded: yes`")
+    if "Goal created: yes" not in text:
+        errors.append(f"`{display_path(path)}` Goal Tool Status must record `Goal created: yes`")
+    if label_value(text, "Goal status").lower() != "completed":
+        errors.append(f"`{display_path(path)}` must record `Goal status: completed`")
+    validate_fingerprint(path, text, "Definition Artifact Fingerprint", definition_fingerprint, errors)
+
+
+def reflected_definition_sections(text: str) -> str:
+    sections = (
+        "## Requirements",
+        "## Acceptance Criteria",
+        "## Policy Rules",
+        "## Boundaries",
+        "## Failure And Recovery Behavior",
+        "## Regression Prevention",
+    )
+    return "\n".join(section_text(text, section) for section in sections)
+
+
+def validate_transition_risk_file(path: Path, definition_text: str, has_pending_clarifications: bool, errors: list[str]) -> None:
+    text = read_required_text(path, errors)
+    if text is None:
+        return
+    if "# Transition Risk" not in text:
+        errors.append(f"`{display_path(path)}` must include `# Transition Risk`")
+    for section in (
+        "## Risk Generation Basis",
+        "## Generated Risk Cases",
+        "## Suggested Definition Updates",
+        "## User Confirmation",
+        "## Final Disposition",
+    ):
+        if not section_text(text, section).strip():
+            errors.append(f"`{display_path(path)}` must include non-empty `{section}`")
+
+    table = parse_required_table(
+        path,
+        section_text(text, "## Generated Risk Cases"),
+        ("ID", "Category", "Risk Case", "Affected Definition Area", "Suggested Handling", "User Confirmation", "Disposition"),
+        "## Generated Risk Cases",
+        errors,
+    )
+    reflected = reflected_definition_sections(definition_text).lower()
+    for row in table.rows:
+        risk_id = row.get("ID", "").strip() or "<unknown>"
+        category = row.get("Category", "").strip()
+        risk_case = row.get("Risk Case", "").strip()
+        confirmation = row.get("User Confirmation", "").strip()
+        disposition = row.get("Disposition", "").strip()
+        is_no_material = "no material transition risks found" in risk_case.lower()
+        if category not in TRANSITION_RISK_CATEGORIES:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Category is not allowed")
+        if not confirmation or confirmation.lower() in {"n/a", "none", "pending", "unconfirmed"}:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` must record User Confirmation")
+        if disposition not in TRANSITION_RISK_DISPOSITIONS:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Disposition is not allowed")
+        if disposition == "ask-follow-up" and not has_pending_clarifications:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` asks follow-up, so definition must have active Pending Clarifications")
+        if disposition == "apply-to-definition" and risk_id.lower() not in reflected and "transition-risk" not in reflected:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` is apply-to-definition but reflected definition evidence is missing")
+        if is_no_material and disposition != "not-applicable":
+            errors.append(f"`{display_path(path)}` no-material risk row `{risk_id}` must use Disposition `not-applicable`")
+
+
+def validate_transition_risk_gate(stage_dir: Path, artifact_text: str, artifact_fingerprint: str, errors: list[str], has_pending_clarifications: bool) -> None:
+    stop_signal = has_user_stop_signal(artifact_text)
+    if not stop_signal and not transition_risk_file_present(stage_dir):
+        return
+    if stop_signal and not has_pending_clarifications:
+        validate_transition_risk_goal(stage_dir / "transition-risk-goal.md", artifact_fingerprint, errors)
+        validate_transition_risk_file(stage_dir / "transition-risk.md", artifact_text, has_pending_clarifications, errors)
+    elif transition_risk_file_present(stage_dir):
+        validate_transition_risk_goal(stage_dir / "transition-risk-goal.md", artifact_fingerprint, errors)
+        validate_transition_risk_file(stage_dir / "transition-risk.md", artifact_text, has_pending_clarifications, errors)
+
+
 def validate_goal(
     stage: Stage,
     path: Path,
@@ -983,10 +1101,16 @@ def render_stage_tree() -> str:
     rows: list[str] = []
     for stage in STAGES:
         parts = []
-        if stage.phase != "definition":
+        if stage.phase == "definition":
+            parts.extend([
+                f"`{stage.folder}/{stage.artifact}`",
+                f"`{stage.folder}/transition-risk-goal.md` (after stop signal)",
+                f"`{stage.folder}/transition-risk.md` (after stop signal)",
+            ])
+        else:
             parts.append(f"`{stage.folder}/goal.md`")
+            parts.append(f"`{stage.folder}/{stage.artifact}`")
         parts.extend([
-            f"`{stage.folder}/{stage.artifact}`",
             f"`{stage.folder}/review.md`",
             f"`{stage.folder}/approval.md`",
         ])

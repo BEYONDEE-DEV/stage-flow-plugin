@@ -42,6 +42,7 @@ COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc", "\ub05d")
 OPTION_ITEM_RE = re.compile(r"(?:^|[;\n|]\s*)((?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:[^;\n|]+)", re.IGNORECASE)
 AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"\b(completed|done)\b|완료\s*확인|목표(?:를)?\s*(?:완료|달성)|"
+    r"\bdefinition\s+(?:approved|approval|is approved)\b|정의(?:\s*단계)?(?:가|를|은|는)?\s*(?:승인|approved)|"
     r"다음\s*단계(?:로)?\s*(?:진행|이동)|서비스\s*계획(?:을)?\s*(?:작성|진행|시작)|"
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
     re.IGNORECASE,
@@ -405,9 +406,9 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
                 "The user answered the pending clarification batch. Reflect the answer in definition.md, compare any question-backlog.md candidates against the answer impact, then create the next pending clarification batch and stop for the user."
             )
         elif prompt_kind == "stop_signal":
-            action = "record_definition_stop_signal"
+            action = "run_definition_transition_risk_goal"
             instruction = (
-                "The user explicitly stopped definition clarification. Record the stop signal in Clarification History, then proceed only through definition review and approval gates."
+                "The user explicitly stopped definition clarification. Record the stop signal in Clarification History, then run only the definition transition-risk goal: create or update `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and do not start review, approval, or implementation-plan work until the transition-risk gate is satisfied."
             )
         else:
             action = "answer_follow_up_and_restate_pending"
@@ -595,6 +596,27 @@ def is_question_backlog_write(payload: dict[str, Any]) -> bool:
     return "question-backlog.md" in normalize_tool_path(command).lower()
 
 
+def is_transition_risk_gate_write(payload: dict[str, Any]) -> bool:
+    allowed_suffixes = (
+        "/01-definition/definition.md",
+        "/01-definition/transition-risk-goal.md",
+        "/01-definition/transition-risk.md",
+    )
+    tool_input = extract_tool_input(payload)
+    paths = payload_paths(tool_input)
+    if paths:
+        normalized_paths = [normalize_tool_path(path).lower() for path in paths]
+        return all(any(path.endswith(suffix) for suffix in allowed_suffixes) for path in normalized_paths)
+    command = normalize_tool_path(str(tool_input.get("command") or "")).lower()
+    if not command:
+        return False
+    return (
+        "01-definition/definition.md" in command
+        or "01-definition/transition-risk-goal.md" in command
+        or "01-definition/transition-risk.md" in command
+    ) and "02-implementation-plan" not in command and "03-implementation" not in command
+
+
 def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     current = load_json(current_path(root, payload))
     if current is None:
@@ -616,6 +638,18 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
             result["question_backlog_write"] = True
             return result
         block_result(result, "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates")
+        return result
+
+    if (
+        turn.get("status") == "AWAITING_USER"
+        and turn.get("awaiting_user_prompt_kind") == "stop_signal"
+        and turn.get("turn_start_action") == "run_definition_transition_risk_goal"
+        and is_stageflow_artifact_write(payload)
+    ):
+        if is_transition_risk_gate_write(payload):
+            result["transition_risk_gate_write"] = True
+            return result
+        block_result(result, "definition stop-signal turns may only write `01-definition/definition.md`, `01-definition/transition-risk-goal.md`, or `01-definition/transition-risk.md` before transition risk confirmation")
         return result
 
     if is_stageflow_artifact_write(payload):

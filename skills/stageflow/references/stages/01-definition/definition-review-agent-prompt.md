@@ -16,6 +16,8 @@ Review only these inputs:
 
 - Current stage artifact: `01-definition/definition.md`
 - Current artifact fingerprint: `sha256:<artifact-fingerprint>`
+- Conditional transition risk goal: `01-definition/transition-risk-goal.md` after a user stop signal
+- Conditional transition risk artifact: `01-definition/transition-risk.md` after a user stop signal
 - Writing and review rule file: `references/stages/01-definition/definition-writing-and-review-rules.md`
 - Previous approval and review records only when needed to confirm approved scope
 
@@ -32,6 +34,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Check that `구현 계획으로 넘어가기` and equivalent stop signals are recorded only as user stop signals, not as pending question options.
 - Mark `FAIL` when the agent closed definition because it judged the request or behavior model "clear enough", `충분함`, or complete without a user stop signal.
 - Mark `FAIL` when purpose is missing, invalid, inferred/unknown without a purpose-focused broad pending question, or not confirmed before a user stop signal.
+- Mark `FAIL` when a user stop signal exists but transition-risk generation is missing, stale against the current definition fingerprint, unconfirmed by the user, has an invalid disposition, leaves an `ask-follow-up` case without active pending clarification, or marks `apply-to-definition` without reflected evidence in requirements, acceptance criteria, policy rules, boundaries, failure/recovery, or regression prevention.
 - Mark `FAIL` when the latest user answer has no following active pending clarification batch, when the batch has more than five active questions, when a question has invalid depth or fewer than two labeled options, when the agent moves from broad to mid/detail without recorded basis, or when there is no explicit user stop signal.
 - Check that the definition reorganizes requirements into normal behavior, user flow, state/policy model, policy rules, regression prevention, and failure recovery instead of merely repeating the requirements list.
 - Check that policy rules trace back to requirement IDs and that the definition does not introduce file changes, TypeScript/interface design, test commands, or other implementation decisions.

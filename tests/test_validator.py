@@ -32,7 +32,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 16)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
 }
@@ -293,9 +293,76 @@ class ValidatorThreeStageTests(unittest.TestCase):
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / folder
         artifact_path = stage_dir / artifact_name
         fingerprint = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-        if phase != "definition":
+        if phase == "definition":
+            self.write_transition_risk_files(root, fingerprint)
+        else:
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
+
+    def write_transition_risk_files(self, root: Path, fingerprint: str | None = None) -> None:
+        stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+        if fingerprint is None:
+            fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+        (stage_dir / "transition-risk-goal.md").write_text(self.transition_risk_goal_text(fingerprint), encoding="utf-8")
+        (stage_dir / "transition-risk.md").write_text(self.transition_risk_text(), encoding="utf-8")
+
+    @staticmethod
+    def transition_risk_goal_text(fingerprint: str) -> str:
+        return f"""# Transition Risk Goal
+
+Stage: definition
+
+Purpose: transition-risk
+
+Artifact Path: `01-definition/transition-risk.md`
+
+Definition Artifact Fingerprint: sha256:{fingerprint}
+
+## Goal Invocation
+
+Tool: create_goal
+
+Invocation recorded: yes
+
+Invocation result: goal created
+
+## Goal Objective
+
+Generate transition risk cases before implementation planning and collect user confirmation before definition approval.
+
+## Goal Tool Status
+
+Goal created: yes
+
+Goal status: completed
+"""
+
+    @staticmethod
+    def transition_risk_text() -> str:
+        return """# Transition Risk
+
+## Risk Generation Basis
+
+Generated after the user stop signal using the current definition artifact, with no automatic requirement changes before user confirmation.
+
+## Generated Risk Cases
+
+| ID | Category | Risk Case | Affected Definition Area | Suggested Handling | User Confirmation | Disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| RISK-001 | implementation-readiness | No material transition risks found. | Requirements, Acceptance Criteria, Policy Rules, Boundaries, Failure And Recovery Behavior, Regression Prevention | Proceed after user confirmation. | User confirmed no material risks. | not-applicable |
+
+## Suggested Definition Updates
+
+No definition updates required.
+
+## User Confirmation
+
+User confirmed generated transition risk disposition before definition approval.
+
+## Final Disposition
+
+All generated risk cases are confirmed and no follow-up clarification is required.
+"""
 
     def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
         folder, _, _ = STAGE_BY_PHASE[phase]
@@ -417,6 +484,8 @@ Approved.
                 self.assertIn(expected, result.stdout)
                 if template == "stage-tree":
                     self.assertNotIn("01-definition/goal.md", result.stdout)
+                    self.assertIn("01-definition/transition-risk-goal.md", result.stdout)
+                    self.assertIn("01-definition/transition-risk.md", result.stdout)
                 if template == "definition":
                     self.assertIn("Purpose And Intent", result.stdout)
                     self.assertIn("Why is this request needed", result.stdout)
@@ -478,7 +547,7 @@ Approved.
         implementation_plan_rules = (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         implementation_rules = (REFERENCE_ROOT / "stages" / "03-implementation" / "implementation-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         for text, phrase in (
-            (skill_text, "Do not use `create_goal` or require `goal.md` for the `definition` stage"),
+            (skill_text, "the only allowed definition goal is the transition-risk audit"),
             (skill_text, "Question Depth"),
             (skill_text, "question-backlog.md"),
             (skill_text, "Implementation Feedback And Redefinition"),
@@ -787,6 +856,67 @@ Approved.
             self.assertIn("AWAITING_USER definition", result.stdout)
             self.assertIn("Option 3: docs plus hook metadata", result.stdout)
             self.assertNotIn("구현 계획으로 넘어가기", result.stdout)
+
+    def test_definition_stop_signal_requires_transition_risk_files(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+            (stage_dir / "transition-risk-goal.md").unlink()
+            (stage_dir / "transition-risk.md").unlink()
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("transition-risk-goal.md", result.stdout)
+            self.assertIn("transition-risk.md", result.stdout)
+
+    def test_definition_transition_risk_goal_fingerprint_must_match(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            goal = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "transition-risk-goal.md"
+            current = goal.read_text(encoding="utf-8")
+            goal.write_text(
+                current.replace(
+                    "Definition Artifact Fingerprint: sha256:",
+                    "Definition Artifact Fingerprint: sha256:" + "1" * 64 + "\n\nOriginal Fingerprint: sha256:",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Definition Artifact Fingerprint", result.stdout)
+
+    def test_definition_transition_risk_requires_user_confirmation(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            risk = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "transition-risk.md"
+            risk.write_text(risk.read_text(encoding="utf-8").replace("User confirmed no material risks.", "pending"), encoding="utf-8")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must record User Confirmation", result.stdout)
+
+    def test_definition_transition_risk_ask_follow_up_requires_pending_clarification(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            risk = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "transition-risk.md"
+            risk.write_text(risk.read_text(encoding="utf-8").replace("not-applicable", "ask-follow-up"), encoding="utf-8")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must have active Pending Clarifications", result.stdout)
+
+    def test_definition_transition_risk_apply_requires_reflected_evidence(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            risk = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "transition-risk.md"
+            risk.write_text(
+                risk.read_text(encoding="utf-8")
+                .replace("No material transition risks found.", "A missing failure case should become part of the definition.")
+                .replace("not-applicable", "apply-to-definition"),
+                encoding="utf-8",
+            )
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("reflected definition evidence is missing", result.stdout)
+
 
     def test_definition_goal_file_is_not_required(self) -> None:
         with temp_project() as root:

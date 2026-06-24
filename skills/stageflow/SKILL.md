@@ -15,11 +15,13 @@ Every request always moves through three stage folders:
 2. `02-implementation-plan`: implementation plan -> subagent review -> user approval
 3. `03-implementation`: implementation evidence -> subagent review -> user approval/completion
 
-Definition contains exactly these required files:
+Definition contains these required files, plus a conditional transition-risk pair after the user stops clarification:
 
 ```text
 .stageflow/requests/<request-id>/01-definition/
   definition.md
+  transition-risk-goal.md  (required after user stop signal before definition approval)
+  transition-risk.md       (required after user stop signal before definition approval)
   review.md
   approval.md
 ```
@@ -47,7 +49,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Inspect the project before asking definition questions.
 - Keep every request in its own `.stageflow/requests/<request-id>/` folder.
 - Use the session current pointer at `.stageflow/sessions/<session-id>/current.json` as the active request authority.
-- Do not use `create_goal` or require `goal.md` for the `definition` stage; definition is a clarification loop driven by `definition.md`.
+- Do not use `create_goal` or require `goal.md` for normal `definition` clarification; after a user stop signal, the only allowed definition goal is the transition-risk audit recorded in `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`.
 - Run `implementation-plan` and `implementation` as goals before writing or revising those stage artifacts.
 - Record the goal receipt in those later stage `goal.md` files: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
 - When a definition turn presents `Pending Clarifications`, record an active batch of 1-5 questions in `definition.md`, return the full batch to the user, and stop; the stage itself remains unapproved until the user answers and the review/approval gates pass.
@@ -59,7 +61,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
 - During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused broad question active before moving deeper.
 - After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
-- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`.
+- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the question loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning.
 - Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
 - Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
 - Classify each pending question by `Question Depth`: `broad`, `mid`, or `detail`. Start with `broad` batches, keep asking `broad` while broad ambiguities remain, and move to `mid`/`detail` only when clarification history or resolved decisions show the previous depth has been sufficiently covered.
@@ -96,7 +98,7 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER`: classify the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. For `follow_up`, answer, restate every pending question with all labeled options, and stop. For `pending_answer`, reflect the answer into `definition.md`, compare `question-backlog.md` candidates against answer impact, and create the next pending batch. For `stop_signal`, record the stop signal and continue only to definition review/approval gates. No definition `goal.md` is required.
+   - `AWAITING_USER`: classify the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. For `follow_up`, answer, restate every pending question with all labeled options, and stop. For `pending_answer`, reflect the answer into `definition.md`, compare `question-backlog.md` candidates against answer impact, and create the next pending batch. For `stop_signal`, record the stop signal, create the transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and only then proceed to definition review/approval. No definition `goal.md` is required.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
@@ -178,7 +180,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. Follow-up turns must restate all pending labeled choices; answer turns may revise `definition.md` and create the next pending batch; stop-signal turns may proceed to definition review/approval gates.
+- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. Follow-up turns must restate all pending labeled choices; answer turns may revise `definition.md` and create the next pending batch; stop-signal turns must run the definition transition-risk goal before review, approval, or implementation-plan work.
 - Question-generation subagents may run in parallel during `AWAITING_USER` only to prepare optional `01-definition/question-backlog.md` candidates. Other subagent roles or subagent writes to stage artifacts/review/approval are blocked in that wait state.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

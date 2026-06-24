@@ -50,7 +50,9 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
   state.json
   01-definition/
     definition.md
-    question-backlog.md  (optional helper)
+    question-backlog.md       (optional helper)
+    transition-risk-goal.md   (required after user stop signal before definition approval)
+    transition-risk.md        (required after user stop signal before definition approval)
     review.md
     approval.md
   02-implementation-plan/
@@ -93,9 +95,43 @@ Definition artifacts include `## Purpose And Intent` as required first-class pur
 
 `01-definition/question-backlog.md` may be created by a question-generation subagent in parallel while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review.md`, `approval.md`, or the current `Pending Clarifications`, and it is not required for validation. Use it to record candidate next questions, question depth (`broad`, `mid`, `detail`), labeled options, affected definition areas, and invalidation triggers before the main agent decides whether to promote, revise, or discard them after the user answer.
 
+## Definition Transition Risk Gate
+
+After the user gives a definition stop signal such as `구현 계획으로 넘어가기`, Stageflow must run a narrow transition-risk audit before definition review/approval. This is the only definition-stage `create_goal` exception, and it does not create `01-definition/goal.md`. It records `01-definition/transition-risk-goal.md` and produces `01-definition/transition-risk.md`. Generated risk cases are candidates only; reflect into `definition.md` only after user confirmation, or record them as out-of-scope, accepted risk, duplicate, or not applicable.
+
+`transition-risk-goal.md` records:
+
+```md
+# Transition Risk Goal
+
+Stage: definition
+
+Purpose: transition-risk
+
+Artifact Path: `01-definition/transition-risk.md`
+
+Definition Artifact Fingerprint: sha256:<definition-fingerprint>
+
+## Goal Invocation
+
+Tool: create_goal
+
+Invocation recorded: yes
+
+Invocation result: goal created
+
+## Goal Tool Status
+
+Goal created: yes
+
+Goal status: completed
+```
+
+`transition-risk.md` contains `## Risk Generation Basis`, `## Generated Risk Cases`, `## Suggested Definition Updates`, `## User Confirmation`, and `## Final Disposition`. `Generated Risk Cases` must use columns `ID`, `Category`, `Risk Case`, `Affected Definition Area`, `Suggested Handling`, `User Confirmation`, and `Disposition`. Allowed categories are `scope`, `acceptance`, `policy-data`, `failure-recovery`, `regression`, `integration`, `user-flow`, `security-privacy`, and `implementation-readiness`. Allowed dispositions are `apply-to-definition`, `ask-follow-up`, `out-of-scope`, `accepted-risk`, `duplicate`, and `not-applicable`.
+
 ## goal.md
 
-`goal.md` is required only for `02-implementation-plan` and `03-implementation`. The `01-definition` stage does not use `create_goal`; it stays lightweight so the agent can keep asking clarification questions until the user explicitly stops. For later stages, `goal.md` records the goal handoff for that stage artifact, not the whole request.
+`goal.md` is required only for `02-implementation-plan` and `03-implementation`. Normal `01-definition` clarification does not use `create_goal`; the stop-signal transition-risk audit is the only exception and is recorded as `transition-risk-goal.md`, not `goal.md`. For later stages, `goal.md` records the goal handoff for that stage artifact, not the whole request.
 
 ```md
 # Goal
