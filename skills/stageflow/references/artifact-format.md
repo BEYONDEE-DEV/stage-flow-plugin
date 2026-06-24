@@ -89,7 +89,9 @@ Each prompt file owns the review mission, allowed inputs, forbidden actions, rev
 
 ## Optional Definition Question Backlog
 
-`01-definition/question-backlog.md` may be created by a question-generation subagent while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review.md`, or `approval.md`, and it is not required for validation. Use it to record candidate next questions, question depth (`broad`, `mid`, `detail`), labeled options, affected definition areas, and invalidation triggers.
+Definition artifacts include `## Purpose And Intent` as required first-class purpose coverage; confidence must be `confirmed`, `inferred`, or `unknown`, and inferred/unknown purpose requires a purpose-focused broad pending question.
+
+`01-definition/question-backlog.md` may be created by a question-generation subagent in parallel while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review.md`, `approval.md`, or the current `Pending Clarifications`, and it is not required for validation. Use it to record candidate next questions, question depth (`broad`, `mid`, `detail`), labeled options, affected definition areas, and invalidation triggers before the main agent decides whether to promote, revise, or discard them after the user answer.
 
 ## goal.md
 

@@ -57,19 +57,19 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
-- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop.
+- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused broad question active before moving deeper.
 - After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
 - Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`.
 - Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
 - Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
 - Classify each pending question by `Question Depth`: `broad`, `mid`, or `detail`. Start with `broad` batches, keep asking `broad` while broad ambiguities remain, and move to `mid`/`detail` only when clarification history or resolved decisions show the previous depth has been sufficiently covered.
-- During user-answer waiting, use a question-generation subagent to prepare optional `01-definition/question-backlog.md` candidates. When the user answers, reuse unaffected backlog questions, revise partially affected questions, or regenerate the backlog when the answer invalidates it.
+- During `AWAITING_USER`, the main response answers follow-ups, restates pending questions/options, and stops, while a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates in parallel. Backlog candidates are not final pending questions until the main agent evaluates the user answer impact and promotes, revises, or discards them.
 
 ## Definition Question Depth Criteria
 
 Use answer impact to classify pending clarification questions:
 
-- `broad`: the answer can change request identity, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
+- `broad`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
 - `mid`: the answer stays inside the approved broad scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
 - `detail`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
 
@@ -96,7 +96,7 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER` / `await_user_clarification`: answer any user follow-up, restate every pending clarification question with its explicit labeled options, and stop without review, approval, next-stage work, or blocked-goal handling. No definition `goal.md` is required for this wait state.
+   - `AWAITING_USER`: classify the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. For `follow_up`, answer, restate every pending question with all labeled options, and stop. For `pending_answer`, reflect the answer into `definition.md`, compare `question-backlog.md` candidates against answer impact, and create the next pending batch. For `stop_signal`, record the stop signal and continue only to definition review/approval gates. No definition `goal.md` is required.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
@@ -178,7 +178,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch; the assistant must not continue review/approval until the user answers the batch, asks a follow-up that is answered with all pending labeled choices restated, or explicitly gives a stop signal. The response must not claim goal/stage completion or next-stage progress.
-- Subagent lifecycle hooks record lightweight observation state only.
+- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. Follow-up turns must restate all pending labeled choices; answer turns may revise `definition.md` and create the next pending batch; stop-signal turns may proceed to definition review/approval gates.
+- Question-generation subagents may run in parallel during `AWAITING_USER` only to prepare optional `01-definition/question-backlog.md` candidates. Other subagent roles or subagent writes to stage artifacts/review/approval are blocked in that wait state.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.

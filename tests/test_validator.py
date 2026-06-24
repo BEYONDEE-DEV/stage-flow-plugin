@@ -32,7 +32,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 15)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 16)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
 }
@@ -42,6 +42,12 @@ DEFINITION_TEXT = """# Definition
 ## User Goal
 
 Goal based on inspected project context.
+
+## Purpose And Intent
+
+| Purpose | User Value | Business/Product Value | Source | Confidence |
+| --- | --- | --- | --- | --- |
+| Correct the behavior so the user's workflow succeeds. | User can complete the affected workflow without the current failure. | Preserves product reliability for the affected workflow. | user request | confirmed |
 
 ## Request Profile
 
@@ -412,6 +418,8 @@ Approved.
                 if template == "stage-tree":
                     self.assertNotIn("01-definition/goal.md", result.stdout)
                 if template == "definition":
+                    self.assertIn("Purpose And Intent", result.stdout)
+                    self.assertIn("Why is this request needed", result.stdout)
                     self.assertIn("Question Depth", result.stdout)
                     self.assertIn("broad", result.stdout)
                     self.assertIn("Option 3:", result.stdout)
@@ -547,6 +555,58 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Desired Outcomes", result.stdout)
 
+
+    def test_definition_requires_purpose_section(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("## Purpose And Intent", "## Removed Purpose And Intent"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Purpose And Intent", result.stdout)
+
+    def test_definition_rejects_invalid_purpose_confidence(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("| user request | confirmed |", "| user request | guessed |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Confidence must be one of", result.stdout)
+
+    def test_unknown_purpose_requires_purpose_focused_pending_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace("| user request | confirmed |", "| user request needs clarification | unknown |")
+                .replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | Which model scope should be used? | Option 1: A; Option 2: B | Option 1 | N/A | This changes scope. | pending |",
+                )
+                .replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("purpose-focused broad question", result.stdout)
+
+    def test_inferred_purpose_cannot_stop_definition(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("| user request | confirmed |", "| inspected project context | inferred |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must be confirmed before definition clarification can stop", result.stdout)
+
     def test_definition_requires_service_behavior_sections(self) -> None:
         with temp_project() as root:
             self.create_project(root)
@@ -603,7 +663,7 @@ Approved.
             artifact.write_text(
                 DEFINITION_TEXT.replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | Which model? | Option 1: A; Option 2: B; 구현 계획으로 넘어가기 | Option 1 | N/A | This changes scope. | pending |",
+                    "| PENDING-001 | broad | Which model? | Option 1: A; Option 2: B; Option 3: 구현 계획으로 넘어가기 | Option 1 | N/A | This changes scope. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -614,6 +674,26 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not include the user stop signal as a question option", result.stdout)
+
+
+    def test_pending_clarification_allows_implementation_plan_artifact_option_text(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | broad | Which artifact scope should be used? | Option 1: implementation plan artifact에 반영 범위 제한; Option 2: definition artifact에만 범위 기록 | Option 1 | N/A | This is a real proposal, not a stop signal. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER definition", result.stdout)
 
     def test_pending_clarification_rejects_more_than_five_questions(self) -> None:
         with temp_project() as root:

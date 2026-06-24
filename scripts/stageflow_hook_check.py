@@ -46,6 +46,17 @@ AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
     re.IGNORECASE,
 )
+USER_STOP_SIGNAL_RE = re.compile(
+    r"\b(proceed|go ahead|approve|approved|yes)\b|"
+    r"구현\s*계획(?:으로|로)?\s*넘어가기|질문\s*그만|충분해?|진행|승인",
+    re.IGNORECASE,
+)
+PENDING_ANSWER_RE = re.compile(
+    r"\boption\s*[1-9]\d*\b|선택지\s*[1-9]\d*|"
+    r"(?:^|[\s,;/])(?:[1-9]\d*)(?:\s*[,/]\s*[1-9]\d*)+(?:$|[\s,;/])|"
+    r"^\s*[1-9]\d*\s*$",
+    re.IGNORECASE,
+)
 PREFLIGHT_MARKER_PREFIX = "Stageflow preflight:"
 WRITE_TOOL_TOKENS = (
     "edit",
@@ -142,6 +153,34 @@ def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str
     return requirements
 
 
+def pending_output_option_items(pending_output: str) -> list[str]:
+    options: list[str] = []
+    for _question, required_parts in pending_output_requirements(pending_output):
+        for part in required_parts:
+            if OPTION_ITEM_RE.match(part):
+                options.append(part)
+    return options
+
+
+def option_body(option_item: str) -> str:
+    if ":" not in option_item:
+        return option_item.strip()
+    return option_item.split(":", 1)[1].strip()
+
+
+def classify_awaiting_user_prompt(prompt: str, pending_output: str) -> str:
+    if USER_STOP_SIGNAL_RE.search(prompt):
+        return "stop_signal"
+    if PENDING_ANSWER_RE.search(prompt):
+        return "pending_answer"
+    lowered_prompt = prompt.lower()
+    for option in pending_output_option_items(pending_output):
+        body = option_body(option)
+        if len(body) >= 8 and body.lower() in lowered_prompt:
+            return "pending_answer"
+    return "follow_up"
+
+
 def missing_pending_response_parts(last_message: str, pending_output: str) -> list[str]:
     missing: list[str] = []
     for question_label, required_parts in pending_output_requirements(pending_output):
@@ -152,6 +191,23 @@ def missing_pending_response_parts(last_message: str, pending_output: str) -> li
         if "pending clarification" not in last_message.lower() and "대기" not in last_message:
             missing.append("pending clarification summary")
     return missing
+
+
+def subagent_text(payload: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("agent_type", "role", "prompt", "task", "description", "instructions"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+    return " ".join(parts).lower()
+
+
+def is_question_generation_subagent(payload: dict[str, Any]) -> bool:
+    text = subagent_text(payload)
+    return (
+        ("question" in text or "clarification" in text or "질문" in text)
+        and ("backlog" in text or "candidate" in text or "후보" in text)
+    )
 
 
 def resolve_root(args: argparse.Namespace, payload: dict[str, Any]) -> Path:
@@ -342,10 +398,22 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
     elif validation["status"] == "AWAITING_USER":
         status = "AWAITING_USER"
         severity = "info"
-        action = "await_user_clarification"
-        instruction = (
-            "The current Stageflow stage is waiting for user clarification. Answer any user follow-up, then restate every pending clarification question with its options and stop; do not run review, approval, or next-stage work until the user answers the pending batch or explicitly stops clarification."
-        )
+        prompt_kind = classify_awaiting_user_prompt(prompt, validation.get("output", ""))
+        if prompt_kind == "pending_answer":
+            action = "apply_user_clarification_answer"
+            instruction = (
+                "The user answered the pending clarification batch. Reflect the answer in definition.md, compare any question-backlog.md candidates against the answer impact, then create the next pending clarification batch and stop for the user."
+            )
+        elif prompt_kind == "stop_signal":
+            action = "record_definition_stop_signal"
+            instruction = (
+                "The user explicitly stopped definition clarification. Record the stop signal in Clarification History, then proceed only through definition review and approval gates."
+            )
+        else:
+            action = "answer_follow_up_and_restate_pending"
+            instruction = (
+                "The current Stageflow stage is waiting for user clarification. Answer the follow-up, restate every pending clarification question with all labeled options, and stop. Question-generation subagents may prepare question-backlog.md candidates in parallel, but the main response must not review, approve, or advance."
+            )
     else:
         status = "WARNING"
         severity = "warning"
@@ -375,8 +443,9 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         result["warnings"].append("current Stageflow stage validation failed")
     elif validation["status"] == "AWAITING_USER":
         result["pending_clarification_output"] = validation.get("output", "")
+        result["awaiting_user_prompt_kind"] = classify_awaiting_user_prompt(prompt, validation.get("output", ""))
 
-    if looks_like_implementation(prompt):
+    if looks_like_implementation(prompt) and validation["status"] != "AWAITING_USER":
         entry_gate = run_validator(root, "implementation-plan", payload)
         result["implementation_entry_gate"] = entry_gate
         if entry_gate["status"] != "PASS":
@@ -415,15 +484,16 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") == "AWAITING_USER":
             if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
                 block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
-            missing_parts = missing_pending_response_parts(
-                last_message, str(turn.get("pending_clarification_output") or "")
-            )
-            if missing_parts:
-                block_result(
-                    result,
-                    "AWAITING_USER response must restate pending clarification questions and labeled options: "
-                    + "; ".join(missing_parts[:20]),
+            if turn.get("awaiting_user_prompt_kind") == "follow_up":
+                missing_parts = missing_pending_response_parts(
+                    last_message, str(turn.get("pending_clarification_output") or "")
                 )
+                if missing_parts:
+                    block_result(
+                        result,
+                        "AWAITING_USER follow-up response must restate pending clarification questions and labeled options: "
+                        + "; ".join(missing_parts[:20]),
+                    )
 
         if looks_like_completion(last_message):
             validation = run_validator(root, "all", payload)
@@ -516,6 +586,15 @@ def is_stageflow_artifact_write(payload: dict[str, Any]) -> bool:
     return False
 
 
+def is_question_backlog_write(payload: dict[str, Any]) -> bool:
+    tool_input = extract_tool_input(payload)
+    paths = payload_paths(tool_input)
+    if paths:
+        return all(normalize_tool_path(path).lower().endswith("/01-definition/question-backlog.md") for path in paths)
+    command = str(tool_input.get("command") or "")
+    return "question-backlog.md" in normalize_tool_path(command).lower()
+
+
 def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     current = load_json(current_path(root, payload))
     if current is None:
@@ -531,11 +610,18 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
         return result
 
     result["write_like_tool"] = True
+    turn = read_turn_state(root, payload)
+    if payload.get("agent_id") and turn.get("status") == "AWAITING_USER":
+        if is_question_backlog_write(payload):
+            result["question_backlog_write"] = True
+            return result
+        block_result(result, "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates")
+        return result
+
     if is_stageflow_artifact_write(payload):
         result["stageflow_artifact_write"] = True
         return result
 
-    turn = read_turn_state(root, payload)
     current, state = active_request(root, payload)
     if current is None:
         if turn.get("request_creation_required") or turn.get("preflight_required"):
@@ -564,6 +650,7 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
     return result
 
 def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    turn = read_turn_state(root, payload)
     result.update(
         {
             "status": "SUBAGENT_OBSERVED",
@@ -573,6 +660,13 @@ def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dic
             "role": payload.get("role"),
         }
     )
+    if event == "subagent_start" and turn.get("status") == "AWAITING_USER":
+        result["awaiting_user_prompt_kind"] = turn.get("awaiting_user_prompt_kind")
+        if is_question_generation_subagent(payload):
+            result["status"] = "QUESTION_BACKLOG_SUBAGENT_ALLOWED"
+            result["question_backlog_allowed"] = True
+        else:
+            block_result(result, "AWAITING_USER allows only question-generation subagents for `01-definition/question-backlog.md` candidates")
     write_turn_state(root, payload, result)
     return result
 

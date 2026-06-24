@@ -40,6 +40,7 @@ STAGES: tuple[Stage, ...] = (
         "Definition",
         (
             "User Goal",
+            "Purpose And Intent",
             "Request Profile",
             "Desired Outcomes",
             "Current Problems",
@@ -65,6 +66,7 @@ STAGES: tuple[Stage, ...] = (
         "definition-writing-and-review-rules.md",
         "Definition Writing And Review Rules",
         (
+            TableRequirement("Purpose And Intent", ("Purpose", "User Value", "Business/Product Value", "Source", "Confidence")),
             TableRequirement("Desired Outcomes", ("ID", "Outcome", "Source", "Success Signal")),
             TableRequirement(
                 "Current Problems",
@@ -202,6 +204,11 @@ USER_STOP_SIGNAL_RE = re.compile(
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
 OPTION_LABEL_RE = re.compile(r"^(?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
 PENDING_DEPTHS = ("broad", "mid", "detail")
+PURPOSE_CONFIDENCES = {"confirmed", "inferred", "unknown"}
+PURPOSE_KEYWORD_RE = re.compile(
+    r"\b(purpose|why|intent|value|goal|outcome|success)\b|목적|왜|의도|가치|목표|성과|성공",
+    re.IGNORECASE,
+)
 NO_PENDING_STATUS_RE = re.compile(r"^(none|n/a|no|없음)$", re.IGNORECASE)
 AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
 AWAITING_USER_GOAL_REASON = "awaiting user clarification"
@@ -475,6 +482,7 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str], ha
     for requirement in stage.artifact_tables:
         validate_table_columns(path, text, requirement, errors)
     if stage.phase == "definition":
+        validate_definition_purpose(path, text, errors, has_pending_clarifications)
         validate_definition_blocking_questions(path, text, errors)
         validate_definition_clarification_history(path, text, errors, has_pending_clarifications)
     if stage.phase == "implementation-plan":
@@ -488,8 +496,6 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
     table = parse_first_markdown_table(section_text(text, "## Pending Clarifications"))
     if not table.rows:
         return []
-
-    stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
 
     messages: list[str] = []
     depths: list[str] = []
@@ -541,7 +547,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
             errors.append(
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must include at least two explicit labeled proposal options such as `Option 1:` and `Option 2:`"
             )
-        if any(term.lower() in options.lower() for term in stop_terms):
+        if any(is_stop_signal_option_item(option) for option in split_option_items(options)):
             errors.append(
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
             )
@@ -555,18 +561,47 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
     return messages
 
 
+def split_option_items(text: str) -> list[str]:
+    return [item.strip() for item in re.split(r"(?:<br\s*/?>|[;\n|])", text, flags=re.IGNORECASE) if item.strip()]
+
+
+def option_item_body(item: str) -> str:
+    return OPTION_LABEL_RE.sub("", item, count=1).strip()
+
+
+def is_stop_signal_option_item(item: str) -> bool:
+    if not OPTION_LABEL_RE.match(item):
+        return False
+    body = option_item_body(item)
+    normalized = re.sub(r"[\s.。!！]+", " ", body.lower()).strip()
+    if normalized in {
+        "proceed",
+        "go ahead",
+        "approve",
+        "approved",
+        "yes",
+        "stop asking",
+        "enough",
+        "질문 그만",
+        "충분",
+        "충분해",
+        "진행",
+        "승인",
+    }:
+        return True
+    references_implementation_plan = "implementation plan" in normalized or ("구현" in normalized and "계획" in normalized)
+    moves_to_next_stage = any(token in normalized for token in ("넘어", "진행", "시작", "proceed", "go ahead", "move"))
+    return references_implementation_plan and moves_to_next_stage
+
+
 def labeled_proposal_options(text: str) -> list[str]:
-    stop_terms = ("구현 계획", "implementation plan", "proceed", "go ahead", "질문 그만", "충분", "진행", "승인")
-    items = [item.strip() for item in re.split(r"(?:<br\s*/?>|[;\n|])", text, flags=re.IGNORECASE) if item.strip()]
     labeled: list[str] = []
-    for item in items:
-        lower = item.lower()
-        if any(term.lower() in lower for term in stop_terms):
+    for item in split_option_items(text):
+        if is_stop_signal_option_item(item):
             continue
-        if OPTION_LABEL_RE.match(item) and OPTION_LABEL_RE.sub("", item).strip():
+        if OPTION_LABEL_RE.match(item) and option_item_body(item):
             labeled.append(item)
     return labeled
-
 
 def has_at_least_two_proposals(text: str) -> bool:
     return len(labeled_proposal_options(text)) >= 2
@@ -582,6 +617,67 @@ def is_empty_clarification_history_row(row: dict[str, str]) -> bool:
         or "no clarification" in joined
         or all(value in {"", "n/a", "none", "없음"} for value in values)
     )
+
+def active_pending_rows(text: str) -> list[dict[str, str]]:
+    table = parse_first_markdown_table(section_text(text, "## Pending Clarifications"))
+    return [row for row in table.rows if PENDING_STATUS_RE.fullmatch(row.get("Status", "").strip())]
+
+
+def has_user_stop_signal(text: str) -> bool:
+    table = parse_first_markdown_table(section_text(text, "## Clarification History"))
+    for row in table.rows:
+        if USER_STOP_SIGNAL_RE.search(row.get("User Transition Signal", "")):
+            return True
+    return False
+
+
+def is_purpose_focused_pending(row: dict[str, str]) -> bool:
+    if row.get("Question Depth", "").strip() != "broad":
+        return False
+    combined = " ".join(row.get(column, "") for column in ("Question", "Options", "Why This Matters"))
+    return bool(PURPOSE_KEYWORD_RE.search(combined))
+
+
+def purpose_confidence_rank(confidences: list[str]) -> str:
+    if "confirmed" in confidences:
+        return "confirmed"
+    if "inferred" in confidences:
+        return "inferred"
+    return "unknown"
+
+
+def validate_definition_purpose(path: Path, text: str, errors: list[str], has_pending_clarifications: bool) -> None:
+    table = parse_first_markdown_table(section_text(text, "## Purpose And Intent"))
+    if not table.rows:
+        return
+
+    confidences: list[str] = []
+    for index, row in enumerate(table.rows, start=1):
+        row_label = f"Purpose And Intent row {index}"
+        for column in ("Purpose", "User Value", "Business/Product Value", "Source", "Confidence"):
+            value = row.get(column, "").strip()
+            if not value or value.lower() in {"n/a", "none"}:
+                errors.append(f"`{display_path(path)}` {row_label} must include `{column}`")
+        confidence = row.get("Confidence", "").strip().lower()
+        if confidence and confidence not in PURPOSE_CONFIDENCES:
+            errors.append(
+                f"`{display_path(path)}` {row_label} Confidence must be one of confirmed, inferred, unknown"
+            )
+        if confidence in PURPOSE_CONFIDENCES:
+            confidences.append(confidence)
+
+    confidence_rank = purpose_confidence_rank(confidences)
+    pending_rows = active_pending_rows(text)
+    if confidence_rank in {"unknown", "inferred"} and pending_rows:
+        if not any(is_purpose_focused_pending(row) for row in pending_rows):
+            errors.append(
+                f"`{display_path(path)}` Purpose And Intent is {confidence_rank}; Pending Clarifications must include at least one purpose-focused broad question"
+            )
+    if confidence_rank != "confirmed" and has_user_stop_signal(text):
+        errors.append(
+            f"`{display_path(path)}` Purpose And Intent must be confirmed before definition clarification can stop"
+        )
+
 
 def validate_definition_blocking_questions(path: Path, text: str, errors: list[str]) -> None:
     table = parse_first_markdown_table(section_text(text, "## Open Questions"))
@@ -956,6 +1052,12 @@ Goal status: active
 
 Describe the user's goal in their language.
 
+## Purpose And Intent
+
+| Purpose | User Value | Business/Product Value | Source | Confidence |
+| --- | --- | --- | --- | --- |
+| The purpose still needs user confirmation. | Clarifies why the result matters to the user. | Clarifies product or workflow value before planning. | user request needs clarification | unknown |
+
 ## Request Profile
 
 Primary: feature
@@ -991,9 +1093,9 @@ Secondary: none
 
 | ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
-| PENDING-002 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
-| PENDING-003 | broad | Which top-level success outcome should be prioritized? | Option 1: resolve the current problem; Option 2: preserve extensibility for follow-up changes | Option 1 | N/A | Broad outcomes decide which mid-level behavior questions matter. | pending |
+| PENDING-001 | broad | Why is this request needed, and what purpose should the change serve? | Option 1: solve an immediate user workflow problem; Option 2: create product flexibility for follow-up changes | Option 1 | N/A | Purpose must be confirmed before deeper behavior or implementation planning. | pending |
+| PENDING-002 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
+| PENDING-003 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
 
 ## Clarification History
 

@@ -6,7 +6,7 @@ Target: `01-definition/definition.md`
 
 ## Stage Responsibility
 
-The definition stage combines requirements and service behavior into one approved artifact. It captures the user's goal, current problems, outcomes, constraints, decisions, requirements, acceptance criteria, normal behavior model, policy rules, boundaries, regression prevention, and failure recovery before implementation planning begins.
+The definition stage combines requirements and service behavior into one approved artifact. It captures the user's goal, purpose and intent, current problems, outcomes, constraints, decisions, requirements, acceptance criteria, normal behavior model, policy rules, boundaries, regression prevention, and failure recovery before implementation planning begins.
 
 The definition may include technical constraints when supplied by the user or discovered through project inspection, but it must not assign code edits, TypeScript interfaces, file changes, or implementation work.
 
@@ -20,11 +20,11 @@ Record request shape as profile tags, not as a single exclusive type. Use `Prima
 
 ## Clarification Loop
 
-After project inspection, assume there are still ambiguities to clarify. Do not first decide whether ambiguity exists; behave as if it does, find the next useful definition question batch, and ask it. Ask breadth-first: start with broad questions, keep asking broad questions while broad ambiguities remain, and move to mid or detail questions only when `## Clarification History` or `## Resolved Decisions` records that the previous depth has been sufficiently covered or that the user agreed to move deeper.
+After project inspection, assume there are still ambiguities to clarify. Do not first decide whether ambiguity exists; behave as if it does, find the next useful definition question batch, and ask it. Ask breadth-first: start with broad questions, keep asking broad questions while broad ambiguities remain, and move to mid or detail questions only when `## Clarification History` or `## Resolved Decisions` records that the previous depth has been sufficiently covered or that the user agreed to move deeper. Purpose is mandatory broad coverage: if `## Purpose And Intent` is `unknown` or `inferred`, the active pending batch must include at least one purpose-focused broad question before asking only mid/detail questions.
 
 Question depth is based on answer impact:
 
-- `broad`: the answer can change request identity, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
+- `broad`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
 - `mid`: the answer stays inside the approved broad scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
 - `detail`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
 
@@ -32,7 +32,7 @@ After every user answer, reflect the answer into the appropriate definition rows
 
 Record unanswered active questions in `## Pending Clarifications`; before a user stop signal exists, this table must contain 1-5 active question rows. Each active row must include `Question Depth` (`broad`, `mid`, or `detail`), at least two explicit labeled proposal options such as `Option 1:` and `Option 2:`, a recommended option, why the answer matters, and Status `pending` or `awaiting`. `Option 3:` and higher are allowed. `구현 계획으로 넘어가기` is not a proposal option and must not be included inside the `Options` cell; it is only a user-authored stop signal recorded in `## Clarification History`. Do not write a pending question with only one recommended proposal, an unlabeled suggestion, or prose-only guidance. After presenting a pending clarification batch, stop and wait for the user. Do not create or complete a Codex goal for definition, run review, approval, next-stage work, or mark the goal blocked merely because the user has not answered yet.
 
-If the user asks a follow-up about a pending option, answer that follow-up first, then restate every still-pending question with its explicit labeled options and stop again. During user-answer waiting, use a question-generation subagent to prepare optional `01-definition/question-backlog.md` candidates. When the user answers, judge the answer impact against the backlog: reuse unaffected candidates as the next pending batch, revise partially affected candidates, or regenerate the backlog when the answer invalidates it.
+If the user asks a follow-up about a pending option, the main response answers that follow-up first, then restates every still-pending question with its explicit labeled options and stops again. During this wait, a question-generation subagent may run in parallel to prepare optional `01-definition/question-backlog.md` candidates, limited to future candidate questions. When the user answers, judge answer impact against the backlog: reuse unaffected candidates as the next pending batch, revise partially affected candidates, or regenerate the backlog when the answer invalidates it.
 
 ## Blocking Question Criteria
 
@@ -70,6 +70,12 @@ For bugfix or mixed requests, every material `Current Problems` row must appear 
 
 Describe the user's goal in their language.
 
+## Purpose And Intent
+
+| Purpose | User Value | Business/Product Value | Source | Confidence |
+| --- | --- | --- | --- | --- |
+| The purpose still needs user confirmation. | Clarifies why the result matters to the user. | Clarifies product or workflow value before planning. | user request needs clarification | unknown |
+
 ## Request Profile
 
 Primary: feature
@@ -105,9 +111,9 @@ Secondary: none
 
 | ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
-| PENDING-002 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
-| PENDING-003 | broad | Which top-level success outcome should be prioritized? | Option 1: resolve the current problem; Option 2: preserve extensibility for follow-up changes | Option 1 | N/A | Broad outcomes decide which mid-level behavior questions matter. | pending |
+| PENDING-001 | broad | Why is this request needed, and what purpose should the change serve? | Option 1: solve an immediate user workflow problem; Option 2: create product flexibility for follow-up changes | Option 1 | N/A | Purpose must be confirmed before deeper behavior or implementation planning. | pending |
+| PENDING-002 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
+| PENDING-003 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
 
 ## Clarification History
 
@@ -174,12 +180,13 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 
 ## Optional Question Backlog
 
-`01-definition/question-backlog.md` is an optional helper artifact prepared by a question-generation subagent while the main agent is waiting for the user. It is not a review or approval gate. It should record candidate question ID, question depth, question text, at least two labeled options, affected definition areas, and invalidation triggers. When the user answers, reuse unaffected candidates, revise partially affected candidates, or regenerate the backlog if the answer invalidates the candidate batch.
+`01-definition/question-backlog.md` is an optional helper artifact prepared by a question-generation subagent in parallel while the main agent waits for the user. It is not a review or approval gate and does not replace `Pending Clarifications`. It should record candidate question ID, question depth, question text, at least two labeled options, affected definition areas, and invalidation triggers. After the user answers, the main agent judges impact and only then promotes unaffected candidates, revises affected candidates, or regenerates the backlog.
 
 
 ## Required Artifact Sections
 
 - `## User Goal`
+- `## Purpose And Intent`
 - `## Request Profile`
 - `## Desired Outcomes`
 - `## Current Problems`
@@ -208,6 +215,7 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 | DEF-RULE-001 | Inspect the project before asking implementation-affecting questions. | `## User Goal`, `## Discovered Constraints`, requirement rows, or policy rows mention discovered project context when it affects the request. | Confirm the definition is grounded in the existing project instead of only chat assumptions. | Definition ignores relevant discovered project constraints. |
 | DEF-RULE-002 | Record request type as primary and optional secondary profile tags. | `## Request Profile` records `Primary:` and `Secondary:` values. | Confirm the request can be treated as feature, bugfix, mixed, refactor, docs, or tooling without forcing an exclusive type. | Request shape is absent or incorrectly collapses a mixed request into one exclusive type. |
 | DEF-RULE-003 | Capture desired outcomes and current problems separately. | `## Desired Outcomes` and `## Current Problems` contain reviewable rows, using `N/A` only when a side is genuinely absent. | Confirm user goals and bug/problem facts are not merged into one vague requirement list. | A mixed request lacks either desired outcomes or current problems. |
+| DEF-RULE-015 | Confirm purpose and intent before closing definition. | `## Purpose And Intent` records Purpose, User Value, Business/Product Value, Source, and Confidence; pending clarifications include a purpose-focused broad question when confidence is `unknown` or `inferred`. | Confirm purpose is distinct from outcome, sourced to user request/answer or inspected context, and `confirmed` before approval. | Purpose is missing, source/confidence is absent or invalid, purpose is inferred/unknown without a purpose-focused broad question, or definition stops before purpose is confirmed. |
 | DEF-RULE-004 | Link problems to resolving requirements and service behavior. | `## Problem-To-Requirement Mapping`, `## Requirements`, `## Normal Behavior Model`, and `## Regression Prevention` connect material problems to resolution. | Confirm each current problem has a stated requirement and corrected/prevented behavior. | A material problem has no linked requirement, behavior model, or regression prevention. |
 | DEF-RULE-005 | Capture each implementation-affecting requirement as a sourced, verifiable row. | `## Requirements` has `ID`, `Type`, `Source`, `Requirement Detail`, `Boundary Or Exclusion`, and `Linked Outcomes Or Problems` columns. | Confirm every requirement has a source, concrete detail, boundary, and trace to outcomes or problems. | A requirement cannot be reviewed because source, detail, boundary, or trace is missing. |
 | DEF-RULE-006 | Keep user-specified and discovered technical constraints visible without inventing implementation decisions. | `## User-Specified Constraints` and `## Discovered Constraints` separate explicit user constraints from project inspection facts. | Confirm supplied or discovered files, endpoints, commands, screens, or reference systems are retained without promoting model guesses to requirements. | User-specified technical constraints are dropped, or inferred implementation decisions are recorded as requirements without source. |
@@ -222,4 +230,4 @@ Describe errors, empty states, permissions, validation failures, and recovery be
 
 ## Verification Meaning
 
-A definition is ready for implementation planning only when the reviewer can identify what the user wants, what problem it resolves when applicable, where each requirement came from, what behavior and policies are approved, what is out of scope, whether user answers were carried forward, and whether the user explicitly gave a stop signal such as `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. Without that user stop signal, the artifact must keep an active pending clarification batch with 1-5 questions, valid depth, and at least two labeled options per question.
+A definition is ready for implementation planning only when the reviewer can identify what the user wants, why the request matters, what user/product value it serves, what problem it resolves when applicable, where each requirement came from, what behavior and policies are approved, what is out of scope, whether user answers were carried forward, and whether the user explicitly gave a stop signal such as `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. Without that user stop signal, the artifact must keep an active pending clarification batch with 1-5 questions, valid depth, and at least two labeled options per question.

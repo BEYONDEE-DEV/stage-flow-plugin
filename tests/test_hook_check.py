@@ -31,7 +31,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 15)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 16)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
 }
@@ -41,6 +41,12 @@ DEFINITION_TEXT = """# Definition
 ## User Goal
 
 Goal based on inspected project context.
+
+## Purpose And Intent
+
+| Purpose | User Value | Business/Product Value | Source | Confidence |
+| --- | --- | --- | --- | --- |
+| Correct the behavior so the user's workflow succeeds. | User can complete the affected workflow without the current failure. | Preserves product reliability for the affected workflow. | user request | confirmed |
 
 ## Request Profile
 
@@ -282,6 +288,21 @@ class HookCheckThreeStageTests(unittest.TestCase):
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
 
+
+    def write_pending_definition(self, root: Path) -> None:
+        artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+        artifact.write_text(
+            artifact.read_text(encoding="utf-8").replace(
+                "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |",
+            ).replace(
+                "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+            ),
+            encoding="utf-8",
+        )
+        self.refresh_stage_fingerprint(root, "definition")
+
     def mark_goal_awaiting_user(self, root: Path, phase: str) -> None:
         folder, _, _ = STAGE_BY_PHASE[phase]
         goal_path = root / ".stageflow" / "requests" / REQUEST_ID / folder / "goal.md"
@@ -497,12 +518,113 @@ Approved.
             self.refresh_stage_fingerprint(root, "definition")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "AWAITING_USER")
-            self.assertEqual(result["turn_start_action"], "await_user_clarification")
+            self.assertEqual(result["turn_start_action"], "answer_follow_up_and_restate_pending")
+            self.assertEqual(result["awaiting_user_prompt_kind"], "follow_up")
             self.assertEqual(result["validation"]["status"], "AWAITING_USER")
             self.assertIn("How should docs sync status", result["pending_clarification_output"])
             self.assertIn("Which validation boundary", result["pending_clarification_output"])
             self.assertIn("Option 3: docs-wide status plus hook metadata", result["pending_clarification_output"])
             self.assertNotIn("구현 계획으로 넘어가기", result["pending_clarification_output"])
+
+
+    def test_awaiting_user_prompt_option_answer_gets_answer_action(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1"})
+            self.assertEqual(result["status"], "AWAITING_USER")
+            self.assertEqual(result["awaiting_user_prompt_kind"], "pending_answer")
+            self.assertEqual(result["turn_start_action"], "apply_user_clarification_answer")
+
+    def test_awaiting_user_prompt_stop_signal_gets_stop_action(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "질문 그만, 구현 계획으로 넘어가기"})
+            self.assertEqual(prompt_result["status"], "AWAITING_USER")
+            self.assertEqual(prompt_result["awaiting_user_prompt_kind"], "stop_signal")
+            self.assertEqual(prompt_result["turn_start_action"], "record_definition_stop_signal")
+            marker = str(prompt_result["preflight_marker"])
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\nClarification History에 종료 신호를 기록하겠습니다."})
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_allows_question_generation_subagent(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-questions",
+                    "role": "question-generation backlog candidate subagent",
+                    "task": "Prepare clarification question backlog candidates for question-backlog.md",
+                },
+            )
+            self.assertEqual(result["status"], "QUESTION_BACKLOG_SUBAGENT_ALLOWED")
+            self.assertTrue(result["question_backlog_allowed"])
+
+    def test_awaiting_user_blocks_non_question_generation_subagent(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {"session_id": "session-1", "agent_id": "agent-review", "role": "definition review subagent"},
+                expected_returncode=2,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("question-generation subagents", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_subagent_may_only_write_question_backlog(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-questions",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/question-backlog.md"},
+                },
+            )
+            self.assertTrue(allowed["question_backlog_write"])
+            blocked = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-questions",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/review.md"},
+                },
+                expected_returncode=2,
+            )
+            self.assertEqual(blocked["status"], "BLOCKED")
+            self.assertIn("question-backlog.md", "\n".join(blocked["warnings"]))
+
+    def test_awaiting_user_pending_answer_allows_main_definition_write(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"},
+                },
+            )
+            self.assertTrue(result["stageflow_artifact_write"])
 
     def test_awaiting_user_stop_blocks_response_without_pending_questions(self) -> None:
         with temp_project() as root:
