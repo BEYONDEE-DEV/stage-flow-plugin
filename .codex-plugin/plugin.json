@@ -8,14 +8,15 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Stageflow",
-    "shortDescription": "Plan Codex work with validated request artifacts.",
-    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, and proceed from a validated plan.",
+    "shortDescription": "Plan Codex work and manage intent-preserving docs workflows.",
+    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and manage submodule-backed documentation workflows that preserve user intent and implementation state.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [
       "Planning",
       "Workflow",
-      "Validation"
+      "Validation",
+      "Documentation"
     ],
     "defaultPrompt": [
       "Use Stageflow to plan this change before coding.",
