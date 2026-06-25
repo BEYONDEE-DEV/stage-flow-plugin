@@ -1,9 +1,9 @@
 ---
-name: stageflow-docs
-description: "Use when the user says stageflow-docs, stageflow docs, docs skill, or asks Stageflow to create, update, inspect, refresh, or manage project docs as a submodule-backed natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
+name: atomic-docs
+description: "Use when the user says atomic-docs, atomic docs, docs skill, or asks Stageflow to create, update, inspect, refresh, or manage project docs as a submodule-backed natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
 ---
 
-# Stageflow Docs
+# Atomic Docs
 
 Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve user intent, rules, current implementation facts, planned changes, and gaps so future AI/code review can distinguish intended behavior from bugs or uncertain inference.
 
