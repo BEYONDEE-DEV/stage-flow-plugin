@@ -24,7 +24,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 Before acting, read only the references needed for the requested operation:
 
 - `references/docs-root-and-config.md` for docs submodule discovery, confirmation, config, and recovery.
-- `references/atomic-document-contract.md` for domain folders, atomic target folders, `atomic.md` sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
+- `references/atomic-document-contract.md` for domain folders, file-based `*-atom.md` atoms, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
 - `references/language-policy.md` for choosing the natural language used in docs content while preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
 - `references/atomic-graph.md` for `graph_edges`, target keys, traversal, edge validity, duplicate-key conflicts, and path-drift correction.
@@ -39,11 +39,10 @@ Before acting, read only the references needed for the requested operation:
 5. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
 6. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
 7. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-8. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside `atomic.md`.
+8. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
 
 ## Boundaries
 
 - This skill is instruction-first. It does not imply a runtime parser, generator script, external service, or automatic docs write outside the configured documentation submodule.
 - Stageflow request artifacts may explain workflow state, but docs refresh evidence defaults to source files.
-- If the docs root, domain boundary, atomic target, source-to-atomic mapping, or graph relationship is ambiguous, ask or put the uncertainty in a change plan or `Gaps` instead of writing confirmed intent.
-
+- If the docs root, domain boundary, atom target, source-to-atom mapping, or graph relationship is ambiguous, ask or put the uncertainty in a change plan or `Gaps` instead of writing confirmed intent.

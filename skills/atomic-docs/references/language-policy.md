@@ -1,4 +1,4 @@
-﻿# Language Policy
+# Language Policy
 
 ## Responsibility
 
@@ -33,4 +33,4 @@ Keep these values unchanged even when the surrounding prose is written in anothe
 
 ## Change Plan Language
 
-Write change plans in the user's current conversation language unless the user asks otherwise. When proposing edits to existing docs in another language, show enough original fixed terms and target headings for the user to recognize the affected `atomic.md` sections.
+Write change plans in the user's current conversation language unless the user asks otherwise. When proposing edits to existing docs in another language, show enough original fixed terms and target headings for the user to recognize the affected atom sections.
