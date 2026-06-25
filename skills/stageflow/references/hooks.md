@@ -4,15 +4,17 @@ Stageflow ships plugin-provided hooks that audit the three-stage workflow model 
 
 ## Events
 
-`hooks/hooks.json` declares:
+`hooks/hooks.json` declares command hooks for:
 
-- `PreToolUse`: `python hooks/stageflow_hook.py pre_tool_use`
-- `UserPromptSubmit`: `python hooks/stageflow_hook.py user_prompt_submit`
-- `Stop`: `python hooks/stageflow_hook.py stop`
-- `SubagentStart`: `python hooks/stageflow_hook.py subagent_start`
-- `SubagentStop`: `python hooks/stageflow_hook.py subagent_stop`
+- `PreToolUse`
+- `UserPromptSubmit`
+- `Stop`
+- `SubagentStart`
+- `SubagentStop`
 
-The wrapper resolves the plugin root from its own location, or from `PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, or `CLAUDE_PLUGIN_ROOT`. `stageflow_hook_check.py` then resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `scripts/validate_stageflow.py`.
+Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands must not use target-relative paths such as `python hooks/stageflow_hook.py ...`. The declared commands use a small inline Python bootstrap that resolves `scripts/stageflow_hook_check.py` from `STAGEFLOW_PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT`, or the installed Codex plugin cache under `~/.codex/plugins/cache/**/stageflow*/**/scripts/stageflow_hook_check.py`. If no checker is found, the hook writes a warning and exits successfully instead of blocking the user's project because of a stale path.
+
+`stageflow_hook_check.py` resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `hooks/stageflow_hook.py` or `scripts/validate_stageflow.py`.
 
 ## PreToolUse
 
