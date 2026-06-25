@@ -58,6 +58,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
+- When presenting definition questions to the user, lead with the currently known context so the user understands why the question is being asked. Each visible question must name the decision needed, show all labeled options, state the recommended option, explain why the answer matters in user-facing terms, and say which definition area the answer will update.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
 - During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused 큰방향 question active before moving deeper.
 - After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
@@ -74,6 +75,8 @@ Use answer impact to classify pending clarification questions:
 - `큰방향`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can revise at the 큰방향 level `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
 - `주요결정`: the answer stays inside the approved 큰방향 scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
 - `세부확인`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
+
+When showing these scope labels to the user, briefly translate their practical meaning instead of relying on the internal label alone: `큰방향` means the answer can change the request's purpose or top-level scope, `주요결정` means the answer chooses a major behavior or data responsibility inside that scope, and `세부확인` means the answer tunes acceptance, fallback, recovery, or validation details.
 
 ## Implementation Feedback And Redefinition
 
