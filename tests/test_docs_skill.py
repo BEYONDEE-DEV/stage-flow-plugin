@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import unittest
 from pathlib import Path
@@ -50,6 +50,16 @@ class DocsSkillTests(unittest.TestCase):
             self.assertIn(fixed_term, text)
         self.assertIn("Do not translate code identifiers or schema keys", text)
         self.assertIn("ask before writing confirmed docs", text)
+
+
+    def test_plugin_manifest_exposes_docs_skill_prompts(self) -> None:
+        manifest = read(ROOT / ".codex-plugin" / "plugin.json")
+        self.assertIn('"skills": "./skills/"', manifest)
+        self.assertIn("Documentation", manifest)
+        self.assertIn("expose a docs skill", manifest)
+        self.assertIn("Use the docs skill to create submodule-backed project documentation.", manifest)
+        self.assertIn("Use the docs skill to refresh atomic.md docs from source-code changes.", manifest)
+        self.assertIn("Use the docs skill to inspect intent, implementation, planned changes, and gaps.", manifest)
 
     def test_docs_root_contract_preserves_submodule_and_confirmation_rules(self) -> None:
         text = read(DOCS_REFS / "docs-root-and-config.md")
