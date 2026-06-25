@@ -140,13 +140,19 @@ def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str
             continue
         question = line.split("Question: ", 1)[1].split(" Options: ", 1)[0].strip()
         options = line.split(" Options: ", 1)[1].split(" Recommended: ", 1)[0].strip()
+        scope = ""
+        if "질문 범위: " in line and " Question: " in line:
+            scope = line.split("질문 범위: ", 1)[1].split(" Question: ", 1)[0].strip()
+            if " [" in scope:
+                scope = scope.split(" [", 1)[0].strip()
         transition = ""
         if " Transition option: " in line and " Why this matters: " in line:
             transition = line.split(" Transition option: ", 1)[1].split(" Why this matters: ", 1)[0].strip()
         option_items = [item.strip() for item in OPTION_ITEM_RE.findall(options)]
         if transition.lower() in {"n/a", "none", "없음"}:
             transition = ""
-        required_parts = [part for part in (question, transition) if part]
+        scope_label = f"[{scope}]" if scope else ""
+        required_parts = [part for part in (scope_label, question, transition) if part]
         required_parts.extend(option_items)
         if len(option_items) < 2:
             required_parts.append("at least two explicit option labels such as Option 1: and Option 2:")

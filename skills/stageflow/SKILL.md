@@ -59,21 +59,21 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
-- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused broad question active before moving deeper.
+- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused 큰방향 question active before moving deeper.
 - After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
-- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the question loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning.
+- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the question loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning. Transition-risk is a goal-achievement decision readiness audit: ask whether a decision must be settled in definition for the user goal to succeed, then record only decisions that are missing, conflicting, or ambiguous. Already-decided requirements, boundaries, policies, and already answered/reflected user decisions are not risk cases and must be carried into implementation-plan coverage or constraints instead. Before writing any transition-risk row, compare the candidate against `Clarification History`, `Resolved Decisions`, requirements, acceptance criteria, policy rules, and boundaries.
 - Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
 - Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
-- Classify each pending question by `Question Depth`: `broad`, `mid`, or `detail`. Start with `broad` batches, keep asking `broad` while broad ambiguities remain, and move to `mid`/`detail` only when clarification history or resolved decisions show the previous depth has been sufficiently covered.
+- Classify each pending question by `Question Scope`: `큰방향`, `주요결정`, or `세부확인`. Start with `큰방향` batches, keep asking `큰방향` while 큰방향 ambiguities remain, and move to `주요결정`/`세부확인` only when clarification history or resolved decisions show the previous question scope has been sufficiently covered.
 - During `AWAITING_USER`, the main response answers follow-ups, restates pending questions/options, and stops, while a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates in parallel. Backlog candidates are not final pending questions until the main agent evaluates the user answer impact and promotes, revises, or discards them.
 
-## Definition Question Depth Criteria
+## Definition Question Scope Criteria
 
 Use answer impact to classify pending clarification questions:
 
-- `broad`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can broadly revise `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
-- `mid`: the answer stays inside the approved broad scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
-- `detail`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
+- `큰방향`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can revise at the 큰방향 level `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
+- `주요결정`: the answer stays inside the approved 큰방향 scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
+- `세부확인`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
 
 ## Implementation Feedback And Redefinition
 
@@ -124,6 +124,8 @@ Before authoring or revising a stage artifact, read the matching writing and rev
 - Definition: `references/stages/01-definition/definition-writing-and-review-rules.md`
 - Implementation plan: `references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md`
 - Implementation: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
+
+Read `references/intent-fidelity.md` when definition or implementation planning could reinterpret user wording, especially for UX flow, screen, route, state, data, API, or persistence behavior.
 
 Before running a stage review subagent, read and use the matching review agent prompt file:
 

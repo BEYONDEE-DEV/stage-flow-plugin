@@ -51,6 +51,7 @@ STAGES: tuple[Stage, ...] = (
             "Clarification History",
             "Open Questions",
             "Resolved Decisions",
+            "Intent Fidelity",
             "Requirements",
             "Acceptance Criteria",
             "Normal Behavior Model",
@@ -77,7 +78,7 @@ STAGES: tuple[Stage, ...] = (
                 "Pending Clarifications",
                 (
                     "ID",
-                    "Question Depth",
+                    "Question Scope",
                     "Question",
                     "Options",
                     "Recommended Option",
@@ -113,6 +114,17 @@ STAGES: tuple[Stage, ...] = (
             TableRequirement(
                 "Resolved Decisions",
                 ("ID", "Source Question ID", "Answer Source", "Decision", "Reflected In"),
+            ),
+            TableRequirement(
+                "Intent Fidelity",
+                (
+                    "ID",
+                    "User Wording",
+                    "Normalized Requirement",
+                    "Allowed Interpretations",
+                    "Disallowed Interpretations",
+                    "Linked Requirement/Policy",
+                ),
             ),
             TableRequirement(
                 "Requirements",
@@ -151,6 +163,7 @@ STAGES: tuple[Stage, ...] = (
             "Cause Or Design Notes",
             "Work Items",
             "Coverage Matrix",
+            "Definition Fidelity Matrix",
             "Edge Cases And Failure Modes",
             "Validation Strategy",
             "Risks",
@@ -164,6 +177,17 @@ STAGES: tuple[Stage, ...] = (
             TableRequirement(
                 "Coverage Matrix",
                 ("Service Rule ID", "Work Item ID", "Change Area", "Validation Evidence", "Risk/Constraint"),
+            ),
+            TableRequirement(
+                "Definition Fidelity Matrix",
+                (
+                    "Work Item ID",
+                    "Definition Source",
+                    "Approved Meaning",
+                    "Technical Interpretation",
+                    "Must Not Interpret As",
+                    "If Ambiguous",
+                ),
             ),
         ),
     ),
@@ -203,7 +227,7 @@ USER_STOP_SIGNAL_RE = re.compile(
 )
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
 OPTION_LABEL_RE = re.compile(r"^(?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
-PENDING_DEPTHS = ("broad", "mid", "detail")
+QUESTION_SCOPES = ("큰방향", "주요결정", "세부확인")
 TRANSITION_RISK_CATEGORIES = {
     "scope",
     "acceptance",
@@ -223,6 +247,18 @@ TRANSITION_RISK_DISPOSITIONS = {
     "duplicate",
     "not-applicable",
 }
+TRANSITION_RISK_COVERAGE = {"uncovered", "conflicting", "ambiguous", "not-applicable"}
+TRANSITION_RISK_PRIOR_ANSWER_CHECKS = {"not-answered", "answered-not-reflected", "answered-conflicting", "not-applicable"}
+ALREADY_DECIDED_RISK_RE = re.compile(
+    r"\b(already|previously)\s+(confirmed|decided|covered|approved|resolved|answered|responded)\b"
+    r"|이미.{0,20}(답변|대답|응답|확인|결정|정해|반영|승인)"
+    r"|기존.{0,20}(확인|결정|반영|승인)",
+    re.IGNORECASE,
+)
+ACCEPTED_RISK_CONFIRMATION_RE = re.compile(
+    r"\b(accept|accepted|accepts|explicitly accepts|residual risk)\b|감수|수용",
+    re.IGNORECASE,
+)
 PURPOSE_CONFIDENCES = {"confirmed", "inferred", "unknown"}
 PURPOSE_KEYWORD_RE = re.compile(
     r"\b(purpose|why|intent|value|goal|outcome|success)\b|목적|왜|의도|가치|목표|성과|성공",
@@ -519,7 +555,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
         return []
 
     messages: list[str] = []
-    depths: list[str] = []
+    scopes: list[str] = []
     seen_ids: set[str] = set()
     for row in table.rows:
         status = row.get("Status", "").strip()
@@ -536,7 +572,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
             )
             continue
 
-        depth = row.get("Question Depth", "").strip()
+        scope = row.get("Question Scope", "").strip()
         question = row.get("Question", "").strip()
         options = row.get("Options", "").strip()
         recommended = row.get("Recommended Option", "").strip()
@@ -545,7 +581,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
         missing = [
             name
             for name, value in (
-                ("Question Depth", depth),
+                ("Question Scope", scope),
                 ("Question", question),
                 ("Options", options),
                 ("Recommended Option", recommended),
@@ -558,10 +594,10 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` is missing user-answerable fields: {', '.join(missing)}"
             )
             continue
-        depths.append(depth)
-        if depth not in PENDING_DEPTHS:
+        scopes.append(scope)
+        if scope not in QUESTION_SCOPES:
             errors.append(
-                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Question Depth must be one of {', '.join(PENDING_DEPTHS)}"
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Question Scope must be one of {', '.join(QUESTION_SCOPES)}"
             )
         labeled_options = labeled_proposal_options(options)
         if len(labeled_options) < 2:
@@ -573,7 +609,7 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
             )
         messages.append(
-            f"`{display_path(path)}` pending clarification `{pending_id}`: Depth: {depth} Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
+            f"`{display_path(path)}` pending clarification `{pending_id}`: 질문 범위: {scope} [{scope}] Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
         )
     if len(messages) > 5:
         errors.append(
@@ -653,7 +689,7 @@ def has_user_stop_signal(text: str) -> bool:
 
 
 def is_purpose_focused_pending(row: dict[str, str]) -> bool:
-    if row.get("Question Depth", "").strip() != "broad":
+    if row.get("Question Scope", "").strip() != "큰방향":
         return False
     combined = " ".join(row.get(column, "") for column in ("Question", "Options", "Why This Matters"))
     return bool(PURPOSE_KEYWORD_RE.search(combined))
@@ -692,7 +728,7 @@ def validate_definition_purpose(path: Path, text: str, errors: list[str], has_pe
     if confidence_rank in {"unknown", "inferred"} and pending_rows:
         if not any(is_purpose_focused_pending(row) for row in pending_rows):
             errors.append(
-                f"`{display_path(path)}` Purpose And Intent is {confidence_rank}; Pending Clarifications must include at least one purpose-focused broad question"
+                f"`{display_path(path)}` Purpose And Intent is {confidence_rank}; Pending Clarifications must include at least one purpose-focused 큰방향 question"
             )
     if confidence_rank != "confirmed" and has_user_stop_signal(text):
         errors.append(
@@ -844,7 +880,7 @@ def validate_transition_risk_file(path: Path, definition_text: str, has_pending_
     table = parse_required_table(
         path,
         section_text(text, "## Generated Risk Cases"),
-        ("ID", "Category", "Risk Case", "Affected Definition Area", "Suggested Handling", "User Confirmation", "Disposition"),
+        ("ID", "Category", "Risk Case", "Affected Definition Area", "Definition Coverage", "Prior Answer Check", "Suggested Handling", "User Confirmation", "Disposition"),
         "## Generated Risk Cases",
         errors,
     )
@@ -853,15 +889,39 @@ def validate_transition_risk_file(path: Path, definition_text: str, has_pending_
         risk_id = row.get("ID", "").strip() or "<unknown>"
         category = row.get("Category", "").strip()
         risk_case = row.get("Risk Case", "").strip()
+        coverage = row.get("Definition Coverage", "").strip()
+        prior_answer_check = row.get("Prior Answer Check", "").strip()
+        suggested = row.get("Suggested Handling", "").strip()
         confirmation = row.get("User Confirmation", "").strip()
         disposition = row.get("Disposition", "").strip()
         is_no_material = "no material transition risks found" in risk_case.lower()
+        combined_row_text = " ".join((risk_case, coverage, prior_answer_check, suggested, confirmation, disposition))
         if category not in TRANSITION_RISK_CATEGORIES:
             errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Category is not allowed")
+        if coverage not in TRANSITION_RISK_COVERAGE:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Definition Coverage must be one of uncovered, conflicting, ambiguous, or not-applicable")
+        if prior_answer_check not in TRANSITION_RISK_PRIOR_ANSWER_CHECKS:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Prior Answer Check must be one of not-answered, answered-not-reflected, answered-conflicting, or not-applicable")
+        if ALREADY_DECIDED_RISK_RE.search(combined_row_text):
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` records already-decided or already answered/reflected definition content as a risk; move confirmed decisions to implementation-plan constraints or coverage instead")
+        if not is_no_material and coverage == "not-applicable":
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` must use Definition Coverage `uncovered`, `conflicting`, or `ambiguous` for material risks")
+        if not is_no_material and prior_answer_check == "not-applicable":
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` must use Prior Answer Check `not-answered`, `answered-not-reflected`, or `answered-conflicting` for material risks")
+        if is_no_material and coverage != "not-applicable":
+            errors.append(f"`{display_path(path)}` no-material risk row `{risk_id}` must use Definition Coverage `not-applicable`")
+        if is_no_material and prior_answer_check != "not-applicable":
+            errors.append(f"`{display_path(path)}` no-material risk row `{risk_id}` must use Prior Answer Check `not-applicable`")
+        if prior_answer_check in {"answered-not-reflected", "answered-conflicting"} and disposition not in {"apply-to-definition", "ask-follow-up"}:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` is based on an existing user answer, so it must be resolved by `apply-to-definition` or `ask-follow-up`, not parked as a risk")
+        if not is_no_material and len(labeled_proposal_options(suggested)) < 2:
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Suggested Handling must explain at least two labeled resolution options such as `Option 1:` and `Option 2:`")
         if not confirmation or confirmation.lower() in {"n/a", "none", "pending", "unconfirmed"}:
             errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` must record User Confirmation")
         if disposition not in TRANSITION_RISK_DISPOSITIONS:
             errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` Disposition is not allowed")
+        if disposition == "accepted-risk" and not ACCEPTED_RISK_CONFIRMATION_RE.search(confirmation):
+            errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` uses accepted-risk without explicit user risk acceptance")
         if disposition == "ask-follow-up" and not has_pending_clarifications:
             errors.append(f"`{display_path(path)}` Generated Risk Cases row `{risk_id}` asks follow-up, so definition must have active Pending Clarifications")
         if disposition == "apply-to-definition" and risk_id.lower() not in reflected and "transition-risk" not in reflected:
@@ -1215,11 +1275,11 @@ Secondary: none
 
 ## Pending Clarifications
 
-| ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| ID | Question Scope | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | broad | Why is this request needed, and what purpose should the change serve? | Option 1: solve an immediate user workflow problem; Option 2: create product flexibility for follow-up changes | Option 1 | N/A | Purpose must be confirmed before deeper behavior or implementation planning. | pending |
-| PENDING-002 | broad | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | Start with broad request identity and scope before details. | pending |
-| PENDING-003 | broad | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | Broad surface decisions shape later behavior questions. | pending |
+| PENDING-001 | 큰방향 | Why is this request needed, and what purpose should the change serve? | Option 1: solve an immediate user workflow problem; Option 2: create product flexibility for follow-up changes | Option 1 | N/A | 목적은 주요결정이나 세부확인으로 내려가기 전에 확인되어야 합니다. | pending |
+| PENDING-002 | 큰방향 | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | 세부로 들어가기 전에 큰방향 요청 정체성과 범위를 먼저 정합니다. | pending |
+| PENDING-003 | 큰방향 | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | 큰방향 결정은 이후 동작 질문의 기준이 됩니다. | pending |
 
 ## Clarification History
 
@@ -1238,6 +1298,12 @@ Secondary: none
 | ID | Source Question ID | Answer Source | Decision | Reflected In |
 | --- | --- | --- | --- | --- |
 | DEC-001 | N/A | N/A | No resolved decision yet. | N/A |
+
+## Intent Fidelity
+
+| ID | User Wording | Normalized Requirement | Allowed Interpretations | Disallowed Interpretations | Linked Requirement/Policy |
+| --- | --- | --- | --- | --- | --- |
+| INTENT-001 | User's exact or summarized wording. | Requirement meaning preserved from the user wording. | Interpretations explicitly supported by user answers or resolved decisions. | Narrower, broader, or technical interpretations that are not approved. | REQ-001, SP-001 |
 
 ## Requirements
 
@@ -1314,6 +1380,12 @@ The implementation plan must prevent file-list-only plans by requiring architect
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
 | SP-001 | WORK-001 | Validator, rules, and tests. | `python -m unittest discover -s tests` passes and targeted negative tests fail shallow plans. | Keep behavior scoped to implementation-plan artifact quality. |
+
+## Definition Fidelity Matrix
+
+| Work Item ID | Definition Source | Approved Meaning | Technical Interpretation | Must Not Interpret As | If Ambiguous |
+| --- | --- | --- | --- | --- | --- |
+| WORK-001 | REQ-001, SP-001, INTENT-001 | Preserve the approved artifact-quality gate behavior. | Add structural validation and review guidance for the same approved behavior. | New workflow stage, new approval semantics, or product behavior changes. | Return to definition before planning a new meaning. |
 
 ## Edge Cases And Failure Modes
 

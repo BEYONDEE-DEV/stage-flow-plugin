@@ -27,12 +27,16 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Check that every approved service policy rule is mapped through `## Coverage Matrix` to a work item, change area, validation evidence, and risk or constraint.
+- Read `references/intent-fidelity.md` when the plan interprets UX, route, screen, state, data, API, or persistence behavior.
+- Check `## Definition Fidelity Matrix` for every work item. Confirm it names the definition source, approved meaning, technical interpretation, disallowed interpretations, and return-to-definition behavior for ambiguity.
 - Check that work items are concrete enough for another agent to execute without inventing scope, architecture, interfaces, module responsibilities, edge-case behavior, or validation strategy.
 - Check that `## Cause Or Design Notes` contains only implementation-relevant cause analysis, design constraints, or assumptions grounded in the approved definition.
 - Check that `## Edge Cases And Failure Modes` covers material failure behavior and that `## Validation Strategy` ties concrete commands or manual checks to the technical decisions and service rules they prove.
-- Check that the implementation plan does not introduce new requirements, UX policy, service behavior, or endpoint semantics.
+- Check that the implementation plan does not introduce new requirements, UX policy, service behavior, endpoint semantics, or a narrower UX interpretation than the approved definition allows.
+- Perform a semantic diff between the approved definition and the plan. If the plan chooses technical behavior the definition did not approve, mark `FAIL` and require return to definition.
+- Mark `PASS` only when user wording, requirement, acceptance criteria, policy, and technical interpretation preserve the same meaning.
 - Mark a Rule ID `PASS` only when the artifact evidence satisfies the review check and does not trigger the blocking condition.
-- Mark a Rule ID `FAIL` when coverage is missing, work items are vague, architecture is absent, module/data flow is unspecified, validation is generic, failure modes are omitted, implementation has already been performed, or new service decisions are made in this stage.
+- Mark a Rule ID `FAIL` when coverage is missing, Definition Fidelity Matrix coverage is missing, work items are vague, architecture is absent, module/data flow is unspecified, validation is generic, failure modes are omitted, implementation has already been performed, new service decisions are made in this stage, or ambiguous definition wording is silently narrowed into a technical UX choice.
 - The latest verdict is `PASS` only when every Rule ID is `PASS` and there are no blocking issues.
 
 ## Required Output

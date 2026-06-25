@@ -1,4 +1,4 @@
-﻿
+
 from __future__ import annotations
 
 import contextlib
@@ -81,7 +81,7 @@ Secondary: feature-adjustment
 
 ## Pending Clarifications
 
-| ID | Question Depth | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
+| ID | Question Scope | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |
 
@@ -102,6 +102,12 @@ Secondary: feature-adjustment
 | ID | Source Question ID | Answer Source | Decision | Reflected In |
 | --- | --- | --- | --- | --- |
 | DEC-001 | N/A | N/A | No resolved decision yet. | N/A |
+
+## Intent Fidelity
+
+| ID | User Wording | Normalized Requirement | Allowed Interpretations | Disallowed Interpretations | Linked Requirement/Policy |
+| --- | --- | --- | --- | --- | --- |
+| INTENT-001 | User requested corrected behavior. | Implement corrected behavior without unrelated scope. | The existing behavior is corrected according to REQ-001. | New UX meaning, unrelated routes, or extra product policy. | REQ-001, SP-001 |
 
 ## Requirements
 
@@ -177,6 +183,12 @@ Root cause and design notes are grounded in SP-001. The technical contract must 
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
 | SP-001 | WORK-001 | Validator, rule docs, and tests. | Subprocess validator tests cover accepted detailed plans and rejected shallow plans. | Stay scoped to artifact quality gates. |
+
+## Definition Fidelity Matrix
+
+| Work Item ID | Definition Source | Approved Meaning | Technical Interpretation | Must Not Interpret As | If Ambiguous |
+| --- | --- | --- | --- | --- | --- |
+| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |
 
 ## Edge Cases And Failure Modes
 
@@ -298,7 +310,7 @@ class HookCheckThreeStageTests(unittest.TestCase):
         artifact.write_text(
             artifact.read_text(encoding="utf-8").replace(
                 "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |",
+                "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |",
             ).replace(
                 "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                 "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -355,9 +367,9 @@ Generated after the user stop signal using the current definition artifact, with
 
 ## Generated Risk Cases
 
-| ID | Category | Risk Case | Affected Definition Area | Suggested Handling | User Confirmation | Disposition |
-| --- | --- | --- | --- | --- | --- | --- |
-| RISK-001 | implementation-readiness | No material transition risks found. | Requirements, Acceptance Criteria, Policy Rules, Boundaries, Failure And Recovery Behavior, Regression Prevention | Proceed after user confirmation. | User confirmed no material risks. | not-applicable |
+| ID | Category | Risk Case | Affected Definition Area | Definition Coverage | Prior Answer Check | Suggested Handling | User Confirmation | Disposition |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RISK-001 | implementation-readiness | No material transition risks found. | Requirements, Acceptance Criteria, Policy Rules, Boundaries, Failure And Recovery Behavior, Regression Prevention | not-applicable | not-applicable | Proceed after user confirmation. | User confirmed no material risks. | not-applicable |
 
 ## Suggested Definition Updates
 
@@ -577,7 +589,7 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |\n| PENDING-002 | 큰방향 | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | 결과 우선순위는 아직 큰방향 질문입니다. | pending |\n| PENDING-003 | 큰방향 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | 현재 답변되지 않은 큰방향 동작 범위입니다. | pending |\n| PENDING-004 | 큰방향 | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | 큰방향 | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -738,6 +750,32 @@ Approved.
             )
             self.assertTrue(result["stageflow_artifact_write"])
 
+    def test_awaiting_user_follow_up_allows_full_restatement_with_scope_label(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            last_message = (
+                marker
+                + "\n[큰방향] Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                + "Option 1: docs-wide status only\n"
+                + "Option 2: docs-wide status plus review-session scope"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message})
+            self.assertEqual(result["status"], "PREPASS")
+
     def test_awaiting_user_stop_blocks_response_without_pending_questions(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -745,7 +783,7 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |\n| PENDING-002 | 큰방향 | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | 결과 우선순위는 아직 큰방향 질문입니다. | pending |\n| PENDING-003 | 큰방향 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | 현재 답변되지 않은 큰방향 동작 범위입니다. | pending |\n| PENDING-004 | 큰방향 | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | 큰방향 | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -766,7 +804,7 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |\n| PENDING-002 | 큰방향 | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | 결과 우선순위는 아직 큰방향 질문입니다. | pending |\n| PENDING-003 | 큰방향 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | 현재 답변되지 않은 큰방향 동작 범위입니다. | pending |\n| PENDING-004 | 큰방향 | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | 큰방향 | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -780,7 +818,7 @@ Approved.
                 marker
                 + "\n질문: How should docs sync status be represented?\n"
                 + "제안: docs-wide status plus partial review notes로 가겠습니다.\n"
-                + "질문: Which validation detail should be clarified with it?\n"
+                + "질문: 어떤 세부확인 검증 기준을 정해야 하나요?\n"
                 + "제안: status text only로 가겠습니다."
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
@@ -789,14 +827,14 @@ Approved.
             self.assertIn("Option 3: docs-wide status plus hook metadata", "\n".join(result["warnings"]))
 
 
-    def test_awaiting_user_stop_blocks_missing_third_option(self) -> None:
+    def test_awaiting_user_stop_blocks_missing_question_scope_label(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
@@ -808,7 +846,33 @@ Approved.
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
-                + "\n질문: How broad should docs sync status be?\n"
+                + "\n질문: Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("[큰방향]", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_stop_blocks_missing_third_option(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            marker = str(prompt_result["preflight_marker"])
+            last_message = (
+                marker
+                + "\n질문: Docs sync status의 큰방향 범위는 어디까지인가요?\n"
                 + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
@@ -822,7 +886,7 @@ Approved.
             artifact.write_text(
                 artifact.read_text(encoding="utf-8").replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
-                    "| PENDING-001 | broad | How broad should docs sync status be? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | Start with the broad status scope. | pending |\n| PENDING-002 | broad | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | Outcome priority is still broad. | pending |\n| PENDING-003 | broad | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | This is the current unanswered broad behavior surface. | pending |\n| PENDING-004 | broad | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | broad | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
+                    "| PENDING-001 | 큰방향 | Docs sync status의 큰방향 범위는 어디까지인가요? | Option 1: docs-wide status only; Option 2: docs-wide status plus review-session scope; Option 3: docs-wide status plus hook metadata | Option 1 | N/A | 큰방향 상태 범위부터 정합니다. | pending |\n| PENDING-002 | 큰방향 | Which outcome should this clarify? | Option 1: status readability; Option 2: traceability for reviewers | Option 1 | N/A | 결과 우선순위는 아직 큰방향 질문입니다. | pending |\n| PENDING-003 | 큰방향 | How should docs sync status be represented? | Option 1: docs-wide status only; Option 2: docs-wide status plus partial review notes | Option 2 | N/A | 현재 답변되지 않은 큰방향 동작 범위입니다. | pending |\n| PENDING-004 | 큰방향 | Which data should status own? | Option 1: status text only; Option 2: status plus hook response shape | Option 1 | N/A | Data responsibility can still shift the top-level boundary. | pending |\n| PENDING-005 | 큰방향 | Which validation boundary should be clarified with it? | Option 1: validate response text only; Option 2: validate status and hook response shape | Option 1 | N/A | Validation boundary affects later detail checks. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
