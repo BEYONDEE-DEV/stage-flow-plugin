@@ -1,0 +1,20 @@
+{
+  "name": "stage-flow-local",
+  "interface": {
+    "displayName": "Stage Flow Local"
+  },
+  "plugins": [
+    {
+      "name": "stageflow",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
