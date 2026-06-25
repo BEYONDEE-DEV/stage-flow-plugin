@@ -1234,13 +1234,13 @@ Goal status: active
 
 ## User Goal
 
-Describe the user's goal in their language.
+사용자의 목표를 사용자가 말한 언어로 요약한다.
 
 ## Purpose And Intent
 
 | Purpose | User Value | Business/Product Value | Source | Confidence |
 | --- | --- | --- | --- | --- |
-| The purpose still needs user confirmation. | Clarifies why the result matters to the user. | Clarifies product or workflow value before planning. | user request needs clarification | unknown |
+| 아직 목적은 사용자 확인이 필요하다. | 사용자에게 이 결과가 왜 필요한지 확인한다. | 구현 계획 전에 제품 또는 workflow 가치를 확인한다. | user request needs clarification | unknown |
 
 ## Request Profile
 
@@ -1251,181 +1251,181 @@ Secondary: none
 
 | ID | Outcome | Source | Success Signal |
 | --- | --- | --- | --- |
-| OUT-001 | The requested result is visible or verifiable. | User request. | A reviewer can confirm the outcome. |
+| OUT-001 | 요청한 결과가 화면, 산출물, 검증 절차 중 하나로 확인된다. | 사용자 요청. | 리뷰어가 결과 충족 여부를 확인할 수 있다. |
 
 ## Current Problems
 
 | ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |
 | --- | --- | --- | --- | --- | --- |
-| PROB-001 | No current problem identified. | N/A | N/A | N/A | N/A |
+| PROB-001 | 현재 확인된 문제 없음. | N/A | N/A | N/A | N/A |
 
 ## Problem-To-Requirement Mapping
 
 | Problem ID | Requirement ID | Resolution |
 | --- | --- | --- |
-| PROB-001 | REQ-001 | The requirement resolves or prevents the problem. |
+| PROB-001 | REQ-001 | 요구사항이 해당 문제를 해결하거나 재발을 막는다. |
 
 ## User-Specified Constraints
 
-- None specified.
+- 명시된 제약 없음.
 
 ## Discovered Constraints
 
-- None discovered.
+- 발견된 제약 없음.
 
 ## Pending Clarifications
 
 | ID | Question Scope | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | 큰방향 | Why is this request needed, and what purpose should the change serve? | Option 1: solve an immediate user workflow problem; Option 2: create product flexibility for follow-up changes | Option 1 | N/A | 목적은 주요결정이나 세부확인으로 내려가기 전에 확인되어야 합니다. | pending |
-| PENDING-002 | 큰방향 | Which top-level scope boundary should be clarified next? | Option 1: narrow the request boundary; Option 2: include adjacent behavior | Option 1 | N/A | 세부로 들어가기 전에 큰방향 요청 정체성과 범위를 먼저 정합니다. | pending |
-| PENDING-003 | 큰방향 | Which user or system surface should this request primarily affect? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | 큰방향 결정은 이후 동작 질문의 기준이 됩니다. | pending |
+| PENDING-001 | 큰방향 | 현재 목적은 아직 확인되지 않았습니다. 이 변경이 우선 달성해야 할 목적은 무엇인가요? | Option 1: 사용자가 제기한 즉시 workflow 문제를 해결한다; Option 2: 후속 변경에 대비한 재사용 가능한 제품 유연성을 만든다 | Option 1 | N/A | 이 답변은 `Purpose And Intent`와 `Desired Outcomes`에 반영되어 이후 범위와 검증 기준의 기준점이 됩니다. | pending |
+| PENDING-002 | 큰방향 | 현재 요청 범위가 핵심 변경에만 머물지, 인접 동작까지 포함할지 열려 있습니다. 상위 범위는 어디까지로 잡을까요? | Option 1: 직접 요청된 동작으로 범위를 좁힌다; Option 2: 나중에 영향을 받을 인접 동작까지 포함한다 | Option 1 | N/A | 이 답변은 `Requirements`와 `Boundaries`에 반영되어 구현 계획이 불필요한 인접 동작까지 포함하지 않도록 합니다. | pending |
+| PENDING-003 | 큰방향 | 현재 영향 대상이 사용자 화면/경험인지 내부 workflow인지 아직 확정되지 않았습니다. 주된 적용 표면은 무엇인가요? | Option 1: 사용자-facing 동작; Option 2: 내부 workflow 동작; Option 3: 둘 다 | Option 1 | N/A | 이 답변은 `User Flow`, `Normal Behavior Model`, `Policy Rules`에 반영되어 이후 동작 질문의 기준을 정합니다. | pending |
 
 ## Clarification History
 
 | Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
 | --- | --- | --- | --- | --- | --- |
-| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |
+| CLAR-000 | 완료된 clarification이 아직 없다. | N/A | no | N/A | N/A |
 
 ## Open Questions
 
 | ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |
+| Q-001 | 열린 질문 없음. | N/A | N/A | N/A | N/A | no | N/A |
 
 ## Resolved Decisions
 
 | ID | Source Question ID | Answer Source | Decision | Reflected In |
 | --- | --- | --- | --- | --- |
-| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |
+| DEC-001 | N/A | N/A | 확정된 결정 없음. | N/A |
 
 ## Intent Fidelity
 
 | ID | User Wording | Normalized Requirement | Allowed Interpretations | Disallowed Interpretations | Linked Requirement/Policy |
 | --- | --- | --- | --- | --- | --- |
-| INTENT-001 | User's exact or summarized wording. | Requirement meaning preserved from the user wording. | Interpretations explicitly supported by user answers or resolved decisions. | Narrower, broader, or technical interpretations that are not approved. | REQ-001, SP-001 |
+| INTENT-001 | 사용자의 원문 또는 의미를 보존한 요약. | 사용자 표현에서 요구사항 의미를 보존한다. | 사용자 답변이나 resolved decision이 명시적으로 뒷받침한 해석. | 승인되지 않은 더 좁거나 넓거나 기술적인 해석. | REQ-001, SP-001 |
 
 ## Requirements
 
 | ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |
 | --- | --- | --- | --- | --- | --- |
-| REQ-001 | feature | User request. | One concrete requirement. | Out-of-scope behavior is explicit. | OUT-001 |
+| REQ-001 | feature | 사용자 요청. | 검증 가능한 요구사항 한 가지를 기록한다. | 제외되는 동작을 명시한다. | OUT-001 |
 
 ## Acceptance Criteria
 
-- `REQ-001` is satisfied when `OUT-001` is verifiable.
+- `REQ-001`은 `OUT-001`을 검증할 수 있을 때 충족된다.
 
 ## Normal Behavior Model
 
-Describe the corrected or desired service behavior as an organized model.
+수정되거나 원하는 서비스 동작을 구조화된 모델로 설명한다.
 
 ## User Flow
 
-Describe what the user or system does, sees, and receives in order.
+사용자 또는 시스템이 무엇을 하고, 보고, 받는지 순서대로 설명한다.
 
 ## State And Policy Model
 
-Describe states, transitions, permissions, validation rules, and product policies.
+상태, 전이, 권한, 검증 규칙, 제품 정책을 설명한다.
 
 ## Policy Rules
 
 | Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
 | --- | --- | --- | --- | --- | --- | --- |
-| SP-001 | A relevant condition occurs. | The service follows the approved behavior. | The user or system sees the planned response. | State or data responsibility is described. | Recovery behavior is described. | REQ-001 |
+| SP-001 | 관련 조건이 발생한다. | 서비스는 승인된 동작을 따른다. | 사용자 또는 시스템은 계획된 응답을 받는다. | 상태 또는 데이터 책임을 설명한다. | 복구 동작을 설명한다. | REQ-001 |
 
 ## Integration Flow And Data Responsibilities
 
-Describe service-level integration sequence and data responsibilities only where needed for behavior.
+동작 이해에 필요한 경우에만 서비스 수준 통합 순서와 데이터 책임을 설명한다.
 
 ## Boundaries
 
-Describe in-scope and out-of-scope behavior.
+포함 범위와 제외 범위의 동작을 설명한다.
 
 ## Regression Prevention
 
-Describe bugfix or mixed-request behaviors that must not regress.
+bugfix 또는 mixed 요청에서 회귀하면 안 되는 동작을 설명한다.
 
 ## Failure And Recovery Behavior
 
-Describe errors, empty states, permissions, validation failures, and recovery behavior.
+오류, 빈 상태, 권한, 검증 실패, 복구 동작을 설명한다.
 """,
     "implementation-plan": """# Implementation Plan
 
 ## Technical Approach
 
-Use the existing validator-driven Stageflow architecture. Extend the stage metadata and markdown validators instead of adding a separate parser path so the same gate enforces artifact format, review checklist, and approval behavior.
+기존 validator-driven Stageflow 구조를 사용한다. 별도 parser 경로를 추가하기보다 stage metadata와 markdown validator를 확장해 같은 gate가 artifact 형식, review checklist, approval 동작을 검증하게 한다.
 
 ## Implementation Architecture
 
-`scripts/validate_stageflow.py` owns required section and table validation. Stage rule markdown owns authoring/review contracts. Tests create fixture requests that exercise the validator through subprocess, so fixtures must mirror the new artifact contract.
+`scripts/validate_stageflow.py`는 required section과 table validation을 담당한다. Stage rule markdown은 authoring/review contract를 담당한다. 테스트는 subprocess로 validator를 실행하는 fixture request를 만들기 때문에 fixture는 새 artifact contract를 따라야 한다.
 
 ## Change Areas
 
-- Stage metadata and validation helpers in `scripts/validate_stageflow.py`.
-- Stage writing and review rules under `skills/stageflow/references/stages/`.
-- Fixture artifacts and regression tests under `tests/`.
+- `scripts/validate_stageflow.py`의 stage metadata와 validation helper.
+- `skills/stageflow/references/stages/` 아래 stage writing/review rule.
+- `tests/` 아래 fixture artifact와 regression test.
 
 ## Cause Or Design Notes
 
-The implementation plan must prevent file-list-only plans by requiring architecture, flow, edge-case, and validation evidence before implementation approval.
+implementation plan은 implementation approval 전에 architecture, flow, edge-case, validation evidence를 요구해 파일 목록만 있는 plan을 막아야 한다.
 
 ## Work Items
 
 | ID | Implementation Unit | Technical Design | Completion Evidence |
 | --- | --- | --- | --- |
-| WORK-001 | Stage validator contract. | Add required technical sections and table columns to the implementation-plan stage metadata. | Validator rejects artifacts missing technical sections or using legacy work-item columns. |
+| WORK-001 | Stage validator contract 정리. | implementation-plan stage metadata에 필요한 technical section과 table column을 추가한다. | validator는 technical section이 없거나 legacy work-item column을 쓰는 artifact를 거부한다. |
 
 ## Coverage Matrix
 
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
-| SP-001 | WORK-001 | Validator, rules, and tests. | `python -m unittest discover -s tests` passes and targeted negative tests fail shallow plans. | Keep behavior scoped to implementation-plan artifact quality. |
+| SP-001 | WORK-001 | validator, rule, test. | `python -m unittest discover -s tests`가 통과하고, targeted negative test가 얕은 plan을 실패시킨다. | 동작 범위를 implementation-plan artifact 품질로 제한한다. |
 
 ## Definition Fidelity Matrix
 
 | Work Item ID | Definition Source | Approved Meaning | Technical Interpretation | Must Not Interpret As | If Ambiguous |
 | --- | --- | --- | --- | --- | --- |
-| WORK-001 | REQ-001, SP-001, INTENT-001 | Preserve the approved artifact-quality gate behavior. | Add structural validation and review guidance for the same approved behavior. | New workflow stage, new approval semantics, or product behavior changes. | Return to definition before planning a new meaning. |
+| WORK-001 | REQ-001, SP-001, INTENT-001 | 승인된 artifact-quality gate 동작을 보존한다. | 같은 승인 동작을 위한 구조 validation과 review guidance를 추가한다. | 새 workflow stage, 새 approval semantics, product behavior 변경. | 새 의미를 계획하기 전에 definition으로 돌아간다. |
 
 ## Edge Cases And Failure Modes
 
-Legacy implementation-plan artifacts with only `Change Areas`, `Work Items`, and `Validation` fail validation. Missing technical sections fail before approval. Generic rows such as `Code and tests` or `Implement behavior` are rejected as too shallow.
+기존 implementation-plan artifact가 `Change Areas`, `Work Items`, `Validation`만 있으면 validation에 실패한다. technical section이 없으면 approval 전에 실패한다. `Code and tests`나 `Implement behavior` 같은 generic row는 너무 얕은 계획으로 거부된다.
 
 ## Validation Strategy
 
-- Run `python -m unittest discover -s tests` to verify all Stageflow gates.
-- Include negative tests for missing technical sections and shallow work item text.
-- Confirm printed templates include the new technical sections.
+- `python -m unittest discover -s tests`를 실행해 모든 Stageflow gate를 검증한다.
+- technical section 누락과 얕은 work item text에 대한 negative test를 포함한다.
+- 출력 template이 새 technical section을 포함하는지 확인한다.
 
 ## Risks
 
-Stricter validation may require existing in-flight Stageflow requests to update implementation-plan artifacts.
+더 엄격한 validation 때문에 진행 중인 Stageflow request의 implementation-plan artifact 업데이트가 필요할 수 있다.
 
 ## Constraints
 
-Do not weaken approval, fingerprint, review, or stage-order gates.
+approval, fingerprint, review, stage-order gate를 약화하지 않는다.
 """,
     "implementation": """# Implementation
 
 ## Work Completed
 
-Record the actual work completed.
+실제로 완료한 작업을 기록한다.
 
 ## Plan Compliance And Deviations
 
-Record whether the implementation matched the approved plan, including deviations, skipped work, or incomplete work.
+구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업을 포함해 기록한다.
 
 ## Validation
 
-Record commands, checks, and results.
+명령, 확인 항목, 결과를 기록한다.
 
 ## Review Result
 
-Record the implementation review result.
+implementation review 결과를 기록한다.
 
 ## Completion Summary
 
-Record the final plan-vs-actual outcome for the user.
+사용자가 승인할 수 있도록 plan 대비 실제 완료 결과를 기록한다.
 """,
     "review": """# Review
 

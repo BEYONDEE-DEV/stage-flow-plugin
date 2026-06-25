@@ -27,6 +27,9 @@ Do not review unrelated files unless the implementation evidence explicitly incl
 
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
+- Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
+- Mark `FAIL` when non-fixed prose, questions, option descriptions, recommendation reasons, review evidence, or completion summaries are written in the wrong language for the artifact. Fixed headings, table columns, schema keys, code identifiers, paths, commands, `PASS`/`FAIL`, and validator-required status/control values may remain unchanged.
+- Mark `FAIL` when starter-template filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete...`, or `Record...` remains as artifact prose instead of request-specific prose in the selected language.
 - Check that completed work stays within the approved implementation plan, including its `Definition Fidelity Matrix`.
 - Check that validation evidence is specific, relevant, and tied to completed work.
 - Check that deviations, skipped work, incomplete work, residual risk, and any implementation-plan or definition-fidelity mismatch are explicit in `## Plan Compliance And Deviations`.

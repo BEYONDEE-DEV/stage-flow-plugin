@@ -23,6 +23,12 @@ Use the approved request profile only to shape evidence:
 - Bugfix-heavy work records reproduction or regression evidence proving the problem no longer occurs.
 - Mixed work records both completed desired outcomes and resolved current problems.
 
+## Language Policy
+
+Read `references/language-policy.md` before writing or revising the implementation artifact. Keep required headings, table columns, rule IDs, paths, commands, code identifiers, and review status values unchanged, but write completed-work descriptions, deviation explanations, validation summaries, review evidence, and completion summaries in the selected user/artifact language.
+
+For a Korean workflow, new implementation prose should default to Korean. English starter filler such as `Record the actual work completed.` is not review-ready content unless the selected artifact language is English.
+
 ## Stage Artifact Format
 
 ```md
@@ -30,23 +36,23 @@ Use the approved request profile only to shape evidence:
 
 ## Work Completed
 
-Record the actual work completed.
+실제로 완료한 작업을 기록한다.
 
 ## Plan Compliance And Deviations
 
-Record whether the implementation matched the approved plan, including deviations, skipped work, or incomplete work.
+구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업을 포함해 기록한다.
 
 ## Validation
 
-Record commands, checks, and results.
+명령, 확인 항목, 결과를 기록한다.
 
 ## Review Result
 
-Record the implementation review result.
+implementation review 결과를 기록한다.
 
 ## Completion Summary
 
-Record the final plan-vs-actual outcome for the user.
+사용자가 승인할 수 있도록 plan 대비 실제 완료 결과를 기록한다.
 ```
 
 ## Required Artifact Sections

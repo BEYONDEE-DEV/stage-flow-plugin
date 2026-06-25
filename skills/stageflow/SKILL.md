@@ -58,6 +58,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
+- Apply `references/language-policy.md` for all Stageflow artifact prose, pending clarification options, review evidence, and completion summaries: keep fixed headings/table columns unchanged, but write natural-language content in the user-selected or inferred artifact language.
 - When presenting definition questions to the user, lead with the currently known context so the user understands why the question is being asked. Each visible question must name the decision needed, show all labeled options, state the recommended option, explain why the answer matters in user-facing terms, and say which definition area the answer will update.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
 - During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused 큰방향 question active before moving deeper.
@@ -127,6 +128,8 @@ Before authoring or revising a stage artifact, read the matching writing and rev
 - Definition: `references/stages/01-definition/definition-writing-and-review-rules.md`
 - Implementation plan: `references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md`
 - Implementation: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
+
+Read `references/language-policy.md` before authoring or revising any Stageflow artifact or user-facing workflow message so prose uses the selected user/artifact language while validator-required headings, table columns, status values, identifiers, paths, and commands remain unchanged.
 
 Read `references/intent-fidelity.md` when definition or implementation planning could reinterpret user wording, especially for UX flow, screen, route, state, data, API, or persistence behavior.
 

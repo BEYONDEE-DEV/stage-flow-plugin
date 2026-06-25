@@ -33,6 +33,12 @@ When the definition is revised after an implementation plan already exists, do n
 Keep unaffected work items, partially update work items whose technical design still fits but needs adjusted scope or validation, and rewrite only the work items whose service rule coverage is no longer correct. Record the reason in `## Cause Or Design Notes`, update affected `## Work Items`, `## Coverage Matrix`, `## Validation Strategy`, and `## Risks`, then rerun the implementation-plan review and approval gate.
 
 
+## Language Policy
+
+Read `references/language-policy.md` before writing or revising the implementation-plan artifact. Keep required headings, table columns, rule IDs, paths, commands, and code identifiers unchanged, but write natural-language technical approach, work-item explanations, risk notes, validation explanations, and review evidence in the selected user/artifact language.
+
+For a Korean workflow, new implementation-plan prose should default to Korean. English starter filler such as `Describe...`, `One concrete implementation unit.`, or generic English row prose is not review-ready content unless the selected artifact language is English.
+
 ## Stage Artifact Format
 
 ```md
@@ -40,53 +46,53 @@ Keep unaffected work items, partially update work items whose technical design s
 
 ## Technical Approach
 
-Describe the selected implementation architecture, the alternatives considered, and why this approach fits the approved definition.
+승인된 definition에 맞는 기술 접근, 검토한 대안, 선택 이유를 설명한다.
 
 ## Implementation Architecture
 
-Describe module/script/component responsibilities, call flow, data flow, artifact/schema changes, and compatibility boundaries.
+모듈/스크립트/컴포넌트 책임, 호출 흐름, 데이터 흐름, artifact/schema 변경, 호환성 경계를 설명한다.
 
 ## Change Areas
 
-Describe the code, docs, tests, or assets expected to change at implementation granularity.
+구현 단위에서 변경될 코드, 문서, 테스트, 자산을 설명한다.
 
 ## Cause Or Design Notes
 
-Record only implementation-relevant cause analysis, design constraints, or assumptions grounded in the approved definition.
+승인된 definition에 근거한 구현 관련 원인 분석, 설계 제약, 가정만 기록한다.
 
 ## Work Items
 
 | ID | Implementation Unit | Technical Design | Completion Evidence |
 | --- | --- | --- | --- |
-| WORK-001 | One concrete implementation unit. | Exact technical approach, affected surface, and behavior to change. | Specific changed artifact and test/review evidence. |
+| WORK-001 | 구체적인 구현 단위 하나. | 정확한 기술 접근, 영향 표면, 변경할 동작. | 변경된 artifact와 테스트/리뷰 증거. |
 
 ## Coverage Matrix
 
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
-| SP-001 | WORK-001 | Target module, script, docs, tests, or assets. | Specific automated or manual check proving the service rule. | Relevant implementation risk or constraint. |
+| SP-001 | WORK-001 | 대상 모듈, 스크립트, 문서, 테스트, 자산. | service rule을 입증하는 구체적인 자동 또는 수동 확인. | 관련 구현 위험 또는 제약. |
 
 ## Definition Fidelity Matrix
 
 | Work Item ID | Definition Source | Approved Meaning | Technical Interpretation | Must Not Interpret As | If Ambiguous |
 | --- | --- | --- | --- | --- | --- |
-| WORK-001 | REQ-001, SP-001, INTENT-001 | Approved requirement meaning from definition. | Technical implementation that preserves the approved meaning. | Unapproved narrower UX, route, screen, state, data, or API interpretation. | return-to-definition |
+| WORK-001 | REQ-001, SP-001, INTENT-001 | definition에서 승인된 요구사항 의미. | 승인된 의미를 보존하는 기술 구현. | 승인되지 않은 더 좁은 UX, route, screen, state, data, API 해석. | return-to-definition |
 
 ## Edge Cases And Failure Modes
 
-Describe validation failures, missing state, malformed artifacts, backward compatibility, permissions, unavailable dependencies, rollback/recovery, and no-op behavior that matter to the implementation.
+구현에 영향을 주는 검증 실패, 누락 상태, 잘못된 artifact, 하위 호환성, 권한, 사용할 수 없는 dependency, rollback/recovery, no-op 동작을 설명한다.
 
 ## Validation Strategy
 
-List concrete commands, test cases, fixture scenarios, and review checks. Explain which technical decision or service rule each check proves.
+구체적인 명령, 테스트 케이스, fixture 시나리오, 리뷰 확인을 나열한다. 각 확인이 어떤 기술 결정이나 service rule을 입증하는지 설명한다.
 
 ## Risks
 
-Record material technical risks and mitigation.
+중요한 기술 위험과 완화 방법을 기록한다.
 
 ## Constraints
 
-Keep implementation scoped to the approved definition and recorded technical architecture.
+구현을 승인된 definition과 기록된 기술 architecture 범위 안에 유지한다.
 ```
 
 ## Required Artifact Sections

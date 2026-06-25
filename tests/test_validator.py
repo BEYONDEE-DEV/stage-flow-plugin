@@ -501,15 +501,23 @@ Approved.
                 if template == "definition":
                     self.assertIn("Purpose And Intent", result.stdout)
                     self.assertIn("Intent Fidelity", result.stdout)
-                    self.assertIn("Why is this request needed", result.stdout)
+                    self.assertIn("현재 목적은 아직 확인되지 않았습니다", result.stdout)
                     self.assertIn("Question Scope", result.stdout)
                     self.assertIn("큰방향", result.stdout)
                     self.assertIn("Option 3:", result.stdout)
                     self.assertNotIn("PENDING-006", result.stdout)
-                    self.assertIn("No completed clarification yet", result.stdout)
+                    self.assertIn("완료된 clarification이 아직 없다", result.stdout)
+                    self.assertNotIn("Describe the user's goal", result.stdout)
+                    self.assertNotIn("Why is this request needed", result.stdout)
+                    self.assertNotIn("No completed clarification yet", result.stdout)
                     self.assertNotIn("User selected `구현 계획으로 넘어가기`", result.stdout)
                 if template == "implementation-plan":
                     self.assertIn("Definition Fidelity Matrix", result.stdout)
+                    self.assertIn("기존 validator-driven Stageflow 구조", result.stdout)
+                    self.assertNotIn("Use the existing validator-driven", result.stdout)
+                if template == "implementation":
+                    self.assertIn("실제로 완료한 작업을 기록한다", result.stdout)
+                    self.assertNotIn("Record the actual work completed", result.stdout)
 
     def test_old_stage_templates_are_removed(self) -> None:
         for template in ("requirements", "service-plan"):
@@ -527,6 +535,7 @@ Approved.
         artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
         for relative in (
             "references/intent-fidelity.md",
+            "references/language-policy.md",
             "references/stages/01-definition/definition-writing-and-review-rules.md",
             "references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md",
             "references/stages/03-implementation/implementation-writing-and-review-rules.md",
@@ -535,8 +544,13 @@ Approved.
                 self.assertIn(relative, skill_text)
                 self.assertIn(relative, artifact_text)
                 reference_text = (ROOT / "skills" / "stageflow" / relative).read_text(encoding="utf-8-sig")
+                if relative == "references/language-policy.md":
+                    self.assertIn("## Default Language Selection", reference_text)
+                    self.assertIn("default to Korean", reference_text)
+                    self.assertIn("validator-required headings", reference_text)
                 if relative.endswith("writing-and-review-rules.md"):
                     self.assertIn("## Stage Artifact Format", reference_text)
+                    self.assertIn("references/language-policy.md", reference_text)
         self.assertNotIn("references/stages/01-requirements", skill_text)
         self.assertNotIn("references/stages/02-service-plan", skill_text)
 
@@ -601,6 +615,12 @@ Approved.
             (implementation_plan_rules, "Definition Fidelity Matrix"),
             (implementation_plan_rules, "return-to-definition"),
             (implementation_plan_rules, "references/intent-fidelity.md"),
+            (skill_text, "references/language-policy.md"),
+            (artifact_text, "references/language-policy.md"),
+            (definition_rules, "For a Korean workflow, new definition prose should default to Korean"),
+            (definition_prompt, "Read `references/language-policy.md`"),
+            (implementation_plan_rules, "new implementation-plan prose should default to Korean"),
+            (implementation_rules, "new implementation prose should default to Korean"),
             (intent_fidelity, "수정 모드` must not silently become `수정 화면`, `edit route`"),
             (intent_fidelity, "edit route navigation"),
             (implementation_plan_rules, "## Selective Rework After Definition Changes"),

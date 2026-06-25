@@ -72,6 +72,12 @@ For bugfix or mixed requests, every material `Current Problems` row must appear 
 
 Read `references/intent-fidelity.md` when user wording could be narrowed into UX, route, screen, state, data, API, or persistence behavior. Definition must preserve user meaning in `## Intent Fidelity` before expanding it into requirements, acceptance criteria, user flow, policy rules, failure recovery, or boundaries.
 
+## Language Policy
+
+Read `references/language-policy.md` before writing or revising the definition artifact. Keep required headings, table columns, status values, IDs, paths, commands, and `Option 1:` style labels unchanged, but write artifact prose, pending clarification questions, option descriptions, recommendation reasons, review evidence, and user-facing summaries in the selected user/artifact language.
+
+For a Korean workflow, new definition prose should default to Korean. English starter filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete requirement.`, or option descriptions that remain in English is not review-ready content unless the selected artifact language is English.
+
 ## Stage Artifact Format
 
 ```md
@@ -79,13 +85,13 @@ Read `references/intent-fidelity.md` when user wording could be narrowed into UX
 
 ## User Goal
 
-Describe the user's goal in their language.
+사용자의 목표를 사용자가 말한 언어로 요약한다.
 
 ## Purpose And Intent
 
 | Purpose | User Value | Business/Product Value | Source | Confidence |
 | --- | --- | --- | --- | --- |
-| The purpose still needs user confirmation. | Clarifies why the result matters to the user. | Clarifies product or workflow value before planning. | user request needs clarification | unknown |
+| 아직 목적은 사용자 확인이 필요하다. | 사용자에게 이 결과가 왜 필요한지 확인한다. | 구현 계획 전에 제품 또는 workflow 가치를 확인한다. | user request needs clarification | unknown |
 
 ## Request Profile
 
@@ -96,103 +102,103 @@ Secondary: none
 
 | ID | Outcome | Source | Success Signal |
 | --- | --- | --- | --- |
-| OUT-001 | The requested result is visible or verifiable. | User request. | A reviewer can confirm the outcome. |
+| OUT-001 | 요청한 결과가 화면, 산출물, 검증 절차 중 하나로 확인된다. | 사용자 요청. | 리뷰어가 결과 충족 여부를 확인할 수 있다. |
 
 ## Current Problems
 
 | ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |
 | --- | --- | --- | --- | --- | --- |
-| PROB-001 | No current problem identified. | N/A | N/A | N/A | N/A |
+| PROB-001 | 현재 확인된 문제 없음. | N/A | N/A | N/A | N/A |
 
 ## Problem-To-Requirement Mapping
 
 | Problem ID | Requirement ID | Resolution |
 | --- | --- | --- |
-| PROB-001 | REQ-001 | The requirement resolves or prevents the problem. |
+| PROB-001 | REQ-001 | 요구사항이 해당 문제를 해결하거나 재발을 막는다. |
 
 ## User-Specified Constraints
 
-- Constraint explicitly supplied by the user, or `None specified.`
+- 사용자가 명시한 제약을 기록하거나 `명시된 제약 없음`을 쓴다.
 
 ## Discovered Constraints
 
-- Constraint discovered during project inspection, or `None discovered.`
+- 프로젝트 확인 중 발견한 제약을 기록하거나 `발견된 제약 없음`을 쓴다.
 
 ## Pending Clarifications
 
 | ID | Question Scope | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | 큰방향 | 현재 목적은 아직 확인되지 않았습니다. 이 변경이 우선 달성해야 할 목적은 무엇인가요? | Option 1: solve the immediate workflow problem the user raised; Option 2: create reusable product flexibility for follow-up changes | Option 1 | N/A | 이 답변은 `Purpose And Intent`와 `Desired Outcomes`에 반영되어 이후 범위와 검증 기준의 기준점이 됩니다. | pending |
-| PENDING-002 | 큰방향 | 현재 요청 범위가 핵심 변경에만 머물지, 인접 동작까지 포함할지 열려 있습니다. 상위 범위는 어디까지로 잡을까요? | Option 1: narrow the request boundary to the directly requested behavior; Option 2: include adjacent behavior that would otherwise be affected later | Option 1 | N/A | 이 답변은 `Requirements`와 `Boundaries`에 반영되어 구현 계획이 불필요한 인접 동작까지 포함하지 않도록 합니다. | pending |
-| PENDING-003 | 큰방향 | 현재 영향 대상이 사용자 화면/경험인지 내부 workflow인지 아직 확정되지 않았습니다. 주된 적용 표면은 무엇인가요? | Option 1: user-facing behavior; Option 2: internal workflow behavior; Option 3: both user-facing and internal behavior | Option 1 | N/A | 이 답변은 `User Flow`, `Normal Behavior Model`, `Policy Rules`에 반영되어 이후 동작 질문의 기준을 정합니다. | pending |
+| PENDING-001 | 큰방향 | 현재 목적은 아직 확인되지 않았습니다. 이 변경이 우선 달성해야 할 목적은 무엇인가요? | Option 1: 사용자가 제기한 즉시 workflow 문제를 해결한다; Option 2: 후속 변경에 대비한 재사용 가능한 제품 유연성을 만든다 | Option 1 | N/A | 이 답변은 `Purpose And Intent`와 `Desired Outcomes`에 반영되어 이후 범위와 검증 기준의 기준점이 됩니다. | pending |
+| PENDING-002 | 큰방향 | 현재 요청 범위가 핵심 변경에만 머물지, 인접 동작까지 포함할지 열려 있습니다. 상위 범위는 어디까지로 잡을까요? | Option 1: 직접 요청된 동작으로 범위를 좁힌다; Option 2: 나중에 영향을 받을 인접 동작까지 포함한다 | Option 1 | N/A | 이 답변은 `Requirements`와 `Boundaries`에 반영되어 구현 계획이 불필요한 인접 동작까지 포함하지 않도록 합니다. | pending |
+| PENDING-003 | 큰방향 | 현재 영향 대상이 사용자 화면/경험인지 내부 workflow인지 아직 확정되지 않았습니다. 주된 적용 표면은 무엇인가요? | Option 1: 사용자-facing 동작; Option 2: 내부 workflow 동작; Option 3: 둘 다 | Option 1 | N/A | 이 답변은 `User Flow`, `Normal Behavior Model`, `Policy Rules`에 반영되어 이후 동작 질문의 기준을 정합니다. | pending |
 
 ## Clarification History
 
 | Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
 | --- | --- | --- | --- | --- | --- |
-| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |
+| CLAR-000 | 완료된 clarification이 아직 없다. | N/A | no | N/A | N/A |
 
 ## Open Questions
 
 | ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |
+| Q-001 | 열린 질문 없음. | N/A | N/A | N/A | N/A | no | N/A |
 
 ## Resolved Decisions
 
 | ID | Source Question ID | Answer Source | Decision | Reflected In |
 | --- | --- | --- | --- | --- |
-| DEC-001 | N/A | N/A | No resolved decision yet. | N/A |
+| DEC-001 | N/A | N/A | 확정된 결정 없음. | N/A |
 
 ## Intent Fidelity
 
 | ID | User Wording | Normalized Requirement | Allowed Interpretations | Disallowed Interpretations | Linked Requirement/Policy |
 | --- | --- | --- | --- | --- | --- |
-| INTENT-001 | User's exact or faithfully summarized wording. | Requirement meaning preserved from the user wording. | Interpretations explicitly supported by user answers or resolved decisions. | Narrower, broader, or technical interpretations that are not approved. | REQ-001, SP-001 |
+| INTENT-001 | 사용자의 원문 또는 의미를 보존한 요약. | 사용자 표현에서 요구사항 의미를 보존한다. | 사용자 답변이나 resolved decision이 명시적으로 뒷받침한 해석. | 승인되지 않은 더 좁거나 넓거나 기술적인 해석. | REQ-001, SP-001 |
 
 ## Requirements
 
 | ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |
 | --- | --- | --- | --- | --- | --- |
-| REQ-001 | feature | User request. | One concrete requirement. | Out-of-scope behavior is explicit. | OUT-001 |
+| REQ-001 | feature | 사용자 요청. | 검증 가능한 요구사항 한 가지를 기록한다. | 제외되는 동작을 명시한다. | OUT-001 |
 
 ## Acceptance Criteria
 
-- `REQ-001` is satisfied when the linked outcome or problem resolution is verifiable.
+- `REQ-001`은 연결된 outcome 또는 problem resolution을 검증할 수 있을 때 충족된다.
 
 ## Normal Behavior Model
 
-Describe the corrected or desired service behavior as an organized model.
+수정되거나 원하는 서비스 동작을 구조화된 모델로 설명한다.
 
 ## User Flow
 
-Describe what the user or system does, sees, and receives in order.
+사용자 또는 시스템이 무엇을 하고, 보고, 받는지 순서대로 설명한다.
 
 ## State And Policy Model
 
-Describe states, transitions, permissions, validation rules, and product policies.
+상태, 전이, 권한, 검증 규칙, 제품 정책을 설명한다.
 
 ## Policy Rules
 
 | Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
 | --- | --- | --- | --- | --- | --- | --- |
-| SP-001 | A relevant condition occurs. | The service follows the approved behavior. | The user or system sees the planned response. | State or data responsibility is described. | Recovery behavior is described. | REQ-001 |
+| SP-001 | 관련 조건이 발생한다. | 서비스는 승인된 동작을 따른다. | 사용자 또는 시스템은 계획된 응답을 받는다. | 상태 또는 데이터 책임을 설명한다. | 복구 동작을 설명한다. | REQ-001 |
 
 ## Integration Flow And Data Responsibilities
 
-Describe service-level integration sequence and data responsibilities only where needed for behavior.
+동작 이해에 필요한 경우에만 서비스 수준 통합 순서와 데이터 책임을 설명한다.
 
 ## Boundaries
 
-Describe in-scope and out-of-scope behavior.
+포함 범위와 제외 범위의 동작을 설명한다.
 
 ## Regression Prevention
 
-Describe bugfix or mixed-request behaviors that must not regress.
+bugfix 또는 mixed 요청에서 회귀하면 안 되는 동작을 설명한다.
 
 ## Failure And Recovery Behavior
 
-Describe errors, empty states, permissions, validation failures, and recovery behavior.
+오류, 빈 상태, 권한, 검증 실패, 복구 동작을 설명한다.
 ```
 
 ## Optional Question Backlog

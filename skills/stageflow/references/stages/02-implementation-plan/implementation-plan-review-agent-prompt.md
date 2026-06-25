@@ -26,6 +26,9 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
+- Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
+- Mark `FAIL` when non-fixed prose, questions, option descriptions, recommendation reasons, review evidence, or completion summaries are written in the wrong language for the artifact. Fixed headings, table columns, schema keys, code identifiers, paths, commands, `PASS`/`FAIL`, and validator-required status/control values may remain unchanged.
+- Mark `FAIL` when starter-template filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete...`, or `Record...` remains as artifact prose instead of request-specific prose in the selected language.
 - Check that every approved service policy rule is mapped through `## Coverage Matrix` to a work item, change area, validation evidence, and risk or constraint.
 - Read `references/intent-fidelity.md` when the plan interprets UX, route, screen, state, data, API, or persistence behavior.
 - Check `## Definition Fidelity Matrix` for every work item. Confirm it names the definition source, approved meaning, technical interpretation, disallowed interpretations, and return-to-definition behavior for ambiguity.

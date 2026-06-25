@@ -78,6 +78,7 @@ Before writing or reviewing a stage artifact, read the matching rule file:
 - Implementation: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
 
 Each rule file owns that stage's artifact format, required sections, writing rules, and review checks.
+Also read `references/language-policy.md` before writing or reviewing stage prose. Keep validator-required headings, table columns, schema keys, paths, commands, and status/control values unchanged, but write user-facing artifact content, clarification questions, option descriptions, review evidence, change plans, and summaries in the selected user/artifact language.
 
 ## Stage Review Agent Prompt Files
 
@@ -90,6 +91,7 @@ Before running a review subagent, use the matching prompt file:
 Each prompt file owns the review mission, allowed inputs, forbidden actions, review instructions, and required review output for that stage.
 
 Use `references/intent-fidelity.md` when stage artifacts involve user wording that could be narrowed into unapproved UX, route, screen, state, data, API, or persistence behavior.
+Use `references/language-policy.md` whenever starter templates, review evidence, or user-facing workflow messages are written so template filler such as `Describe...`, `No pending...`, or `Record...` is replaced with request-specific prose in the selected language.
 
 ## Optional Definition Question Backlog
 

@@ -37,6 +37,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("dominant language already used", text)
         self.assertIn("current conversation language", text)
         self.assertIn("default to Korean", text)
+        self.assertIn("managed docs prose, docs change plans", text)
         for fixed_term in [
             "Intent",
             "Rules",
@@ -46,10 +47,14 @@ class DocsSkillTests(unittest.TestCase):
             "graph_edges",
             "docs_root",
             "source-code identifiers",
+            "option labels",
+            "Stageflow artifact",
         ]:
             self.assertIn(fixed_term, text)
         self.assertIn("Do not translate code identifiers or schema keys", text)
         self.assertIn("ask before writing confirmed docs", text)
+        self.assertIn("leftover English filler text", text)
+        self.assertIn("change plan and managed docs prose should use the user/artifact language", text)
 
 
     def test_plugin_manifest_exposes_docs_skill_prompts(self) -> None:
