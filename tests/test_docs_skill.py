@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS_SKILL = ROOT / "skills" / "docs" / "SKILL.md"
-DOCS_REFS = ROOT / "skills" / "docs" / "references"
+DOCS_SKILL = ROOT / "skills" / "stageflow-docs" / "SKILL.md"
+DOCS_REFS = ROOT / "skills" / "stageflow-docs" / "references"
 
 
 def read(path: Path) -> str:
@@ -15,7 +15,7 @@ def read(path: Path) -> str:
 class DocsSkillTests(unittest.TestCase):
     def test_docs_skill_entry_references_required_contracts(self) -> None:
         text = read(DOCS_SKILL)
-        self.assertIn("name: docs", text)
+        self.assertIn("name: stageflow-docs", text)
         self.assertIn("create, update, inspect, refresh, and manage", text)
         for reference in [
             "docs-root-and-config.md",
@@ -56,10 +56,10 @@ class DocsSkillTests(unittest.TestCase):
         manifest = read(ROOT / ".codex-plugin" / "plugin.json")
         self.assertIn('"skills": "./skills/"', manifest)
         self.assertIn("Documentation", manifest)
-        self.assertIn("expose a docs skill", manifest)
-        self.assertIn("Use the docs skill to create submodule-backed project documentation.", manifest)
-        self.assertIn("Use the docs skill to refresh atomic.md docs from source-code changes.", manifest)
-        self.assertIn("Use the docs skill to inspect intent, implementation, planned changes, and gaps.", manifest)
+        self.assertIn("expose a stageflow-docs skill", manifest)
+        self.assertIn("Use stageflow-docs to create submodule-backed project documentation.", manifest)
+        self.assertIn("Use stageflow-docs to refresh atomic.md docs from source-code changes.", manifest)
+        self.assertIn("Use stageflow-docs to inspect intent, implementation, planned changes, and gaps.", manifest)
 
     def test_docs_root_contract_preserves_submodule_and_confirmation_rules(self) -> None:
         text = read(DOCS_REFS / "docs-root-and-config.md")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stageflow Docs"
+  short_description: "Submodule-backed atomic project docs."
+  default_prompt: "Use $stageflow-docs to refresh submodule-backed atomic project docs from source-code changes."

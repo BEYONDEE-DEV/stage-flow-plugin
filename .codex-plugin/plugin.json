@@ -1,6 +1,6 @@
 {
   "name": "stageflow",
-  "version": "0.1.17+codex.20260622093925",
+  "version": "0.1.17+codex.20260625072905",
   "description": "Standardize Codex planning workflows with durable request artifacts and validation gates.",
   "author": {
     "name": "Local developer"
@@ -8,8 +8,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Stageflow",
-    "shortDescription": "Plan Codex work and expose docs management skills.",
-    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose a docs skill for submodule-backed atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships.",
+    "shortDescription": "Plan Codex work and expose the stageflow-docs skill.",
+    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose a stageflow-docs skill for submodule-backed atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [
@@ -22,9 +22,9 @@
       "Use Stageflow to plan this change before coding.",
       "Use Stageflow to clarify this request and create a validated plan.",
       "Resume the current .stageflow workflow request.",
-      "Use the docs skill to create submodule-backed project documentation.",
-      "Use the docs skill to refresh atomic.md docs from source-code changes.",
-      "Use the docs skill to inspect intent, implementation, planned changes, and gaps."
+      "Use stageflow-docs to create submodule-backed project documentation.",
+      "Use stageflow-docs to refresh atomic.md docs from source-code changes.",
+      "Use stageflow-docs to inspect intent, implementation, planned changes, and gaps."
     ]
   }
 }
