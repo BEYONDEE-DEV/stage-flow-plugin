@@ -326,6 +326,85 @@ def set_turn_start_action(
     result["state_handling_required"] = required
 
 
+def user_prompt_additional_context(result: dict[str, Any]) -> str:
+    lines = [
+        "Stageflow hook state is available in `.stageflow/hook-state/`.",
+        f"Stageflow status: {result.get('status')}",
+        f"turn_start_action: {result.get('turn_start_action')}",
+    ]
+    for key, label in (
+        ("preflight_marker", "preflight_marker"),
+        ("turn_start_instruction", "instruction"),
+        ("reason", "reason"),
+    ):
+        value = result.get(key)
+        if value:
+            lines.append(f"{label}: {value}")
+    if result.get("current_request_id"):
+        lines.append(f"current_request_id: {result.get('current_request_id')}")
+    if result.get("phase"):
+        lines.append(f"phase: {result.get('phase')}")
+    pending = str(result.get("pending_clarification_output") or "").strip()
+    if pending:
+        lines.append("pending_clarifications:")
+        lines.append(pending)
+    return "\n".join(lines)
+
+
+def wire_reason(result: dict[str, Any], fallback: str) -> str:
+    warnings = [str(item).strip() for item in result.get("warnings", []) if str(item).strip()]
+    if warnings:
+        return "\n".join(warnings)
+    reason = str(result.get("reason") or "").strip()
+    return reason or fallback
+
+
+def to_wire_output(event: str, result: dict[str, Any]) -> dict[str, Any] | None:
+    is_blocked = result.get("decision") == "block"
+
+    if event == "user_prompt_submit":
+        if is_blocked:
+            return {"decision": "block", "reason": wire_reason(result, "Stageflow user prompt blocked")}
+        if result.get("status") == "PREPASS":
+            return None
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": user_prompt_additional_context(result),
+            }
+        }
+
+    if event == "pre_tool_use":
+        if not is_blocked:
+            return None
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": wire_reason(result, "Stageflow pre-tool-use gate denied this tool call"),
+            }
+        }
+
+    if event == "stop":
+        if not is_blocked:
+            return None
+        return {"decision": "block", "reason": wire_reason(result, "Stageflow stop gate blocked this turn")}
+
+    if event == "subagent_start":
+        if not is_blocked:
+            return None
+        return {
+            "continue": False,
+            "stopReason": wire_reason(result, "Stageflow subagent-start gate blocked this subagent"),
+        }
+
+    if event == "subagent_stop":
+        if not is_blocked:
+            return None
+        return {"decision": "block", "reason": wire_reason(result, "Stageflow subagent-stop gate blocked this subagent")}
+
+    return None
+
 def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     prompt = extract_prompt(payload)
     explicit = is_explicit_workflow(prompt)
@@ -727,7 +806,7 @@ def main() -> None:
     try:
         payload = read_payload()
     except Exception as exc:
-        print(json.dumps({"status": "ERROR", "severity": "error", "reason": str(exc)}))
+        sys.stderr.write(json.dumps({"status": "ERROR", "severity": "error", "reason": str(exc)}) + "\n")
         raise SystemExit(1)
 
     root = resolve_root(args, payload)
@@ -740,9 +819,9 @@ def main() -> None:
         result = handle_stop(root, payload, result)
     else:
         result = handle_subagent(args.event, root, payload, result)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    if result.get("decision") == "block":
-        raise SystemExit(2)
+    wire_output = to_wire_output(args.event, result)
+    if wire_output is not None:
+        print(json.dumps(wire_output, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

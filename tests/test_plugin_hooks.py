@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
@@ -62,9 +62,7 @@ class PluginHookDeclarationTests(unittest.TestCase):
             shutil.rmtree(target_root, ignore_errors=True)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        output = json.loads(result.stdout)
-        self.assertEqual(output["status"], "PREPASS")
-        self.assertEqual(output["turn_start_action"], "none")
+        self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":

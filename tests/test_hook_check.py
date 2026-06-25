@@ -239,6 +239,23 @@ STAGE_BY_PHASE = {phase: (folder, artifact_name, artifact_text) for phase, folde
 
 
 class HookCheckThreeStageTests(unittest.TestCase):
+    def read_hook_state(self, root: Path, payload: dict[str, object]) -> dict[str, object]:
+        session_id = str(payload.get("session_id") or "no-session")
+        agent_id = str(payload.get("agent_id") or "").strip()
+        paths = []
+        if agent_id:
+            paths.append(root / ".stageflow" / "hook-state" / "sessions" / session_id / "agents" / agent_id / "current-turn.json")
+        paths.extend(
+            [
+                root / ".stageflow" / "hook-state" / "sessions" / session_id / "main" / "current-turn.json",
+                root / ".stageflow" / "hook-state" / "current-turn.json",
+            ]
+        )
+        for path in paths:
+            if path.is_file():
+                return json.loads(path.read_text(encoding="utf-8"))
+        return {}
+
     def run_hook(self, root: Path, event: str, payload: dict[str, object], expected_returncode: int = 0) -> dict[str, object]:
         proc = subprocess.run(
             [sys.executable, str(HOOK_CHECK), "--event", event, "--root", str(root)],
@@ -247,7 +264,27 @@ class HookCheckThreeStageTests(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(proc.returncode, expected_returncode, proc.stdout + proc.stderr)
-        return json.loads(proc.stdout)
+        wire_output = json.loads(proc.stdout) if proc.stdout.strip() else {}
+        result = self.read_hook_state(root, payload) if event in {"user_prompt_submit", "subagent_start", "subagent_stop"} else {}
+        if not result:
+            result = {"status": "PREPASS", "turn_start_action": "none", "warnings": []}
+        if wire_output.get("decision") == "block":
+            result.update({"status": "BLOCKED", "reason": wire_output.get("reason")})
+            result.setdefault("warnings", []).append(str(wire_output.get("reason") or ""))
+        hook_output = wire_output.get("hookSpecificOutput") if isinstance(wire_output.get("hookSpecificOutput"), dict) else {}
+        if hook_output.get("permissionDecision") == "deny":
+            reason = str(hook_output.get("permissionDecisionReason") or "")
+            result.update({"status": "BLOCKED", "reason": reason})
+            result.setdefault("warnings", []).append(reason)
+        if wire_output.get("continue") is False:
+            reason = str(wire_output.get("stopReason") or "")
+            result.update({"status": "BLOCKED", "reason": reason})
+            result.setdefault("warnings", []).append(reason)
+        result["_wire_output"] = wire_output
+        result["_stdout"] = proc.stdout
+        result["_stderr"] = proc.stderr
+        result["_returncode"] = proc.returncode
+        return result
 
     def create_project(self, root: Path, state_phase: str = "definition") -> None:
         stageflow = root / ".stageflow"
@@ -489,12 +526,22 @@ Approved.
             self.assertEqual(result["status"], "REQUEST_REQUIRED")
             self.assertEqual(result["turn_start_action"], "create_request")
             self.assertTrue(result["request_creation_required"])
+            wire_output = result["_wire_output"]
+            self.assertEqual(set(wire_output), {"hookSpecificOutput"})
+            hook_output = wire_output["hookSpecificOutput"]
+            self.assertEqual(hook_output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("REQUEST_REQUIRED", hook_output["additionalContext"])
+            self.assertIn("create_request", hook_output["additionalContext"])
+            self.assertNotIn("event", wire_output)
+            self.assertNotIn("status", wire_output)
+            self.assertNotIn("turn_start_action", wire_output)
 
     def test_plain_prompt_without_current_prepasses(self) -> None:
         with temp_project() as root:
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "hello"})
             self.assertEqual(result["status"], "PREPASS")
             self.assertEqual(result["turn_start_action"], "none")
+            self.assertEqual(result["_stdout"], "")
 
     def test_invalid_current_requires_pointer_repair(self) -> None:
         with temp_project() as root:
@@ -514,6 +561,13 @@ Approved.
             self.assertEqual(result["turn_start_action"], "continue_current_stage")
             self.assertEqual(result["validation"]["status"], "PASS")
             self.assertIn("Stageflow preflight", result["preflight_marker"])
+            wire_output = result["_wire_output"]
+            self.assertEqual(set(wire_output), {"hookSpecificOutput"})
+            hook_output = wire_output["hookSpecificOutput"]
+            self.assertEqual(hook_output["hookEventName"], "UserPromptSubmit")
+            self.assertIn("OK", hook_output["additionalContext"])
+            self.assertIn("continue_current_stage", hook_output["additionalContext"])
+            self.assertNotIn("status", wire_output)
 
     def test_old_phase_current_is_invalid(self) -> None:
         with temp_project() as root:
@@ -547,18 +601,25 @@ Approved.
         with temp_project() as root:
             self.create_project(root, "definition")
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "status answered"}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "status answered"}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("preflight marker", "\n".join(result["warnings"]))
+            self.assertEqual(result["_wire_output"]["decision"], "block")
+            self.assertIn("preflight marker", result["_wire_output"]["reason"])
 
     def test_pre_tool_use_blocks_non_stageflow_write_before_implementation_plan_passes(self) -> None:
         with temp_project() as root:
             self.create_project(root, "implementation")
             approval = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "approval.md"
             approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
-            result = self.run_hook(root, "pre_tool_use", {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}}, expected_returncode=2)
+            result = self.run_hook(root, "pre_tool_use", {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
-            self.assertEqual(result["implementation_entry_gate"]["status"], "FAIL")
+            hook_output = result["_wire_output"]["hookSpecificOutput"]
+            self.assertEqual(hook_output["hookEventName"], "PreToolUse")
+            self.assertEqual(hook_output["permissionDecision"], "deny")
+            self.assertIn("implementation-plan stage passes", hook_output["permissionDecisionReason"])
+            self.assertNotIn("status", result["_wire_output"])
+            self.assertNotIn("turn_start_action", result["_wire_output"])
 
     def test_pre_tool_use_allows_stageflow_artifact_write_before_implementation_plan_passes(self) -> None:
         with temp_project() as root:
@@ -567,12 +628,13 @@ Approved.
             approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
             result = self.run_hook(root, "pre_tool_use", {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"}})
             self.assertEqual(result["status"], "PREPASS")
-            self.assertTrue(result["stageflow_artifact_write"])
+            self.assertEqual(result["_wire_output"], {})
 
     def test_pre_tool_use_allows_read_only_shell_command(self) -> None:
         with temp_project() as root:
             result = self.run_hook(root, "pre_tool_use", {"session_id": "session-1", "tool_name": "shell_command", "tool_input": {"command": "rg Stageflow"}})
             self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["_wire_output"], {})
 
     def test_completion_like_stop_runs_all_validation(self) -> None:
         with temp_project() as root:
@@ -580,7 +642,7 @@ Approved.
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\ncompleted"})
-            self.assertEqual(result["completion_validation"]["status"], "PASS")
+            self.assertEqual(result["_wire_output"], {})
 
     def test_definition_pending_clarification_returns_awaiting_user_action(self) -> None:
         with temp_project() as root:
@@ -643,7 +705,7 @@ Approved.
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/transition-risk.md"},
                 },
             )
-            self.assertTrue(allowed["transition_risk_gate_write"])
+            self.assertEqual(allowed["_wire_output"], {})
             blocked = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -652,7 +714,7 @@ Approved.
                     "tool_name": "Write",
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/02-implementation-plan/implementation-plan.md"},
                 },
-                expected_returncode=2,
+                expected_returncode=0,
             )
             self.assertIn("transition-risk", "\n".join(blocked["warnings"]))
 
@@ -667,7 +729,7 @@ Approved.
                 root,
                 "stop",
                 {"session_id": "session-1", "last_assistant_message": marker + "\ndefinition approved"},
-                expected_returncode=2,
+                expected_returncode=0,
             )
             self.assertIn("must not claim completion or next-stage progress", "\n".join(result["warnings"]))
 
@@ -699,10 +761,12 @@ Approved.
                 root,
                 "subagent_start",
                 {"session_id": "session-1", "agent_id": "agent-review", "role": "definition review subagent"},
-                expected_returncode=2,
+                expected_returncode=0,
             )
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("question-generation subagents", "\n".join(result["warnings"]))
+            self.assertFalse(result["_wire_output"]["continue"])
+            self.assertIn("question-generation subagents", result["_wire_output"]["stopReason"])
 
     def test_awaiting_user_subagent_may_only_write_question_backlog(self) -> None:
         with temp_project() as root:
@@ -719,7 +783,7 @@ Approved.
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/question-backlog.md"},
                 },
             )
-            self.assertTrue(allowed["question_backlog_write"])
+            self.assertEqual(allowed["_wire_output"], {})
             blocked = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -729,7 +793,7 @@ Approved.
                     "tool_name": "Write",
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/review.md"},
                 },
-                expected_returncode=2,
+                expected_returncode=0,
             )
             self.assertEqual(blocked["status"], "BLOCKED")
             self.assertIn("question-backlog.md", "\n".join(blocked["warnings"]))
@@ -748,7 +812,7 @@ Approved.
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"},
                 },
             )
-            self.assertTrue(result["stageflow_artifact_write"])
+            self.assertEqual(result["_wire_output"], {})
 
     def test_awaiting_user_follow_up_allows_full_restatement_with_scope_label(self) -> None:
         with temp_project() as root:
@@ -793,7 +857,7 @@ Approved.
             self.refresh_stage_fingerprint(root, "definition")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("pending clarification questions and labeled options", "\n".join(result["warnings"]))
 
@@ -821,7 +885,7 @@ Approved.
                 + "질문: 어떤 세부확인 검증 기준을 정해야 하나요?\n"
                 + "제안: status text only로 가겠습니다."
             )
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("Option 1: docs-wide status only", "\n".join(result["warnings"]))
             self.assertIn("Option 3: docs-wide status plus hook metadata", "\n".join(result["warnings"]))
@@ -849,7 +913,7 @@ Approved.
                 + "\n질문: Docs sync status의 큰방향 범위는 어디까지인가요?\n"
                 + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
             )
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("[큰방향]", "\n".join(result["warnings"]))
 
@@ -875,7 +939,7 @@ Approved.
                 + "\n질문: Docs sync status의 큰방향 범위는 어디까지인가요?\n"
                 + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
             )
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("Option 3: docs-wide status plus hook metadata", "\n".join(result["warnings"]))
 
@@ -902,7 +966,7 @@ Approved.
                 + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus partial review notes\n"
                 + "목표를 달성했습니다."
             )
-            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=2)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertIn("must not claim completion", "\n".join(result["warnings"]))
 

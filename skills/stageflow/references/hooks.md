@@ -16,6 +16,20 @@ Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands
 
 `stageflow_hook_check.py` resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `hooks/stageflow_hook.py` or `scripts/validate_stageflow.py`.
 
+## Stdout Wire Output
+
+`stageflow_hook_check.py` keeps Stageflow's internal audit result separate from the Codex hook stdout response. Internal fields such as `event`, `status`, `severity`, `turn_start_action`, `validation`, `warnings`, and pending clarification details are stored under `.stageflow/hook-state/`; they must not be emitted as top-level stdout JSON fields because Codex hook schemas reject unknown properties.
+
+Stdout follows the generated Codex hook output schemas:
+
+- No control needed: write nothing to stdout and exit `0`.
+- `UserPromptSubmit`: write `hookSpecificOutput.hookEventName: "UserPromptSubmit"` plus `additionalContext` when Stageflow needs to guide the next turn. Use top-level `decision: "block"` only for prompt submission blocks.
+- `PreToolUse`: write `hookSpecificOutput.hookEventName: "PreToolUse"`, `permissionDecision: "deny"`, and `permissionDecisionReason` when blocking a tool call.
+- `Stop` and `SubagentStop`: write top-level `decision: "block"` and `reason` when blocking.
+- `SubagentStart`: write `continue: false` and `stopReason` when blocking a subagent start.
+
+Normal hook policy decisions, including deny/block outputs, exit `0`. Only hook execution failures such as invalid input JSON exit non-zero.
+
 ## PreToolUse
 
 The hook inspects write-like tools before they run.
