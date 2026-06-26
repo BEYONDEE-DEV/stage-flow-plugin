@@ -1,8 +1,8 @@
-﻿# Stageflow Integration
+# Stageflow Integration
 
 ## Responsibility
 
-This reference defines how the docs skill behaves when invoked during Stageflow-controlled work.
+This reference defines how the `atomic-docs` skill behaves when invoked during Stageflow-controlled work.
 
 ## Gate Policy
 
@@ -10,6 +10,7 @@ This reference defines how the docs skill behaves when invoked during Stageflow-
 - Do not perform non-Stageflow code edits before the active implementation-plan gate passes.
 - Writing Stageflow request artifacts does not mean docs submodule files are approved for update.
 - Writing docs submodule files requires the docs operation's own confirmed scope and change plan.
+- Stageflow plan approval alone is not docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 
 ## Evidence Boundaries
 
@@ -20,7 +21,7 @@ This reference defines how the docs skill behaves when invoked during Stageflow-
 
 ## Output Scope
 
-By default, docs skill write operations modify only files inside the configured documentation submodule root. Plugin code, Stageflow request artifacts, and source files are outside docs output scope unless a separate approved request expands scope.
+By default, `atomic-docs` write operations modify only files inside the configured documentation submodule root. Plugin code, Stageflow request artifacts, and source files are outside docs output scope unless a separate approved request expands scope.
 
 ## Conflict Policy
 

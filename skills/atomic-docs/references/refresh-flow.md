@@ -8,7 +8,7 @@ This reference defines full refresh and targeted docs operations against source 
 
 Freshness is tracked with one source-code commit hash stored in metadata at the documentation submodule root. The baseline metadata is outside individual atom files.
 
-The baseline records the last source-code commit hash used for a confirmed docs refresh. The docs skill should compare `git diff <stored-source-hash>..HEAD` or the equivalent source-root diff to prioritize changed source behavior files.
+The baseline records the last source-code commit hash used for a confirmed docs refresh. The `atomic-docs` skill should compare `git diff <stored-source-hash>..HEAD` or the equivalent source-root diff to prioritize changed source behavior files.
 
 ## Domain Context Discovery
 
@@ -20,6 +20,8 @@ Before assigning changed source behavior to a domain, inspect the context atoms 
 - `<domain>/<domain>-context-atom.md` for existing domain goals and boundaries
 
 If a new domain, new common atom, or domain move is plausible, include the candidate domain, evidence, affected atom files, and unresolved boundary questions in the change plan before writing docs.
+
+If a domain candidate looks like a broad grouping instead of a durable ownership boundary, do not write it as confirmed structure. Present a split proposal using observed capabilities, workflows, responsibilities, contracts, or policies, and keep unresolved boundary questions in the change plan or `Gaps`.
 
 ## Full Refresh
 
@@ -50,12 +52,17 @@ A change plan should group by domain and list:
 - source behavior files inspected
 - affected atom files
 - affected atom sections
+- new domains, domain moves, atom splits, atom merges, and split proposals
 - project goal, project glossary, common context, or domain context changes
 - inferred `Intent` or `Rules` that require confirmation
 - `Current Implementation` changes
 - `Planned Changes` reconciliation candidates
 - `Gaps`, bug candidates, uncertain mappings, rename/merge proposals, and implemented-plan candidates
 - graph path corrections or target-key conflicts
+- source-baseline metadata updates and docs-root config writes
+- unresolved boundary questions that must be accepted before writing confirmed structure
+
+The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or docs-submodule structure before that acceptance.
 
 ## Inference And Gaps
 

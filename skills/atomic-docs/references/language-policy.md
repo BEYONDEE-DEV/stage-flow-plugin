@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines which natural language the docs skill uses when writing or updating managed documentation, change plans, review notes, and user-facing docs operation summaries while preserving fixed schema terms.
+This reference defines which natural language the `atomic-docs` skill uses when writing or updating managed documentation, change plans, review notes, and user-facing docs operation summaries while preserving fixed schema terms.
 
 ## Default Language Selection
 

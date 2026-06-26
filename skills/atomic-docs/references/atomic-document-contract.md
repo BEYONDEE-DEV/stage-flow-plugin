@@ -1,5 +1,16 @@
 # Atomic Document Contract
 
+## Contents
+
+- [Responsibility](#responsibility)
+- [Path Contract](#path-contract)
+- [Project And Domain Context Policy](#project-and-domain-context-policy)
+- [Domain Discovery Policy](#domain-discovery-policy)
+- [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
+- [Required Atom Sections](#required-atom-sections)
+- [Forbidden Shapes](#forbidden-shapes)
+- [Atomicity Policy](#atomicity-policy)
+
 ## Responsibility
 
 This reference defines the managed documentation shape inside the configured documentation submodule.
@@ -65,7 +76,26 @@ Use this priority order:
 3. Source-observed user-visible capabilities, workflows, policies, or domain models.
 4. Cross-cutting boundaries such as shared platform, integration contract, infrastructure, or policy only when the content coherently affects multiple domains.
 
-Do not confirm a domain solely from a code folder name. Do not use document state names such as `gap`, `todo`, `status`, `current-state`, or `future-plan` as first-level domains.
+Do not confirm a domain solely from a code folder name.
+
+## Domain Boundary Quality Gate
+
+A first-level domain is valid only when it describes a durable ownership boundary. The boundary must be explainable as at least one of:
+
+- a product or business capability
+- a user-visible workflow
+- an operational responsibility
+- an integration contract
+- a shared policy or platform concern
+
+Before creating or moving a domain, the domain context or change plan must state:
+
+- the behavior the domain owns
+- the behavior the domain excludes
+- the adjacent-domain boundary
+- why the atom files in the domain tend to change together
+
+Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, present a split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
 
 ## Required Atom Sections
 

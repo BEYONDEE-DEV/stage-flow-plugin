@@ -1,8 +1,8 @@
-﻿# Docs Root And Config
+# Docs Root And Config
 
 ## Responsibility
 
-This reference defines how the docs skill discovers, confirms, and persists the documentation submodule root for a target project.
+This reference defines how the `atomic-docs` skill discovers, confirms, and persists the documentation submodule root for a target project.
 
 ## Discovery Policy
 
@@ -15,7 +15,7 @@ This reference defines how the docs skill discovers, confirms, and persists the 
 
 ## Configuration File
 
-Persist the confirmed root in target-project config at `.stageflow/docs-submodule.json`. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
+Persist the confirmed root in target-project config at `.stageflow/docs-submodule.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
 
 Required fields:
 

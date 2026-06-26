@@ -1,5 +1,18 @@
 # Stageflow Artifact Format
 
+## Contents
+
+- [Registry Files](#registry-files)
+- [Request Tree](#request-tree)
+- [Stage Writing And Review Rule Files](#stage-writing-and-review-rule-files)
+- [Stage Review Agent Prompt Files](#stage-review-agent-prompt-files)
+- [Optional Definition Question Backlog](#optional-definition-question-backlog)
+- [Definition Transition Risk Gate](#definition-transition-risk-gate)
+- [goal.md](#goalmd)
+- [review.md](#reviewmd)
+- [approval.md](#approvalmd)
+- [Validator Templates](#validator-templates)
+
 Stageflow uses one request folder with three fixed stage folders. This file defines request-level structure and common stage files. Stage-specific artifact formats live in each stage's writing and review rule file.
 
 ## Registry Files
@@ -91,7 +104,7 @@ Before running a review subagent, use the matching prompt file:
 Each prompt file owns the review mission, allowed inputs, forbidden actions, review instructions, and required review output for that stage.
 
 Use `references/intent-fidelity.md` when stage artifacts involve user wording that could be narrowed into unapproved UX, route, screen, state, data, API, or persistence behavior.
-Use `references/language-policy.md` whenever starter templates, review evidence, or user-facing workflow messages are written so template filler such as `Describe...`, `No pending...`, or `Record...` is replaced with request-specific prose in the selected language.
+Use `references/language-policy.md` whenever starter templates, review evidence, or user-facing Stageflow workflow messages are written so template filler such as `Describe...`, `No pending...`, or `Record...` is replaced with request-specific prose in the selected language.
 
 ## Optional Definition Question Backlog
 
@@ -253,22 +266,22 @@ Approval text must contain a positive approval intent such as `approve`, `approv
 
 ## Validator Templates
 
-The validator is bundled with the Stageflow plugin. Run it from the plugin root, and pass `--root <target-project-root>` when validating a target project rather than assuming that project has its own validator script.
+The skill-local validator wrapper delegates to `<plugin-root>/scripts/validate_stageflow.py`. Run the wrapper path from the plugin root, and pass `--root <target-project-root>` when validating a target project rather than assuming that project has its own validator script.
 
 The validator can print starter templates:
 
-```powershell
-python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
-python <plugin-root>/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
-python <plugin-root>/scripts/validate_stageflow.py --print-template definition
-python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
-python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
-python <plugin-root>/scripts/validate_stageflow.py --print-template review
-python <plugin-root>/scripts/validate_stageflow.py --print-template approval
+```bash
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template stage-tree
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template definition
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation-plan
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template review
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template approval
 ```
 
 Validate a target project with:
 
-```powershell
-python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase <phase>
+```bash
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase <phase>
 ```

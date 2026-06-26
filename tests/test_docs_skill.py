@@ -63,7 +63,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Documentation", manifest)
         self.assertIn("expose an atomic-docs skill", manifest)
         self.assertIn("Use atomic-docs to create submodule-backed project documentation.", manifest)
-        self.assertIn("Use atomic-docs to refresh atomic.md docs from source-code changes.", manifest)
+        self.assertIn("Use atomic-docs to refresh atom files from source-code changes.", manifest)
+        self.assertNotIn("refresh atomic.md docs", manifest)
         self.assertIn("Use atomic-docs to inspect intent, implementation, planned changes, and gaps.", manifest)
 
     def test_docs_root_contract_preserves_submodule_and_confirmation_rules(self) -> None:
@@ -76,18 +77,59 @@ class DocsSkillTests(unittest.TestCase):
             self.assertIn(field, text)
         self.assertIn("source repository root used for diffs", text)
         self.assertIn("Do not silently create a real submodule", text)
+        self.assertIn("accepted the docs-root setup scope and config write", text)
+
+    def test_docs_skill_requires_write_approval_for_managed_state(self) -> None:
+        text = read(DOCS_SKILL)
+        self.assertIn("accepted the explicit docs operation scope and change plan", text)
+        for write_target in [
+            "managed docs",
+            "atom files",
+            "graph corrections",
+            "source-baseline metadata",
+            "`.stageflow/docs-submodule.json`",
+        ]:
+            self.assertIn(write_target, text)
+        self.assertIn("Stageflow plan approval as separate from docs-submodule approval", text)
+        self.assertIn("Write only the paths and actions accepted by the user", text)
 
     def test_atomic_document_contract_sections_and_boundaries(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
-        self.assertIn("<doc-root>/<domain>/<atomic-target>/atomic.md", text)
+        self.assertIn("<doc-root>/<domain>/<atomic-target>-atom.md", text)
         self.assertIn("domain folder", text)
+        self.assertIn("Every atom file must end with `-atom.md`", text)
         self.assertIn("globally unique", text)
+        self.assertNotIn("<doc-root>/<domain>/<atomic-target>/atomic.md", text)
         for section in ["Intent", "Rules", "Current Implementation", "Planned Changes", "Gaps"]:
             self.assertIn(section, text)
         self.assertIn("marked as inferred", text)
-        self.assertIn("Do not put per-atomic freshness/status fields inside `atomic.md`", text)
+        self.assertIn("Do not put per-atomic freshness/status fields inside atom files", text)
         self.assertIn("Do not store per-file commit status", text)
         self.assertNotIn("<doc-root>/<domain>/current-state", text)
+
+    def test_domain_boundary_policy_uses_general_quality_gate(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Domain Boundary Quality Gate", text)
+        self.assertIn("durable ownership boundary", text)
+        for criterion in [
+            "product or business capability",
+            "user-visible workflow",
+            "operational responsibility",
+            "integration contract",
+            "shared policy or platform concern",
+        ]:
+            self.assertIn(criterion, text)
+        for required_boundary in [
+            "the behavior the domain owns",
+            "the behavior the domain excludes",
+            "the adjacent-domain boundary",
+            "why the atom files in the domain tend to change together",
+        ]:
+            self.assertIn(required_boundary, text)
+        self.assertIn("documentation section type, lifecycle state, task status, freshness state, review state", text)
+        self.assertIn("temporary work grouping, code-layer grouping, screen grouping, or generic catch-all bucket", text)
+        self.assertIn("split proposal based on observed capabilities", text)
+        self.assertNotIn("Do not use document state names such as", text)
 
     def test_refresh_flow_contract_uses_source_baseline_and_change_plan(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
@@ -96,10 +138,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("git diff <stored-source-hash>..HEAD", text)
         self.assertIn("changed source behavior files", text)
         self.assertIn("auxiliary files by default unless the user requested", text)
-        self.assertIn("source-to-atomic seed discovery", text)
+        self.assertIn("source-to-atom seed discovery", text)
         self.assertIn("domain-grouped change plan", text)
+        self.assertIn("new domains, domain moves, atom splits, atom merges, and split proposals", text)
         self.assertIn("implemented-plan candidates", text)
         self.assertIn("rename/merge proposals", text)
+        self.assertIn("source-baseline metadata updates and docs-root config writes", text)
+        self.assertIn("accepted change plan defines the only paths and write actions", text)
+        self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 
     def test_atomic_graph_contract_fields_and_traversal(self) -> None:
         text = read(DOCS_REFS / "atomic-graph.md")
@@ -112,7 +158,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("controlled vocabulary", text)
         self.assertIn("directional", text)
         self.assertIn("explicit inverse edges only when", text)
-        self.assertIn("may only target existing `atomic.md` files", text)
+        self.assertIn("may only target existing atom files", text)
+        self.assertIn("existing target `*-atom.md` file", text)
         self.assertIn("Stop when no further modification candidates appear", text)
         self.assertIn("Do not create a root graph output by default", text)
         self.assertIn("not strength or priority fields", text)
@@ -126,6 +173,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Stageflow artifacts are not the default docs refresh evidence source", text)
         self.assertIn("modify only files inside the configured documentation submodule root", text)
         self.assertIn("prioritize the current explicit user-requested scope", text)
+        self.assertIn("Stageflow plan approval alone is not docs-submodule approval", text)
+        self.assertIn("names the affected docs paths and write actions", text)
         self.assertIn("Gaps", text)
 
 

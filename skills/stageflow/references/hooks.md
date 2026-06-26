@@ -1,6 +1,17 @@
 # Stageflow Codex Hooks
 
-Stageflow ships plugin-provided hooks that audit the three-stage workflow model and block premature file edits. The hooks do not create or repair request artifacts. They report current state, write runtime records under `.stageflow/hook-state/`, and block non-Stageflow file edits until the implementation-plan gate passes.
+## Contents
+
+- [Events](#events)
+- [Stdout Wire Output](#stdout-wire-output)
+- [PreToolUse](#pretooluse)
+- [UserPromptSubmit](#userpromptsubmit)
+- [Stop](#stop)
+- [Subagent Hooks](#subagent-hooks)
+- [Runtime State](#runtime-state)
+- [Manual Checks](#manual-checks)
+
+Stageflow ships plugin-provided hooks that audit the three-stage workflow model and block premature file edits. The hooks do not create or repair request artifacts. They record current state under `.stageflow/hook-state/`, write only Codex hook wire-schema output to stdout, and block non-Stageflow file edits until the implementation-plan gate passes.
 
 ## Events
 
@@ -47,21 +58,21 @@ The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates t
 
 Behavior:
 
-- Explicit Stageflow prompts without a session current pointer return `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and record turn state for the Stop hook.
-- Non-workflow prompts without a session current pointer return `PREPASS` and `turn_start_action: none`.
-- Invalid or stale current pointers return `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
-- Completed current requests return `COMPLETED_CURRENT` with `turn_start_action: start_new_request` so new workflow work does not continue on terminal state.
-- Active requests return a preflight marker:
+- Explicit Stageflow prompts without a session current pointer record `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and store turn state for the Stop hook.
+- Non-Stageflow prompts without a session current pointer record `PREPASS` and `turn_start_action: none`; stdout is empty.
+- Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
+- Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` so new Stageflow work does not continue on terminal state.
+- Active requests record a preflight marker:
 
 ```text
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL|AWAITING_USER>
 ```
 
-- Active requests also return `turn_start_action`: `continue_current_stage` when validation passes; `answer_follow_up_and_restate_pending`, `apply_user_clarification_answer`, or `run_definition_transition_risk_goal` for `AWAITING_USER` definition turns; or `repair_current_stage` when the current stage fails validation.
-- Pending clarification validation returns `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook classifies the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Pending-answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns must record the stop, run the definition transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, and ask the user to confirm risk cases before definition review/approval. Definition still does not use `01-definition/goal.md` for this status.
-- Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook returns `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
+- Active requests also record `turn_start_action`: `continue_current_stage` when validation passes; `answer_follow_up_and_restate_pending`, `apply_user_clarification_answer`, or `run_definition_transition_risk_goal` for `AWAITING_USER` definition turns; or `repair_current_stage` when the current stage fails validation.
+- These values are internal hook-state fields. `UserPromptSubmit` stdout is empty for `PREPASS`; otherwise it uses `hookSpecificOutput.hookEventName: "UserPromptSubmit"` with `additionalContext`, except true prompt blocks use top-level `decision: "block"` and `reason`.
+- Pending clarification validation records `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook classifies the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Pending-answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns must record the stop, run the definition transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, and ask the user to confirm risk cases before definition review/approval. Definition still does not use `01-definition/goal.md` for this status.
+- Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook records `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
 - `turn_start_instruction` is mandatory next-action guidance for the main agent.
-
 ## Stop
 
 The stop hook reads the previous turn state from `.stageflow/hook-state/`.
@@ -93,18 +104,18 @@ Do not treat hook-state files as durable workflow artifacts. Durable request sta
 
 Run a pre-tool edit gate check:
 
-```powershell
+```bash
 '{"hook_event_name":"PreToolUse","session_id":"session-1","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}' | python <plugin-root>/scripts/stageflow_hook_check.py --event pre_tool_use --root <target-project-root>
 ```
 
 Run a prompt check:
 
-```powershell
+```bash
 '{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | python <plugin-root>/scripts/stageflow_hook_check.py --event user_prompt_submit --root <target-project-root>
 ```
 
 Run a stop check:
 
-```powershell
+```bash
 '{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"구현 완료했습니다."}' | python <plugin-root>/scripts/stageflow_hook_check.py --event stop --root <target-project-root>
 ```

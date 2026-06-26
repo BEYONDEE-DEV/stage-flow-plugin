@@ -1,6 +1,6 @@
 interface:
   display_name: "Stageflow"
-  short_description: "Three-stage review and approval workflow."
+  short_description: "Stageflow three-stage review and approval process."
   default_prompt: "Use $stageflow to run this request through definition, implementation plan, and implementation stages."
 policy:
   allow_implicit_invocation: true

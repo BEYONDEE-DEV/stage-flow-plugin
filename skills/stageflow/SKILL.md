@@ -1,6 +1,6 @@
 ---
 name: stageflow
-description: "Use when the user explicitly asks to use Stageflow, workflow, stageflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
+description: "Use when the user explicitly asks to use Stageflow, stage-flow, stageflow, a Stageflow workflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
 ---
 
 # Stageflow
@@ -61,23 +61,23 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Apply `references/language-policy.md` for all Stageflow artifact prose, pending clarification options, review evidence, and completion summaries: keep fixed headings/table columns unchanged, but write natural-language content in the user-selected or inferred artifact language.
 - When presenting definition questions to the user, lead with the currently known context so the user understands why the question is being asked. Each visible question must name the decision needed, show all labeled options, state the recommended option, explain why the answer matters in user-facing terms, and say which definition area the answer will update.
 - If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
-- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused 큰방향 question active before moving deeper.
+- During `definition`, assume there is always more ambiguity to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused top-direction (`Question Scope`) question active before moving deeper; use the exact localized labels from the definition writing rules.
 - After every user answer in `definition`, reflect the answer into `definition.md`, then create or maintain the next clarification batch with 1-5 active questions in `Pending Clarifications`, and stop for the user.
-- Never close `definition` because the agent judges the request `clear enough`, `충분함`, or has no more questions. Only the user can end the question loop with an explicit stop signal: `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning. Transition-risk is a goal-achievement decision readiness audit: ask whether a decision must be settled in definition for the user goal to succeed, then record only decisions that are missing, conflicting, or ambiguous. Already-decided requirements, boundaries, policies, and already answered/reflected user decisions are not risk cases and must be carried into implementation-plan coverage or constraints instead. Before writing any transition-risk row, compare the candidate against `Clarification History`, `Resolved Decisions`, requirements, acceptance criteria, policy rules, and boundaries.
-- Treat `구현 계획으로 넘어가기` as a user stop signal, not as an option inside a pending clarification question.
+- Never close `definition` because the agent judges the request `clear enough`, complete, or has no more questions. Only the user can end the question loop with an explicit stop signal listed in the definition writing rules, such as `proceed` or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning. Transition-risk is a goal-achievement decision readiness audit: ask whether a decision must be settled in definition for the user goal to succeed, then record only decisions that are missing, conflicting, or ambiguous. Already-decided requirements, boundaries, policies, and already answered/reflected user decisions are not risk cases and must be carried into implementation-plan coverage or constraints instead. Before writing any transition-risk row, compare the candidate against `Clarification History`, `Resolved Decisions`, requirements, acceptance criteria, policy rules, and boundaries.
+- Treat implementation-plan transition stop signals as user stop signals, not as options inside pending clarification questions. Use the exact stop-signal examples from the definition writing rules.
 - Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
-- Classify each pending question by `Question Scope`: `큰방향`, `주요결정`, or `세부확인`. Start with `큰방향` batches, keep asking `큰방향` while 큰방향 ambiguities remain, and move to `주요결정`/`세부확인` only when clarification history or resolved decisions show the previous question scope has been sufficiently covered.
+- Classify each pending question by `Question Scope` using the exact labels from the definition writing rules. Start with top-direction batches, keep asking top-direction questions while top-direction ambiguities remain, and move to major-decision or detail-check questions only when clarification history or resolved decisions show the previous question scope has been sufficiently covered.
 - During `AWAITING_USER`, the main response answers follow-ups, restates pending questions/options, and stops, while a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates in parallel. Backlog candidates are not final pending questions until the main agent evaluates the user answer impact and promotes, revises, or discards them.
 
 ## Definition Question Scope Criteria
 
-Use answer impact to classify pending clarification questions:
+Use answer impact to classify pending clarification questions, then write the exact localized `Question Scope` label from `references/stages/01-definition/definition-writing-and-review-rules.md`.
 
-- `큰방향`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can revise at the 큰방향 level `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
-- `주요결정`: the answer stays inside the approved 큰방향 scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
-- `세부확인`: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`.
+- Top-direction: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries.
+- Major-decision: the answer stays inside the approved top-direction scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility.
+- Detail-check: the answer stays inside an approved behavior or policy direction and refines acceptance criteria, copy/text, fallback behavior, error handling, recovery behavior, validation method, or regression checks.
 
-When showing these scope labels to the user, briefly translate their practical meaning instead of relying on the internal label alone: `큰방향` means the answer can change the request's purpose or top-level scope, `주요결정` means the answer chooses a major behavior or data responsibility inside that scope, and `세부확인` means the answer tunes acceptance, fallback, recovery, or validation details.
+When showing scope labels to the user, briefly explain their practical meaning in the user's language instead of relying on the internal label alone.
 
 ## Implementation Feedback And Redefinition
 
@@ -153,29 +153,29 @@ For every stage:
 6. Ask the user for explicit approval only after review passes.
 7. Record `Stage approved: yes`, `Approved By`, `Approved At`, and the user's explicit approval text in `approval.md`.
 
-Approval text must contain clear positive intent such as `approve`, `approved`, `go ahead`, `proceed`, `yes`, `승인`, or `진행`. Silence or vague acknowledgement is not approval.
+Approval text must contain clear positive intent such as `approve`, `approved`, `go ahead`, `proceed`, `yes`, or equivalent approval wording in the user's language. Silence or vague acknowledgement is not approval.
 
 ## Validator
 
-Run the plugin-bundled validator against the target project root. Do not assume the target project contains its own `scripts/validate_stageflow.py` copy:
+Run the skill-local validator wrapper against the target project root. The wrapper delegates to `<plugin-root>/scripts/validate_stageflow.py`, so agents can use a skill-local script path while hooks still resolve the bundled plugin script directly:
 
-```powershell
-python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase definition
-python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation-plan
-python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation
-python <plugin-root>/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase all
+```bash
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase definition
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation-plan
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase implementation
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase all
 ```
 
 Use `--print-template` to get exact starter files:
 
-```powershell
-python <plugin-root>/scripts/validate_stageflow.py --print-template stage-tree
-python <plugin-root>/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
-python <plugin-root>/scripts/validate_stageflow.py --print-template definition
-python <plugin-root>/scripts/validate_stageflow.py --print-template implementation-plan
-python <plugin-root>/scripts/validate_stageflow.py --print-template implementation
-python <plugin-root>/scripts/validate_stageflow.py --print-template review
-python <plugin-root>/scripts/validate_stageflow.py --print-template approval
+```bash
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template stage-tree
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template definition
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation-plan
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template review
+python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template approval
 ```
 
 The validator is an auditor. Treat failures as the next action to repair.
@@ -185,8 +185,8 @@ The validator is an auditor. Treat failures as the next action to repair.
 Plugin hooks are read-only for durable workflow artifacts except for runtime records under `.stageflow/hook-state/`. They may block premature tool use.
 
 - `PreToolUse` blocks non-Stageflow file edits until `implementation-plan` validates, while allowing `.stageflow/**` artifact creation and repair.
-- `UserPromptSubmit` checks the active stage, emits a preflight marker, and returns `turn_start_action` so the next turn is driven by durable state instead of chat memory.
-- Implementation-like prompts validate `implementation-plan` before code work proceeds and return `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` when the gate fails.
+- `UserPromptSubmit` checks the active stage, records `status` and `turn_start_action` under `.stageflow/hook-state/`, and passes next-turn guidance through Codex hook wire output `additionalContext` instead of top-level internal JSON fields.
+- Implementation-like prompts validate `implementation-plan` before code work proceeds and record `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` in hook state/additional context when the gate fails.
 - `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
 - `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. Follow-up turns must restate all pending labeled choices; answer turns may revise `definition.md` and create the next pending batch; stop-signal turns must run the definition transition-risk goal before review, approval, or implementation-plan work.
 - Question-generation subagents may run in parallel during `AWAITING_USER` only to prepare optional `01-definition/question-backlog.md` candidates. Other subagent roles or subagent writes to stage artifacts/review/approval are blocked in that wait state.

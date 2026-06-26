@@ -1,6 +1,6 @@
 ---
 name: atomic-docs
-description: "Use when the user says atomic-docs, atomic docs, docs skill, or asks Stageflow to create, update, inspect, refresh, or manage project docs as a submodule-backed natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
+description: "Use when the user says atomic-docs, atomic docs, atomic docs, the Stageflow atomic documentation skill, or asks Stageflow to create, update, inspect, refresh, or manage atomic project docs as a submodule-backed natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
 ---
 
 # Atomic Docs
@@ -18,6 +18,8 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Do not create a real submodule, remote repository, generated docs set, or migration unless the user separately asks for that operation.
 - Treat source files as the default evidence for docs refresh, not Stageflow request artifacts.
 - Respect Stageflow gates when invoked during Stageflow-controlled work.
+- Do not write managed docs, atom files, graph corrections, source-baseline metadata, migrations, or `.stageflow/docs-submodule.json` until the user has accepted the explicit docs operation scope and change plan.
+- Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 
 ## Required References
 
@@ -35,11 +37,12 @@ Before acting, read only the references needed for the requested operation:
 1. Identify whether the user wants root setup, full refresh, targeted docs work, inspection, graph maintenance, or Stageflow-adjacent documentation.
 2. Read the relevant reference files before making changes.
 3. Inspect source state and docs-submodule state.
-4. Present a change plan before writing docs when refresh or targeted updates would modify documentation.
+4. Present a change plan before any write to docs config, atom files, graph edges, baseline metadata, or docs-submodule structure.
 5. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
 6. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
 7. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
 8. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+9. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 
