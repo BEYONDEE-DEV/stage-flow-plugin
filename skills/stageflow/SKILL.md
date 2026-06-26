@@ -22,7 +22,8 @@ Definition contains these required files, plus a conditional transition-risk pai
   definition.md
   transition-risk-goal.md  (required after user stop signal before definition approval)
   transition-risk.md       (required after user stop signal before definition approval)
-  review.md
+  review/final.md
+  review/subagents/001-full-bounded-review.md
   approval.md
 ```
 
@@ -32,7 +33,8 @@ Implementation-plan and implementation contain exactly these required files:
 .stageflow/requests/<request-id>/<stage-folder>/
   goal.md
   <stage-artifact>.md
-  review.md
+  review/final.md
+  review/subagents/001-full-bounded-review.md
   approval.md
 ```
 
@@ -54,7 +56,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Record the goal receipt in those later stage `goal.md` files: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
 - When a definition turn presents `Pending Clarifications`, record an active batch of 1-5 questions in `definition.md`, return the full batch to the user, and stop; the stage itself remains unapproved until the user answers and the review/approval gates pass.
 - Review each stage artifact with a subagent. Self-review is allowed only as a private preliminary check and never satisfies the review gate.
-- Record every review in the same stage's `review.md`, including review cycle history, current artifact fingerprint, latest verdict, blocking issues, and final verdict.
+- Record review synthesis in the same stage's `review/final.md`, and record each bounded subagent shard in `review/subagents/<cycle>-<slice>.md`. The main agent owns conflict resolution, complete Rule ID checklist coverage, latest verdict, blocking issues, and final verdict in `review/final.md`.
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
 - During `implementation`, the review subagent must audit completion against every approved implementation-plan work item before final user approval. If any work item is incomplete, unverifiable, out of scope, insufficiently validated, or hidden as a deviation, do not ask for user approval; revise the implementation and `03-implementation/implementation.md`, then rerun the subagent review cycle until the latest review verdict is PASS.
@@ -147,11 +149,11 @@ Keep only the core workflow in this `SKILL.md`; stage-specific writing rules, re
 For every stage:
 
 1. Compute the SHA-256 fingerprint of the current stage artifact.
-2. Run a subagent review using the matching stage review agent prompt, against only that stage's artifact and the previous approved stage artifacts needed for context.
-3. Record `Subagent review.` in `review.md` and the exact `Reviewed Artifact Fingerprint: sha256:<hex>`.
-4. Record `## Writing And Review Rule Checklist` using every Rule ID from the matching stage rule file.
-5. If the review finds blocking issues, revise the stage artifact and repeat the review cycle. During `implementation`, blocking issues include any approved implementation-plan work item that is incomplete, unverifiable, out of scope, insufficiently validated, or not mapped to implementation evidence.
-6. Ask the user for explicit approval only after review passes.
+2. Split non-trivial review work into bounded shard scopes. Prefer parallel subagents when there are independent rule clusters, domains, changed areas, or implementation work items. A small/simple stage may use one `review/subagents/001-full-bounded-review.md` shard.
+3. Run subagent reviews using the matching stage review agent prompt. Each subagent writes only its assigned shard under `review/subagents/<cycle>-<slice>.md`, with explicit inputs, shard scope, verdict, and blocking issues.
+4. The main agent writes `review/final.md`. It must list every shard in `## Subagent Review Shards`, resolve shard conflicts or missing coverage, record `Subagent review.`, the exact `Reviewed Artifact Fingerprint: sha256:<hex>`, and a complete `## Writing And Review Rule Checklist` using every Rule ID from the matching stage rule file.
+5. If any shard or final synthesis finds blocking issues, revise the stage artifact and repeat the shard review cycle. During `implementation`, blocking issues include any approved implementation-plan work item that is incomplete, unverifiable, out of scope, insufficiently validated, or not mapped to implementation evidence.
+6. Ask the user for explicit approval only after `review/final.md` passes validation.
 7. Record `Stage approved: yes`, `Approved By`, `Approved At`, and the user's explicit approval text in `approval.md`.
 
 Approval text must contain clear positive intent such as `approve`, `approved`, `go ahead`, `proceed`, `yes`, or equivalent approval wording in the user's language. Silence or vague acknowledgement is not approval.

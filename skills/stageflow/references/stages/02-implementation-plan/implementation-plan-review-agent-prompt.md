@@ -24,6 +24,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Review Instructions
 
+- Use one bounded shard scope such as definition-fidelity coverage, technical executability/work-item specificity, or validation/risk/failure-mode coverage. Do not review every planning concern in one subagent when those scopes can be split.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
@@ -44,30 +45,31 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Required Output
 
-Return markdown that can be copied into `review.md`:
+Return markdown that can be written to `review/subagents/<cycle>-<slice>.md`. Do not write `review/final.md`; the main agent synthesizes final PASS/FAIL, conflict resolution, and the full Rule ID checklist after reading all shard files.
 
 ```md
-## Review Cycle
+# Subagent Review Shard
 
-| Cycle | Reviewer | Result | Notes |
-| --- | --- | --- | --- |
-| <cycle> | implementation plan review subagent | PASS or FAIL | Short reason. |
+Stage: implementation-plan
 
-## Writing And Review Rule Checklist
+Reviewed Artifact Fingerprint: sha256:<artifact-fingerprint>
 
-| Rule ID | Evidence Read | Verdict | Blocking Issue |
-| --- | --- | --- | --- |
-| IP-RULE-001 | Evidence from the implementation plan artifact. | PASS or FAIL | None, or a concrete blocking issue. |
+Shard Scope: definition fidelity coverage
 
-## Latest Verdict
+## Inputs Read
+
+- `02-implementation-plan/implementation-plan.md` and approved definition when assigned
+- Matching writing and review rule file for this shard.
+
+## Findings
+
+- Evidence-backed finding for this bounded shard.
+
+## Verdict
 
 PASS or FAIL
 
 ## Blocking Issues
 
-No blocking issues, or a bullet list of blocking issues.
-
-## Final Verdict
-
-No blocking issues, or explain why the implementation-plan stage cannot pass.
+No blocking issues, or a bullet list of blocking issues for this shard.
 ```

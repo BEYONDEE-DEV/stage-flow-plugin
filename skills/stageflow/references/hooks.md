@@ -86,7 +86,7 @@ Behavior:
 
 ## Subagent Hooks
 
-`SubagentStart` and `SubagentStop` record lightweight lifecycle observations. During `AWAITING_USER`, `SubagentStart` allows only question-generation backlog candidate work, and subagent writes are limited to `01-definition/question-backlog.md`. They do not count as stage review evidence by themselves. A stage review only passes when the stage's `review.md` records `Subagent review.`, a matching artifact fingerprint, `PASS`, and no blocking issues.
+`SubagentStart` and `SubagentStop` record lightweight lifecycle observations. During `AWAITING_USER`, `SubagentStart` allows only question-generation backlog candidate work, and subagent writes are limited to `01-definition/question-backlog.md`. They do not count as stage review evidence by themselves. A stage review only passes when the stage's `review/final.md` records `Subagent review.`, matching artifact fingerprints, listed `review/subagents/` shard files, `PASS`, and no blocking issues.
 
 ## Runtime State
 

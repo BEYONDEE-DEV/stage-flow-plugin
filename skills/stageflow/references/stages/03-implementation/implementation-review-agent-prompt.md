@@ -25,6 +25,7 @@ Do not review unrelated files unless the implementation evidence explicitly incl
 
 ## Review Instructions
 
+- Use one bounded shard scope such as a single approved `Work Item ID`, a small group of related work items, validation evidence, deviations, or final outcome coverage. Do not audit every work item in one subagent when work-item shards can be split.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
@@ -43,37 +44,31 @@ Do not review unrelated files unless the implementation evidence explicitly incl
 
 ## Required Output
 
-Return markdown that can be copied into `review.md`:
+Return markdown that can be written to `review/subagents/<cycle>-<slice>.md`. Do not write `review/final.md`; the main agent synthesizes final PASS/FAIL, conflict resolution, and the full Rule ID checklist after reading all shard files.
 
 ```md
-## Review Cycle
+# Subagent Review Shard
 
-| Cycle | Reviewer | Result | Notes |
-| --- | --- | --- | --- |
-| <cycle> | implementation review subagent | PASS or FAIL | Short reason. |
+Stage: implementation
 
-## Work Item Completion Audit
+Reviewed Artifact Fingerprint: sha256:<artifact-fingerprint>
 
-| Work Item ID | Status | Evidence Read | Blocking Issue |
-| --- | --- | --- | --- |
-| WORK-001 | completed, incomplete, unverifiable, or out-of-scope | Implementation artifact, diff or changed-file evidence, and validation output. | None, or a concrete blocking issue. |
+Shard Scope: WORK-001 completion audit
 
-## Writing And Review Rule Checklist
+## Inputs Read
 
-| Rule ID | Evidence Read | Verdict | Blocking Issue |
-| --- | --- | --- | --- |
-| IMPL-RULE-001 | Evidence from the implementation artifact and implementation evidence. | PASS or FAIL | None, or a concrete blocking issue. |
-| IMPL-RULE-007 | Work item completion audit, implementation artifact, approved implementation plan, changed-file or diff evidence, and validation output. | PASS or FAIL | None, or a concrete blocking issue. |
+- `03-implementation/implementation.md`, approved plan, changed-file evidence, and validation output for the assigned shard
+- Matching writing and review rule file for this shard.
 
-## Latest Verdict
+## Findings
+
+- Evidence-backed finding for this bounded shard.
+
+## Verdict
 
 PASS or FAIL
 
 ## Blocking Issues
 
-No blocking issues, or a bullet list of blocking issues.
-
-## Final Verdict
-
-No blocking issues, or explain why the implementation stage cannot pass.
+No blocking issues, or a bullet list of blocking issues for this shard.
 ```

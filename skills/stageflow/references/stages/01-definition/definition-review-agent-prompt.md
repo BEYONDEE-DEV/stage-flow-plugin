@@ -25,6 +25,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Review Instructions
 
+- Use one bounded shard scope such as intent/clarification/transition-risk, behavior/policy/boundary model, or intent-fidelity/language/template-filler. Do not review every definition concern in one subagent when those scopes can be split.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
@@ -51,30 +52,31 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Required Output
 
-Return markdown that can be copied into `review.md`:
+Return markdown that can be written to `review/subagents/<cycle>-<slice>.md`. Do not write `review/final.md`; the main agent synthesizes final PASS/FAIL, conflict resolution, and the full Rule ID checklist after reading all shard files.
 
 ```md
-## Review Cycle
+# Subagent Review Shard
 
-| Cycle | Reviewer | Result | Notes |
-| --- | --- | --- | --- |
-| <cycle> | definition review subagent | PASS or FAIL | Short reason. |
+Stage: definition
 
-## Writing And Review Rule Checklist
+Reviewed Artifact Fingerprint: sha256:<artifact-fingerprint>
 
-| Rule ID | Evidence Read | Verdict | Blocking Issue |
-| --- | --- | --- | --- |
-| DEF-RULE-001 | Evidence from the definition artifact. | PASS or FAIL | None, or a concrete blocking issue. |
+Shard Scope: intent and clarification coverage
 
-## Latest Verdict
+## Inputs Read
+
+- `01-definition/definition.md` and transition-risk files when assigned
+- Matching writing and review rule file for this shard.
+
+## Findings
+
+- Evidence-backed finding for this bounded shard.
+
+## Verdict
 
 PASS or FAIL
 
 ## Blocking Issues
 
-No blocking issues, or a bullet list of blocking issues.
-
-## Final Verdict
-
-No blocking issues, or explain why the definition stage cannot pass.
+No blocking issues, or a bullet list of blocking issues for this shard.
 ```

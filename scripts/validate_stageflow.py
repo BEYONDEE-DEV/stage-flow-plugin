@@ -403,7 +403,7 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     stage_dir = context.request_dir / stage.folder
     artifact_path = stage_dir / stage.artifact
     goal_path = stage_dir / "goal.md"
-    review_path = stage_dir / "review.md"
+    review_path = stage_dir / "review" / "final.md"
     approval_path = stage_dir / "approval.md"
 
     rule_ids = validate_stage_rule_document(stage, errors)
@@ -520,11 +520,13 @@ def validate_stage_review_agent_prompt(stage: Stage, errors: list[str]) -> None:
             errors.append(f"`{display_path(path)}` must include `{phrase}`")
 
     for marker in (
-        "## Writing And Review Rule Checklist",
-        "## Latest Verdict",
+        "# Subagent Review Shard",
+        "Shard Scope",
+        "## Inputs Read",
+        "## Verdict",
         "## Blocking Issues",
-        "## Final Verdict",
         "PASS or FAIL",
+        "Do not write `review/final.md`",
     ):
         if marker not in text:
             errors.append(f"`{display_path(path)}` Required Output must include `{marker}`")
@@ -1005,7 +1007,63 @@ def validate_review(
         errors.append(f"`{display_path(path)}` Final Verdict must confirm no blocking issues")
     if not section_text(text, "## Review Cycle").strip():
         errors.append(f"`{display_path(path)}` must include `## Review Cycle` history")
+    validate_subagent_review_shards(stage, path, text, artifact_fingerprint, errors)
     validate_rule_checklist(path, text, rule_ids, errors)
+    validate_fingerprint(path, text, "Reviewed Artifact Fingerprint", artifact_fingerprint, errors)
+
+
+def validate_subagent_review_shards(
+    stage: Stage,
+    final_path: Path,
+    final_text: str,
+    artifact_fingerprint: str | None,
+    errors: list[str],
+) -> None:
+    table = parse_required_table(
+        final_path,
+        section_text(final_text, "## Subagent Review Shards"),
+        ("Shard File", "Scope", "Verdict", "Blocking Issue"),
+        "## Subagent Review Shards",
+        errors,
+    )
+    stage_dir = final_path.parent.parent
+    for row in table.rows:
+        shard_file = row.get("Shard File", "").strip().strip("`")
+        if not shard_file:
+            errors.append(f"`{display_path(final_path)}` Subagent Review Shards row must include `Shard File`")
+            continue
+        if not shard_file.startswith("review/subagents/"):
+            errors.append(f"`{display_path(final_path)}` shard file `{shard_file}` must be under `review/subagents/`")
+            continue
+        if row.get("Verdict", "").strip().upper() != "PASS":
+            errors.append(f"`{display_path(final_path)}` shard `{shard_file}` verdict must be PASS")
+        if not NO_BLOCKING_RE.search(row.get("Blocking Issue", "")):
+            errors.append(f"`{display_path(final_path)}` shard `{shard_file}` must record no blocking issue")
+        shard_path = stage_dir / shard_file
+        validate_subagent_review_shard(stage, shard_path, artifact_fingerprint, errors)
+
+
+def validate_subagent_review_shard(
+    stage: Stage,
+    path: Path,
+    artifact_fingerprint: str | None,
+    errors: list[str],
+) -> None:
+    text = read_required_text(path, errors)
+    if text is None:
+        return
+    if "# Subagent Review Shard" not in text:
+        errors.append(f"`{display_path(path)}` must include `# Subagent Review Shard`")
+    if label_value(text, "Stage") != stage.phase:
+        errors.append(f"`{display_path(path)}` must record `Stage: {stage.phase}`")
+    if not label_value(text, "Shard Scope"):
+        errors.append(f"`{display_path(path)}` must record `Shard Scope`")
+    if not section_text(text, "## Inputs Read").strip():
+        errors.append(f"`{display_path(path)}` must include non-empty `## Inputs Read`")
+    if not PASS_RE.search(section_text(text, "## Verdict")):
+        errors.append(f"`{display_path(path)}` Verdict must be PASS")
+    if not NO_BLOCKING_RE.search(section_text(text, "## Blocking Issues")):
+        errors.append(f"`{display_path(path)}` Blocking Issues must record no blocking issues")
     validate_fingerprint(path, text, "Reviewed Artifact Fingerprint", artifact_fingerprint, errors)
 
 
@@ -1171,7 +1229,8 @@ def render_stage_tree() -> str:
             parts.append(f"`{stage.folder}/goal.md`")
             parts.append(f"`{stage.folder}/{stage.artifact}`")
         parts.extend([
-            f"`{stage.folder}/review.md`",
+            f"`{stage.folder}/review/final.md`",
+            f"`{stage.folder}/review/subagents/001-full-bounded-review.md`",
             f"`{stage.folder}/approval.md`",
         ])
         rows.append("- " + ", ".join(parts))
@@ -1439,13 +1498,19 @@ Subagent review.
 
 ## Reviewer
 
-reviewer subagent
+main agent synthesis
 
 ## Review Cycle
 
 | Cycle | Reviewer | Result | Notes |
 | --- | --- | --- | --- |
-| 1 | reviewer subagent | PASS | No blocking issues. |
+| 1 | main agent synthesis | PASS | Synthesized bounded subagent review shards. |
+
+## Subagent Review Shards
+
+| Shard File | Scope | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |
 
 ## Writing And Review Rule Checklist
 

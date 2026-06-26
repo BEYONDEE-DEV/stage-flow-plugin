@@ -309,7 +309,7 @@ class ValidatorThreeStageTests(unittest.TestCase):
             self.write_transition_risk_files(root, fingerprint)
         else:
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
-        (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
+        self.write_review_files(stage_dir, phase, fingerprint, STAGE_RULE_IDS[phase])
 
     def write_transition_risk_files(self, root: Path, fingerprint: str | None = None) -> None:
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
@@ -416,6 +416,43 @@ Goal created: yes
 Goal status: active
 """
 
+    def write_review_files(self, stage_dir: Path, phase: str, fingerprint: str, rule_ids: list[str]) -> None:
+        review_dir = stage_dir / "review"
+        subagent_dir = review_dir / "subagents"
+        subagent_dir.mkdir(parents=True, exist_ok=True)
+        (subagent_dir / "001-full-bounded-review.md").write_text(
+            self.review_shard_text(phase, fingerprint),
+            encoding="utf-8",
+        )
+        (review_dir / "final.md").write_text(
+            self.review_text(phase, fingerprint, rule_ids),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def review_shard_text(phase: str, fingerprint: str) -> str:
+        return f"""# Subagent Review Shard
+
+Stage: {phase}
+
+Reviewed Artifact Fingerprint: sha256:{fingerprint}
+
+Shard Scope: full bounded review for a small stage
+
+## Inputs Read
+
+- Current stage artifact.
+- Matching writing and review rule file.
+
+## Verdict
+
+PASS
+
+## Blocking Issues
+
+No blocking issues.
+"""
+
     @staticmethod
     def review_text(phase: str, fingerprint: str, rule_ids: list[str]) -> str:
         checklist_rows = "\n".join(f"| {rule_id} | Evidence for {rule_id}. | PASS | None |" for rule_id in rule_ids)
@@ -431,13 +468,19 @@ Subagent review.
 
 ## Reviewer
 
-reviewer subagent
+main agent synthesis
 
 ## Review Cycle
 
 | Cycle | Reviewer | Result | Notes |
 | --- | --- | --- | --- |
-| 1 | reviewer subagent | PASS | No blocking issues. |
+| 1 | main agent synthesis | PASS | Synthesized bounded subagent review shards. |
+
+## Subagent Review Shards
+
+| Shard File | Scope | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |
 
 ## Writing And Review Rule Checklist
 
@@ -640,6 +683,28 @@ Approved.
         self.assertNotIn("`mid`", user_facing_docs)
         self.assertNotIn("`detail`", user_facing_docs)
 
+    def test_review_folder_contract_is_documented(self) -> None:
+        skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
+        artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
+        prompts = [
+            (REFERENCE_ROOT / "stages" / "01-definition" / "definition-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "stages" / "03-implementation" / "implementation-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
+        ]
+        for text in (skill_text, artifact_text):
+            self.assertIn("review/final.md", text)
+            self.assertIn("review/subagents", text)
+            self.assertIn("bounded", text)
+            self.assertIn("main agent", text)
+        self.assertIn("Subagent Review Shards", artifact_text)
+        self.assertIn("legacy `review.md` does not satisfy", artifact_text)
+        for prompt in prompts:
+            self.assertIn("review/subagents/<cycle>-<slice>.md", prompt)
+            self.assertIn("Do not write `review/final.md`", prompt)
+            self.assertIn("# Subagent Review Shard", prompt)
+            self.assertIn("Shard Scope", prompt)
+            self.assertIn("bounded shard", prompt)
+
     def test_validator_docs_use_plugin_script_and_target_root(self) -> None:
         skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
         artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
@@ -689,7 +754,7 @@ Approved.
     def test_review_checklist_requires_all_rule_ids(self) -> None:
         with temp_project() as root:
             self.create_project(root)
-            review = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review.md"
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review" / "final.md"
             review.write_text("\n".join(line for line in review.read_text(encoding="utf-8").splitlines() if "DEF-RULE-004" not in line), encoding="utf-8")
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
@@ -697,11 +762,57 @@ Approved.
     def test_implementation_review_requires_completion_audit_rule(self) -> None:
         with temp_project() as root:
             self.create_project(root)
-            review = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "review.md"
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "review" / "final.md"
             review.write_text("\n".join(line for line in review.read_text(encoding="utf-8").splitlines() if "IMPL-RULE-007" not in line), encoding="utf-8")
             result = self.run_validator(root, "implementation")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("IMPL-RULE-007", result.stdout)
+
+    def test_review_final_file_is_required(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review" / "final.md"
+            review.unlink()
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("review/final.md", result.stdout)
+
+    def test_review_requires_subagent_shard_section_and_file(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review" / "final.md"
+            review.write_text(review.read_text(encoding="utf-8").replace("## Subagent Review Shards", "## Removed Subagent Review Shards"), encoding="utf-8")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Subagent Review Shards", result.stdout)
+
+    def test_review_fails_when_shard_file_is_missing(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review" / "subagents" / "001-full-bounded-review.md"
+            shard.unlink()
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("001-full-bounded-review.md", result.stdout)
+
+    def test_review_fails_when_shard_verdict_fails(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "review" / "subagents" / "001-full-bounded-review.md"
+            shard.write_text(shard.read_text(encoding="utf-8").replace("## Verdict\n\nPASS", "## Verdict\n\nFAIL"), encoding="utf-8")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Verdict must be PASS", result.stdout)
+
+    def test_legacy_review_md_does_not_satisfy_review_gate(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+            shutil.rmtree(stage_dir / "review")
+            (stage_dir / "review.md").write_text(self.review_text("definition", hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest(), STAGE_RULE_IDS["definition"]), encoding="utf-8")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("review/final.md", result.stdout)
 
     def test_definition_requires_requirements_sections(self) -> None:
         with temp_project() as root:

@@ -9,7 +9,7 @@
 - [Optional Definition Question Backlog](#optional-definition-question-backlog)
 - [Definition Transition Risk Gate](#definition-transition-risk-gate)
 - [goal.md](#goalmd)
-- [review.md](#reviewmd)
+- [review folder](#review-folder)
 - [approval.md](#approvalmd)
 - [Validator Templates](#validator-templates)
 
@@ -66,17 +66,26 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
     question-backlog.md       (optional helper)
     transition-risk-goal.md   (required after user stop signal before definition approval)
     transition-risk.md        (required after user stop signal before definition approval)
-    review.md
+    review/
+      final.md
+      subagents/
+        001-full-bounded-review.md
     approval.md
   02-implementation-plan/
     goal.md
     implementation-plan.md
-    review.md
+    review/
+      final.md
+      subagents/
+        001-full-bounded-review.md
     approval.md
   03-implementation/
     goal.md
     implementation.md
-    review.md
+    review/
+      final.md
+      subagents/
+        001-full-bounded-review.md
     approval.md
 ```
 
@@ -110,7 +119,7 @@ Use `references/language-policy.md` whenever starter templates, review evidence,
 
 Definition artifacts include `## Purpose And Intent` as required first-class purpose coverage; confidence must be `confirmed`, `inferred`, or `unknown`, and inferred/unknown purpose requires a purpose-focused 큰방향 pending question.
 
-`01-definition/question-backlog.md` may be created by a question-generation subagent in parallel while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review.md`, `approval.md`, or the current `Pending Clarifications`, and it is not required for validation. Use it to record candidate next questions, question scope (`큰방향`, `주요결정`, `세부확인`), labeled options, affected definition areas, and invalidation triggers before the main agent decides whether to promote, revise, or discard them after the user answer.
+`01-definition/question-backlog.md` may be created by a question-generation subagent in parallel while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review/final.md`, `approval.md`, or the current `Pending Clarifications`, and it is not required for validation. Use it to record candidate next questions, question scope (`큰방향`, `주요결정`, `세부확인`), labeled options, affected definition areas, and invalidation triggers before the main agent decides whether to promote, revise, or discard them after the user answer.
 
 ## Definition Transition Risk Gate
 
@@ -185,9 +194,47 @@ Required values:
 - `Tool: create_goal`, `Invocation recorded: yes`, and `Goal created: yes` are required.
 - `Goal status` must be active, in progress, complete, completed, or another non-pending success state.
 
-## review.md
+## review folder
 
-Every stage has one `review.md`. Use it as a compact review cycle ledger.
+Every stage has one `review/` folder. Subagents write bounded shard files under `review/subagents/`; the main agent writes `review/final.md` after reading those shard files.
+
+Required structure:
+
+```text
+<stage-folder>/review/
+  final.md
+  subagents/
+    001-full-bounded-review.md
+```
+
+Use more shard files when review work can be split by rule cluster, domain/behavior area, changed area, or implementation work item. Use one bounded shard only for small/simple stages where parallelism would add no coverage.
+
+A subagent shard file uses this shape:
+
+```md
+# Subagent Review Shard
+
+Stage: definition
+
+Reviewed Artifact Fingerprint: sha256:<artifact-fingerprint>
+
+Shard Scope: intent and clarification coverage
+
+## Inputs Read
+
+- `01-definition/definition.md`
+- `references/stages/01-definition/definition-writing-and-review-rules.md`
+
+## Verdict
+
+PASS
+
+## Blocking Issues
+
+No blocking issues.
+```
+
+The main-agent synthesis file `review/final.md` uses this shape:
 
 ```md
 # Review
@@ -202,13 +249,19 @@ Subagent review.
 
 ## Reviewer
 
-reviewer subagent
+main agent synthesis
 
 ## Review Cycle
 
 | Cycle | Reviewer | Result | Notes |
 | --- | --- | --- | --- |
-| 1 | reviewer subagent | PASS | No blocking issues. |
+| 1 | main agent synthesis | PASS | Synthesized bounded subagent review shards. |
+
+## Subagent Review Shards
+
+| Shard File | Scope | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |
 
 ## Writing And Review Rule Checklist
 
@@ -231,16 +284,19 @@ No blocking issues.
 
 A passing review requires:
 
+- `review/final.md` exists; legacy `review.md` does not satisfy the review gate.
 - `Subagent review.` in `## Review Method`.
-- A reviewed artifact fingerprint matching the current stage artifact.
-- `## Writing And Review Rule Checklist` containing every Rule ID from the matching stage rule file.
+- A reviewed artifact fingerprint matching the current stage artifact in `review/final.md` and every listed shard file.
+- `## Subagent Review Shards` in `review/final.md`, with each listed shard file under `review/subagents/` and each shard verdict `PASS`.
+- Each listed shard file exists, records `Stage`, `Reviewed Artifact Fingerprint`, `Shard Scope`, non-empty `## Inputs Read`, `PASS` verdict, and no blocking issues.
+- `## Writing And Review Rule Checklist` in `review/final.md` containing every Rule ID from the matching stage rule file.
 - `PASS` for each required Rule ID in the checklist.
 - No blocking issue for each required Rule ID in the checklist.
 - `PASS` as the latest verdict.
 - No blocking issues.
 - A final verdict confirming no blocking issues.
 
-Self-review never satisfies the gate.
+Self-review never satisfies the gate. Subagent shard files do not approve stages independently; only `review/final.md` can satisfy the stage review gate.
 
 ## approval.md
 

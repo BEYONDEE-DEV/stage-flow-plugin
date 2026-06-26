@@ -327,7 +327,7 @@ class HookCheckThreeStageTests(unittest.TestCase):
                 self.write_transition_risk_files(root, fingerprint)
             else:
                 (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
-            (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
+            self.write_review_files(stage_dir, phase, fingerprint, STAGE_RULE_IDS[phase])
             (stage_dir / "approval.md").write_text(self.approval_text(phase), encoding="utf-8")
 
     def refresh_stage_fingerprint(self, root: Path, phase: str) -> None:
@@ -339,7 +339,7 @@ class HookCheckThreeStageTests(unittest.TestCase):
             self.write_transition_risk_files(root, fingerprint)
         else:
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
-        (stage_dir / "review.md").write_text(self.review_text(phase, fingerprint, STAGE_RULE_IDS[phase]), encoding="utf-8")
+        self.write_review_files(stage_dir, phase, fingerprint, STAGE_RULE_IDS[phase])
 
 
     def write_pending_definition(self, root: Path) -> None:
@@ -461,6 +461,43 @@ Goal created: yes
 Goal status: active
 """
 
+    def write_review_files(self, stage_dir: Path, phase: str, fingerprint: str, rule_ids: list[str]) -> None:
+        review_dir = stage_dir / "review"
+        subagent_dir = review_dir / "subagents"
+        subagent_dir.mkdir(parents=True, exist_ok=True)
+        (subagent_dir / "001-full-bounded-review.md").write_text(
+            self.review_shard_text(phase, fingerprint),
+            encoding="utf-8",
+        )
+        (review_dir / "final.md").write_text(
+            self.review_text(phase, fingerprint, rule_ids),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def review_shard_text(phase: str, fingerprint: str) -> str:
+        return f"""# Subagent Review Shard
+
+Stage: {phase}
+
+Reviewed Artifact Fingerprint: sha256:{fingerprint}
+
+Shard Scope: full bounded review for a small stage
+
+## Inputs Read
+
+- Current stage artifact.
+- Matching writing and review rule file.
+
+## Verdict
+
+PASS
+
+## Blocking Issues
+
+No blocking issues.
+"""
+
     @staticmethod
     def review_text(phase: str, fingerprint: str, rule_ids: list[str]) -> str:
         checklist_rows = "\n".join(f"| {rule_id} | Evidence for {rule_id}. | PASS | None |" for rule_id in rule_ids)
@@ -476,13 +513,19 @@ Subagent review.
 
 ## Reviewer
 
-reviewer subagent
+main agent synthesis
 
 ## Review Cycle
 
 | Cycle | Reviewer | Result | Notes |
 | --- | --- | --- | --- |
-| 1 | reviewer subagent | PASS | No blocking issues. |
+| 1 | main agent synthesis | PASS | Synthesized bounded subagent review shards. |
+
+## Subagent Review Shards
+
+| Shard File | Scope | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |
 
 ## Writing And Review Rule Checklist
 
@@ -808,7 +851,7 @@ Approved.
                     "session_id": "session-1",
                     "agent_id": "agent-questions",
                     "tool_name": "Write",
-                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/review.md"},
+                    "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/review/final.md"},
                 },
                 expected_returncode=0,
             )
