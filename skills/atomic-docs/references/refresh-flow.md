@@ -54,6 +54,8 @@ A change plan should group by domain and list:
 - affected atom sections
 - new domains, domain moves, atom splits, atom merges, and split proposals
 - project goal, project glossary, common context, or domain context changes
+- core business terms that require glossary or domain atom coverage before derived behavior is treated as covered
+- parent business terms missing or underdefined in the glossary, including their source evidence and whether they belong in `Gaps`
 - inferred `Intent` or `Rules` that require confirmation
 - `Current Implementation` changes
 - `Planned Changes` reconciliation candidates

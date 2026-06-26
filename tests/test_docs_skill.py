@@ -131,6 +131,35 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("split proposal based on observed capabilities", text)
         self.assertNotIn("Do not use document state names such as", text)
 
+
+    def test_core_business_term_coverage_gate_prevents_parent_term_gaps(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Core Business Term Coverage Gate", text)
+        for evidence_source in [
+            "type/interface names",
+            "collection keys",
+            "UI titles",
+            "API payloads",
+            "existing domain atoms",
+        ]:
+            self.assertIn(evidence_source, text)
+        self.assertIn("source-repeated business nouns", text)
+        self.assertIn("`project/project-glossary-atom.md`", text)
+        self.assertIn("appropriate domain atom", text)
+        self.assertIn("derived concept such as `resource deduction`", text)
+        self.assertIn("parent business term such as `resource`", text)
+        for coverage_item in [
+            "business meaning",
+            "owning domain",
+            "operator action",
+            "source of truth",
+            "stored input fields versus API/computed output fields",
+            "related status, hold, deduction, threshold, display, or availability rules",
+            "aliases, related source identifiers, forbidden conflations, and uncertainty",
+        ]:
+            self.assertIn(coverage_item, text)
+        self.assertIn("change plan or `Gaps`", text)
+
     def test_refresh_flow_contract_uses_source_baseline_and_change_plan(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
         self.assertIn("one source-code commit hash", text)
@@ -144,6 +173,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("implemented-plan candidates", text)
         self.assertIn("rename/merge proposals", text)
         self.assertIn("source-baseline metadata updates and docs-root config writes", text)
+        self.assertIn("core business terms that require glossary or domain atom coverage", text)
+        self.assertIn("parent business terms missing or underdefined in the glossary", text)
         self.assertIn("accepted change plan defines the only paths and write actions", text)
         self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 

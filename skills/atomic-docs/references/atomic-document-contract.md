@@ -7,6 +7,7 @@
 - [Project And Domain Context Policy](#project-and-domain-context-policy)
 - [Domain Discovery Policy](#domain-discovery-policy)
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
+- [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Required Atom Sections](#required-atom-sections)
 - [Forbidden Shapes](#forbidden-shapes)
 - [Atomicity Policy](#atomicity-policy)
@@ -96,6 +97,22 @@ Before creating or moving a domain, the domain context or change plan must state
 - why the atom files in the domain tend to change together
 
 Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, present a split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
+
+## Core Business Term Coverage Gate
+
+Before writing or refreshing atom files, identify source-repeated business nouns from type/interface names, collection keys, UI titles, API payloads, and existing domain atoms. Each core business term must be defined in `project/project-glossary-atom.md` or in an appropriate domain atom before derived behavior is treated as covered.
+
+Do not document a derived concept such as `resource deduction` while the parent business term such as `resource` / `제한자원` is missing or underdefined. If the parent meaning is uncertain, put the missing definition and evidence in the change plan or `Gaps` instead of writing confirmed intent.
+
+Each covered core business term should state:
+
+- business meaning
+- owning domain
+- operator action
+- source of truth
+- stored input fields versus API/computed output fields
+- related status, hold, deduction, threshold, display, or availability rules
+- aliases, related source identifiers, forbidden conflations, and uncertainty
 
 ## Required Atom Sections
 
