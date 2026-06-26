@@ -33,7 +33,7 @@ def temp_project():
 STAGE_RULE_IDS = {
     "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
-    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
+    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
 }
 
 DEFINITION_TEXT = """# Definition
@@ -211,23 +211,23 @@ IMPLEMENTATION_TEXT = """# Implementation
 
 ## Work Completed
 
-Implemented as planned.
+Completed WORK-001 with actual validator, rule, prompt, and fixture changes.
 
 ## Plan Compliance And Deviations
 
-No deviations.
+WORK-001 followed the approved Definition Fidelity Matrix with no deviations, skipped work, or incomplete work.
 
 ## Validation
 
-Tests passed and PROB-001 no longer reproduces.
+`python -m unittest discover -s tests` passed and validates WORK-001 coverage. PROB-001 no longer reproduces.
 
 ## Review Result
 
-Subagent review passed with no blocking issues.
+Implementation review subagent completed the work item completion audit for WORK-001 and passed with no blocking issues.
 
 ## Completion Summary
 
-Completed as approved with no residual risk.
+WORK-001 is completed as approved with no residual work item risk.
 """
 
 STAGES = [

@@ -1409,11 +1409,11 @@ approval, fingerprint, review, stage-order gate를 약화하지 않는다.
 
 ## Work Completed
 
-실제로 완료한 작업을 기록한다.
+승인된 implementation-plan의 work item별로 실제로 완료한 작업을 기록한다.
 
 ## Plan Compliance And Deviations
 
-구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업을 포함해 기록한다.
+구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업, work item별 완료 증거를 포함해 기록한다.
 
 ## Validation
 
@@ -1421,11 +1421,11 @@ approval, fingerprint, review, stage-order gate를 약화하지 않는다.
 
 ## Review Result
 
-implementation review 결과를 기록한다.
+implementation review subagent의 work item 완료성 검수 결과를 기록한다.
 
 ## Completion Summary
 
-사용자가 승인할 수 있도록 plan 대비 실제 완료 결과를 기록한다.
+사용자가 승인할 수 있도록 plan 대비 실제 완료 결과와 남은 work item 리스크를 기록한다.
 """,
     "review": """# Review
 

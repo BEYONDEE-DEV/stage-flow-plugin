@@ -34,7 +34,7 @@ def temp_project():
 STAGE_RULE_IDS = {
     "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
-    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 7)],
+    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
 }
 
 DEFINITION_TEXT = """# Definition
@@ -212,23 +212,23 @@ IMPLEMENTATION_TEXT = """# Implementation
 
 ## Work Completed
 
-Implemented as planned.
+Completed WORK-001 with actual validator, rule, prompt, and fixture changes.
 
 ## Plan Compliance And Deviations
 
-No deviations.
+WORK-001 followed the approved Definition Fidelity Matrix with no deviations, skipped work, or incomplete work.
 
 ## Validation
 
-Tests passed and PROB-001 no longer reproduces.
+`python -m unittest discover -s tests` passed and validates WORK-001 coverage. PROB-001 no longer reproduces.
 
 ## Review Result
 
-Subagent review passed with no blocking issues.
+Implementation review subagent completed the work item completion audit for WORK-001 and passed with no blocking issues.
 
 ## Completion Summary
 
-Completed as approved with no residual risk.
+WORK-001 is completed as approved with no residual work item risk.
 """
 
 STAGES = [
@@ -516,7 +516,7 @@ Approved.
                     self.assertIn("기존 validator-driven Stageflow 구조", result.stdout)
                     self.assertNotIn("Use the existing validator-driven", result.stdout)
                 if template == "implementation":
-                    self.assertIn("실제로 완료한 작업을 기록한다", result.stdout)
+                    self.assertIn("work item별로 실제로 완료한 작업", result.stdout)
                     self.assertNotIn("Record the actual work completed", result.stdout)
 
     def test_old_stage_templates_are_removed(self) -> None:
@@ -628,6 +628,9 @@ Approved.
             (implementation_plan_rules, "Keep unaffected work items"),
             (implementation_rules, "## Selective Rework After Feedback"),
             (implementation_rules, "which completed work remains valid"),
+            (skill_text, "completion audit subagent review"),
+            (implementation_rules, "IMPL-RULE-007"),
+            (implementation_rules, "fix/review cycle until the latest review verdict is PASS"),
         ):
             self.assertIn(phrase, text)
 
@@ -691,6 +694,14 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("DEF-RULE-004", result.stdout)
+    def test_implementation_review_requires_completion_audit_rule(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "review.md"
+            review.write_text("\n".join(line for line in review.read_text(encoding="utf-8").splitlines() if "IMPL-RULE-007" not in line), encoding="utf-8")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("IMPL-RULE-007", result.stdout)
 
     def test_definition_requires_requirements_sections(self) -> None:
         with temp_project() as root:

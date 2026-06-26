@@ -6,13 +6,13 @@ Target: `03-implementation/implementation.md`
 
 ## Stage Responsibility
 
-The implementation stage records what actually changed, how it was validated, and how the result compares with the approved implementation plan, including its `Definition Fidelity Matrix`. It is evidence, not another planning stage.
+The implementation stage records what actually changed, how it was validated, and how the result compares with the approved implementation plan, including its `Definition Fidelity Matrix`. It is evidence, not another planning stage. Before final user approval, the implementation review subagent must audit every approved implementation-plan work item for completion and keep the implementation stage in a fix/review cycle until the latest review verdict is PASS.
 
 ## Selective Rework After Feedback
 
-When user feedback arrives during implementation review, classify whether the implementation result, implementation plan, or approved definition is wrong. Do not mark the request completed while that classification is unresolved.
+When user feedback or subagent completion-audit feedback arrives during implementation review, classify whether the implementation result, implementation plan, or approved definition is wrong. Do not mark the request completed while that classification is unresolved.
 
-If only implementation work is wrong, update `## Work Completed`, `## Validation`, and `## Review Result` after the correction. If actual work exposes an unapproved interpretation, treat the approved plan's `Definition Fidelity Matrix` as the deciding constraint and return to implementation-plan or definition as appropriate. If the plan or definition changes, preserve the existing implementation record as evidence and use `## Plan Compliance And Deviations` to state which completed work remains valid, which work was corrected, which work was rolled back, and which work is no longer applicable.
+If only implementation work is wrong, update `## Work Completed`, `## Validation`, and `## Review Result` after the correction, then rerun the implementation review subagent. If actual work exposes an unapproved interpretation, treat the approved plan's `Definition Fidelity Matrix` as the deciding constraint and return to implementation-plan or definition as appropriate. If the plan or definition changes, preserve the existing implementation record as evidence and use `## Plan Compliance And Deviations` to state which completed work remains valid, which work was corrected, which work was rolled back, and which work is no longer applicable.
 
 
 ## Request Type Profiles
@@ -40,7 +40,7 @@ For a Korean workflow, new implementation prose should default to Korean. Englis
 
 ## Plan Compliance And Deviations
 
-구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업을 포함해 기록한다.
+구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업, work item별 완료 증거를 포함해 기록한다.
 
 ## Validation
 
@@ -52,7 +52,7 @@ implementation review 결과를 기록한다.
 
 ## Completion Summary
 
-사용자가 승인할 수 있도록 plan 대비 실제 완료 결과를 기록한다.
+사용자가 승인할 수 있도록 plan 대비 실제 완료 결과와 남은 work item 리스크를 기록한다.
 ```
 
 ## Required Artifact Sections
@@ -73,3 +73,4 @@ implementation review 결과를 기록한다.
 | IMPL-RULE-004 | For bugfix or mixed requests, record problem-resolution or regression evidence. | `## Validation` or `## Completion Summary` includes evidence that current problems from definition are resolved or protected by regression checks. | Confirm bugfix evidence proves the reported problem no longer reproduces or is guarded. | Bugfix/mixed work lacks reproduction, regression, or equivalent problem-resolution evidence. |
 | IMPL-RULE-005 | Record the subagent implementation review result. | `## Review Result` states review outcome and blocking issue status. | Confirm review result matches the stage review gate. | Review result is missing or contradicts `review.md`. |
 | IMPL-RULE-006 | Summarize final outcome for user approval. | `## Completion Summary` explains the completed outcome and residual risk. | Confirm the user can approve or reject completion from the summary. | Completion summary is missing or too vague for final approval. |
+| IMPL-RULE-007 | Audit completion of every approved implementation-plan work item before user approval. | `## Work Completed`, `## Plan Compliance And Deviations`, `## Validation`, and `## Completion Summary` map each approved `Work Item ID` from `02-implementation-plan/implementation-plan.md` to actual changes, validation evidence, and final outcome. `## Review Result` records that the implementation review subagent checked the work-item completion audit and found no blocking issues. | Confirm the review subagent compared the approved implementation plan, implementation artifact, changed-file or diff evidence, and test output; classify every approved work item as completed before final user approval. | Any approved work item is missing from implementation evidence, partially completed, unverifiable, out of scope, insufficiently validated, hidden as a deviation, or not re-reviewed after a fix. |

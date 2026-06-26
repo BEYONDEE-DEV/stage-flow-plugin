@@ -13,7 +13,7 @@ Every request always moves through three stage folders:
 
 1. `01-definition`: definition -> subagent review -> user approval
 2. `02-implementation-plan`: implementation plan -> subagent review -> user approval
-3. `03-implementation`: implementation evidence -> subagent review -> user approval/completion
+3. `03-implementation`: implementation evidence -> completion audit subagent review -> fix/review cycle until PASS -> user approval/completion
 
 Definition contains these required files, plus a conditional transition-risk pair after the user stops clarification:
 
@@ -57,6 +57,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Record every review in the same stage's `review.md`, including review cycle history, current artifact fingerprint, latest verdict, blocking issues, and final verdict.
 - Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
+- During `implementation`, the review subagent must audit completion against every approved implementation-plan work item before final user approval. If any work item is incomplete, unverifiable, out of scope, insufficiently validated, or hidden as a deviation, do not ask for user approval; revise the implementation and `03-implementation/implementation.md`, then rerun the subagent review cycle until the latest review verdict is PASS.
 - Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
 - Apply `references/language-policy.md` for all Stageflow artifact prose, pending clarification options, review evidence, and completion summaries: keep fixed headings/table columns unchanged, but write natural-language content in the user-selected or inferred artifact language.
 - When presenting definition questions to the user, lead with the currently known context so the user understands why the question is being asked. Each visible question must name the decision needed, show all labeled options, state the recommended option, explain why the answer matters in user-facing terms, and say which definition area the answer will update.
@@ -149,7 +150,7 @@ For every stage:
 2. Run a subagent review using the matching stage review agent prompt, against only that stage's artifact and the previous approved stage artifacts needed for context.
 3. Record `Subagent review.` in `review.md` and the exact `Reviewed Artifact Fingerprint: sha256:<hex>`.
 4. Record `## Writing And Review Rule Checklist` using every Rule ID from the matching stage rule file.
-5. If the review finds blocking issues, revise the stage artifact and repeat the review cycle.
+5. If the review finds blocking issues, revise the stage artifact and repeat the review cycle. During `implementation`, blocking issues include any approved implementation-plan work item that is incomplete, unverifiable, out of scope, insufficiently validated, or not mapped to implementation evidence.
 6. Ask the user for explicit approval only after review passes.
 7. Record `Stage approved: yes`, `Approved By`, `Approved At`, and the user's explicit approval text in `approval.md`.
 
