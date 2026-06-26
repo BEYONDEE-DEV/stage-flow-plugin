@@ -58,8 +58,8 @@ The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates t
 
 Behavior:
 
-- Explicit Stageflow prompts without a session current pointer record `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and store turn state for the Stop hook.
-- Non-Stageflow prompts without a session current pointer record `PREPASS` and `turn_start_action: none`; stdout is empty.
+- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and store turn state for the Stop hook.
+- Non-Stageflow prompts without a session current pointer, including maintenance mentions such as Stageflow plugin docs or hook debugging, record `PREPASS` and `turn_start_action: none`; stdout is empty. This PREPASS state overwrites any stale prior turn state so Stop does not block unrelated later turns.
 - Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
 - Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` so new Stageflow work does not continue on terminal state.
 - Active requests record a preflight marker:

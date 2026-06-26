@@ -18,7 +18,13 @@ PHASE_TO_VALIDATION = {
     "implementation": "implementation",
     "completed": "all",
 }
-WORKFLOW_TOKENS = ("stageflow", "stage flow", ".stageflow", "workflow", "\uc6cc\ud06c\ud50c\ub85c\uc6b0")
+EXPLICIT_WORKFLOW_RE = re.compile(
+    r"\b(?:use|run|start|resume|continue|check|create)\s+(?:the\s+)?(?:stage\s*-?\s*flow|stageflow|workflow)\b|"
+    r"\b(?:stage\s*-?\s*flow|stageflow|workflow)\s+(?:status|request|current|resume|start|create|continue|plan|run|preflight)\b|"
+    r"\.stageflow\s+(?:status|request|current|workflow|preflight)\b|"
+    r"\uc6cc\ud06c\ud50c\ub85c\uc6b0\s*(?:\uc0c1\ud0dc|\uc2dc\uc791|\uc9c4\ud589|\uc7ac\uac1c|\uc694\uccad)",
+    re.IGNORECASE,
+)
 IMPLEMENTATION_TOKENS = (
     "implement",
     "implementation",
@@ -119,8 +125,7 @@ def extract_last_assistant(payload: dict[str, Any]) -> str:
 
 
 def is_explicit_workflow(prompt: str) -> bool:
-    lowered = prompt.lower()
-    return any(token in lowered for token in WORKFLOW_TOKENS)
+    return bool(EXPLICIT_WORKFLOW_RE.search(prompt))
 
 
 def looks_like_implementation(prompt: str) -> bool:
@@ -412,6 +417,9 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
     current = load_json(current_path(root, payload))
 
     if current is None:
+        if not explicit:
+            write_turn_state(root, payload, result)
+            return result
         if explicit:
             result.update(
                 {

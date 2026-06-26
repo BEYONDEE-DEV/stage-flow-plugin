@@ -543,6 +543,23 @@ Approved.
             self.assertEqual(result["turn_start_action"], "none")
             self.assertEqual(result["_stdout"], "")
 
+    def test_stageflow_plugin_maintenance_prompt_without_current_prepasses(self) -> None:
+        with temp_project() as root:
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "fix Stageflow plugin hook docs"})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["turn_start_action"], "none")
+            self.assertEqual(result["_stdout"], "")
+
+    def test_plain_prompt_clears_stale_request_required_state(self) -> None:
+        with temp_project() as root:
+            required = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(required["status"], "REQUEST_REQUIRED")
+            prepass = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "commit and review linux compatibility"})
+            self.assertEqual(prepass["status"], "PREPASS")
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "Committed and reviewed."})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["_wire_output"], {})
+
     def test_invalid_current_requires_pointer_repair(self) -> None:
         with temp_project() as root:
             current_dir = root / ".stageflow" / "sessions" / "session-1"
