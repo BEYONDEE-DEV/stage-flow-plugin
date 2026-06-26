@@ -264,6 +264,28 @@ PURPOSE_KEYWORD_RE = re.compile(
     r"\b(purpose|why|intent|value|goal|outcome|success)\b|목적|왜|의도|가치|목표|성과|성공",
     re.IGNORECASE,
 )
+IMPLEMENTATION_PLAN_ONLY_QUESTION_RE = re.compile(
+    r"\b("
+    r"file|files|module|modules|component|components|function|functions|class|classes|method|methods|"
+    r"architecture|library|libraries|package|packages|dependency|dependencies|"
+    r"test command|test commands|validation strategy|work item|work items|implementation order|"
+    r"schema|interface|interfaces|type|types|hook|hooks|script|scripts"
+    r")\b"
+    r"|파일|모듈|컴포넌트|함수|클래스|메서드|아키텍처|라이브러리|패키지|의존성|"
+    r"테스트\s*명령|검증\s*전략|작업\s*항목|구현\s*순서|스키마|인터페이스|타입|훅|스크립트",
+    re.IGNORECASE,
+)
+DEFINITION_LEVEL_QUESTION_RE = re.compile(
+    r"\b("
+    r"user-visible|user facing|service behavior|service meaning|product policy|policy|"
+    r"acceptance outcome|acceptance criteria|success signal|failure behavior|recovery behavior|"
+    r"security|privacy|authorization|authentication|payment|data responsibility|integration responsibility|"
+    r"scope|boundary|intent|purpose|user flow"
+    r")\b"
+    r"|사용자.{0,12}(동작|결과|흐름|화면|의미)|서비스.{0,12}(동작|의미)|정책|승인\s*기준|"
+    r"성공\s*판정|실패|복구|보안|개인정보|권한|인증|결제|데이터\s*책임|연동\s*책임|범위|경계|목적|의도",
+    re.IGNORECASE,
+)
 NO_PENDING_STATUS_RE = re.compile(r"^(none|n/a|no|없음)$", re.IGNORECASE)
 AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
 AWAITING_USER_GOAL_REASON = "awaiting user clarification"
@@ -549,6 +571,27 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str], ha
 
 
 
+def is_placeholder_question_text(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    return not normalized or normalized in {"n/a", "none", "no open question", "no pending clarification", "없음"}
+
+
+def validate_definition_question_stage_boundary(
+    path: Path,
+    section: str,
+    question_id: str,
+    combined_question_text: str,
+    errors: list[str],
+) -> None:
+    if is_placeholder_question_text(combined_question_text):
+        return
+    if IMPLEMENTATION_PLAN_ONLY_QUESTION_RE.search(combined_question_text) and not DEFINITION_LEVEL_QUESTION_RE.search(combined_question_text):
+        errors.append(
+            f"`{display_path(path)}` {section} row `{question_id}` asks an implementation-plan-only question; "
+            "defer module/file/test command/architecture/work-item decisions to implementation-plan unless the answer changes definition-level service meaning"
+        )
+
+
 def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: list[str]) -> list[str]:
     if stage.phase != "definition":
         return []
@@ -610,6 +653,13 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
             errors.append(
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
             )
+        validate_definition_question_stage_boundary(
+            path,
+            "Pending Clarifications",
+            pending_id,
+            " ".join((question, options, recommended, why)),
+            errors,
+        )
         messages.append(
             f"`{display_path(path)}` pending clarification `{pending_id}`: 질문 범위: {scope} [{scope}] Question: {question} Options: {options} Recommended: {recommended} Transition option: {transition} Why this matters: {why}"
         )
@@ -741,9 +791,26 @@ def validate_definition_purpose(path: Path, text: str, errors: list[str], has_pe
 def validate_definition_blocking_questions(path: Path, text: str, errors: list[str]) -> None:
     table = parse_first_markdown_table(section_text(text, "## Open Questions"))
     for row in table.rows:
+        question_id = row.get("ID", "").strip() or "<unknown>"
+        validate_definition_question_stage_boundary(
+            path,
+            "Open Questions",
+            question_id,
+            " ".join(
+                row.get(column, "")
+                for column in (
+                    "Decision Needed",
+                    "Context Or Conflict",
+                    "Recommended Option",
+                    "Alternatives",
+                    "Impact",
+                    "Resolution Target",
+                )
+            ),
+            errors,
+        )
         blocking_value = row.get("Blocking", "").strip()
         if BLOCKING_OPEN_QUESTION_RE.fullmatch(blocking_value):
-            question_id = row.get("ID", "").strip() or "<unknown>"
             errors.append(
                 f"`{display_path(path)}` Open Questions row `{question_id}` is still blocking; "
                 "resolve it before definition approval"

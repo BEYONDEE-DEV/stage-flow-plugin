@@ -621,6 +621,12 @@ Approved.
             "already answered/reflected user answers must move to implementation-plan coverage or constraints instead",
             "Intent Fidelity",
             "references/intent-fidelity.md",
+            "## Implementation-Plan Deferral Gate",
+            "implementation-plan-only questions",
+            "modules, components, functions",
+            "test commands, validation strategy",
+            "architecture",
+            "acceptance outcome",
         ):
             self.assertIn(phrase, definition_rules)
         for phrase in (
@@ -657,6 +663,10 @@ Approved.
             (skill_text, "Use selective rework instead of blanket invalidation"),
             (implementation_plan_rules, "## Definition Fidelity"),
             (implementation_plan_rules, "Definition Fidelity Matrix"),
+            (implementation_plan_rules, "Implementation-plan owns the technical decisions that definition must defer"),
+            (implementation_plan_rules, "test commands, validation strategy"),
+            (implementation_plan_rules, "work item split"),
+            (skill_text, "defer implementation-plan-only decisions"),
             (implementation_plan_rules, "return-to-definition"),
             (implementation_plan_rules, "references/intent-fidelity.md"),
             (skill_text, "references/language-policy.md"),
@@ -973,6 +983,98 @@ Approved.
                 DEFINITION_TEXT.replace(
                     "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
                     "| PENDING-001 | 큰방향 | Which artifact scope should be used? | Option 1: implementation plan artifact에 반영 범위 제한; Option 2: definition artifact에만 범위 기록 | Option 1 | N/A | This is a real proposal, not a stop signal. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER definition", result.stdout)
+
+    def test_pending_clarification_rejects_module_selection_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 세부확인 | Which module should implement the correction? | Option 1: validator module; Option 2: hook module | Option 1 | N/A | This chooses an implementation surface. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("implementation-plan-only question", result.stdout)
+
+    def test_pending_clarification_rejects_test_command_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 세부확인 | Which test command should validate the change? | Option 1: unittest validator; Option 2: full discovery | Option 1 | N/A | This chooses a validation strategy for implementation-plan. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("implementation-plan-only question", result.stdout)
+
+    def test_pending_clarification_rejects_architecture_or_library_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 주요결정 | Which architecture or library should the implementation use? | Option 1: parser helper; Option 2: regex helper | Option 1 | N/A | This chooses implementation architecture. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("implementation-plan-only question", result.stdout)
+
+    def test_open_question_rejects_work_item_split_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| Q-001 | No open question. | N/A | N/A | N/A | N/A | no | N/A |",
+                    "| Q-001 | How should work items be split? | Implementation can be split several ways. | One work item per file. | One work item per module. | Changes implementation order only. | no | Implementation Plan |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("implementation-plan-only question", result.stdout)
+
+    def test_pending_clarification_allows_acceptance_outcome_question(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 세부확인 | Which acceptance outcome should count as success for the user? | Option 1: reported workflow succeeds; Option 2: reported workflow plus adjacent regression guard succeeds | Option 1 | N/A | This changes the user-visible acceptance outcome, not the test command. | pending |",
                 ).replace(
                     "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
                     "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",

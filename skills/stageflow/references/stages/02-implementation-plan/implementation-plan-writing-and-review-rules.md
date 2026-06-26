@@ -24,6 +24,8 @@ The implementation-plan stage maps the approved definition behavior model to a d
 
 The implementation plan must not create new requirements, new UX policy, new service meaning, new endpoint semantics, or a narrower UX interpretation of ambiguous definition wording. When technical decisions reveal a missing product decision, return to the earlier Stageflow stage instead of silently deciding it here.
 
+Implementation-plan owns the technical decisions that definition must defer: files, modules, components, functions, hooks, scripts, architecture, libraries, packages, schema/type/interface shape, storage/query implementation, control/data-flow implementation, test commands, validation strategy, work item split, and implementation order. Resolve those as implementation-plan assumptions, work items, risks, or validation steps without asking the user unless the answer would change approved service meaning, user-visible behavior, policy, boundary, acceptance outcome, failure/recovery semantics, or service-level data responsibility.
+
 ## Request Type Profiles
 
 Use the approved request profile only to shape implementation evidence:
