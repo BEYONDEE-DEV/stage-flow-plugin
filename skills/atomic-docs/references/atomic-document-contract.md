@@ -104,11 +104,13 @@ Before writing or refreshing atom files, identify source-repeated business nouns
 
 Do not document a derived concept such as `resource deduction` while the parent business term such as `resource` / `제한자원` is missing or underdefined. If the parent meaning is uncertain, put the missing definition and evidence in the change plan or `Gaps` instead of writing confirmed intent.
 
+Do not force admin, operator, or screen-centric language when the source project is not an admin UI. For non-UI services, libraries, jobs, agents, or APIs, describe the relevant caller, service, job, policy, or system flow instead of inventing an operator workflow. When a UI or command entry point exists, include that entry point as source evidence.
+
 Each covered core business term should state:
 
 - business meaning
 - owning domain
-- operator action
+- primary actor, user, or system action
 - source of truth
 - stored input fields versus API/computed output fields
 - related status, hold, deduction, threshold, display, or availability rules

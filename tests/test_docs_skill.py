@@ -148,10 +148,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("appropriate domain atom", text)
         self.assertIn("derived concept such as `resource deduction`", text)
         self.assertIn("parent business term such as `resource`", text)
+        self.assertIn("Do not force admin, operator, or screen-centric language", text)
+        self.assertIn("services, libraries, jobs, agents, or APIs", text)
+        self.assertIn("caller, service, job, policy, or system flow", text)
+        self.assertIn("UI or command entry point", text)
         for coverage_item in [
             "business meaning",
             "owning domain",
-            "operator action",
+            "primary actor, user, or system action",
             "source of truth",
             "stored input fields versus API/computed output fields",
             "related status, hold, deduction, threshold, display, or availability rules",
