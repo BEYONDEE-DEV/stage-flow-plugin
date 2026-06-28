@@ -44,7 +44,8 @@ IMPLEMENTATION_TOKENS = (
     "\uc800\uc7a5",
     "\ud328\uce58",
 )
-COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc", "\ub05d")
+COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc")
+STOP_BLOCK_WIRE_REASON = "Stageflow cannot advance yet because the current workflow gate is not complete."
 AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"\b(completed|done)\b|완료\s*확인|목표(?:를)?\s*(?:완료|달성)|"
     r"\bdefinition\s+(?:approved|approval|is approved)\b|정의(?:\s*단계)?(?:가|를|은|는)?\s*(?:승인|approved)|"
@@ -313,7 +314,7 @@ def to_wire_output(event: str, result: dict[str, Any]) -> dict[str, Any] | None:
     if event == "stop":
         if not is_blocked:
             return None
-        return {"decision": "block", "reason": wire_reason(result, "Stageflow stop gate blocked this turn")}
+        return {"decision": "block", "reason": STOP_BLOCK_WIRE_REASON}
 
     if event == "subagent_start":
         if not is_blocked:
@@ -482,6 +483,7 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") == "AWAITING_USER":
             if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
                 block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
+            return result
 
         if looks_like_completion(last_message):
             validation = run_validator(root, "all", payload)

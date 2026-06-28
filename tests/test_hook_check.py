@@ -667,6 +667,21 @@ Approved.
             self.assertEqual(result["status"], "PREPASS")
             self.assertEqual(result["_wire_output"], {})
 
+    def test_stop_completion_like_response_blocks_with_safe_public_reason(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "completed"}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+            self.assertNotIn("completion-like response", result["_wire_output"]["reason"])
+            self.assertNotIn("Stageflow preflight", result["_wire_output"]["reason"])
+            self.assertNotIn(".stageflow/hook-state", result["_wire_output"]["reason"])
+            self.assertNotIn("pending clarification", result["_wire_output"]["reason"].lower())
+
     def test_pre_tool_use_blocks_non_stageflow_write_before_implementation_plan_passes(self) -> None:
         with temp_project() as root:
             self.create_project(root, "implementation")
@@ -806,7 +821,12 @@ Approved.
                 {"session_id": "session-1", "last_assistant_message": marker + "\ndefinition approved"},
                 expected_returncode=0,
             )
-            self.assertIn("must not claim completion or next-stage progress", "\n".join(result["warnings"]))
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+            self.assertNotIn("must not claim completion", result["_wire_output"]["reason"])
 
 
     def test_awaiting_user_allows_question_generation_subagent(self) -> None:
@@ -935,6 +955,22 @@ Approved.
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
             self.assertEqual(result["status"], "PREPASS")
 
+    def test_awaiting_user_stop_ignores_completion_words_in_question_options(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            last_message = (
+                "1. 모의거래 결과 확정 단위\n"
+                "Option 1: 하루 장이 끝날 때마다 일별 결과를 확정한다\n"
+                "Option 2: 선택 완료 기준은 전략 실행 기간 전체를 하나의 run으로 본다\n"
+                "Option 3: 일별 스냅샷과 run 전체 누적 결과를 함께 둔다"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["_wire_output"], {})
+            self.assertNotIn("completion_validation", result)
+
     def test_awaiting_user_stop_does_not_enforce_labeled_options_from_hook_guess(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -1038,7 +1074,14 @@ Approved.
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
-            self.assertIn("must not claim completion", "\n".join(result["warnings"]))
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+            self.assertNotIn("must not claim completion", result["_wire_output"]["reason"])
+            self.assertNotIn("Stageflow preflight", result["_wire_output"]["reason"])
+            self.assertNotIn(".stageflow/hook-state", result["_wire_output"]["reason"])
+            self.assertNotIn("pending clarification", result["_wire_output"]["reason"].lower())
 
 
 if __name__ == "__main__":

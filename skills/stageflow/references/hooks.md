@@ -31,14 +31,14 @@ Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands
 
 `stageflow_hook_check.py` keeps Stageflow's internal audit result separate from the Codex hook stdout response. Internal fields such as `event`, `status`, `severity`, `turn_start_action`, `validation`, `warnings`, and pending clarification details are stored under `.stageflow/hook-state/`; they must not be emitted as top-level stdout JSON fields because Codex hook schemas reject unknown properties.
 
-Hook stdout and `additionalContext` are model-facing workflow guidance, not user-visible transcript text. Do not copy raw hook diagnostics, `.stageflow/hook-state` JSON, `turn_start_instruction`, or preflight marker strings into assistant responses.
+Hook stdout and `additionalContext` are model-facing workflow guidance, not user-visible transcript text. Codex CLI may show Stop hook `reason` text when a turn is blocked, so Stop reasons must be short, safe, and non-diagnostic. Do not copy raw hook diagnostics, `.stageflow/hook-state` JSON, `turn_start_instruction`, Stop feedback, or preflight marker strings into assistant responses.
 
 Stdout follows the generated Codex hook output schemas:
 
 - No control needed: write nothing to stdout and exit `0`.
 - `UserPromptSubmit`: write `hookSpecificOutput.hookEventName: "UserPromptSubmit"` plus `additionalContext` when Stageflow needs to guide the next turn. Use top-level `decision: "block"` only for prompt submission blocks.
 - `PreToolUse`: write `hookSpecificOutput.hookEventName: "PreToolUse"`, `permissionDecision: "deny"`, and `permissionDecisionReason` when blocking a tool call.
-- `Stop` and `SubagentStop`: write top-level `decision: "block"` and `reason` when blocking.
+- `Stop` and `SubagentStop`: write top-level `decision: "block"` and `reason` when blocking. Stop uses a generic public reason while detailed validation state remains in `.stageflow/hook-state/`.
 - `SubagentStart`: write `continue: false` and `stopReason` when blocking a subagent start.
 
 Normal hook policy decisions, including deny/block outputs, exit `0`. Only hook execution failures such as invalid input JSON exit non-zero.
@@ -82,8 +82,8 @@ The stop hook reads the previous turn state from `.stageflow/hook-state/`.
 Behavior:
 
 - The preflight marker is internal tracking state; the stop hook does not check whether the assistant response includes it.
-- `AWAITING_USER` responses must not claim completion or next-stage progress. The hook does not enforce pending-question restatement from a guessed user intent; that semantic contract belongs to the Stageflow skill instructions.
-- Completion-like responses validate `--phase all`.
+- `AWAITING_USER` responses must not claim completion or next-stage progress. The hook does not enforce pending-question restatement from a guessed user intent, and it does not run the general completion-like `--phase all` validation while waiting for user answers; that semantic contract belongs to the Stageflow skill instructions.
+- Non-`AWAITING_USER` completion-like responses validate `--phase all`.
 - Missing current pointers after explicit Stageflow prompts, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and completion validation failures return a block decision instead of silently warning.
 
 ## Subagent Hooks

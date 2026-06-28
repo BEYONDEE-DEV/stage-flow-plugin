@@ -119,7 +119,7 @@ At the start of every turn using this skill:
 
 Treat `turn_start_instruction` in the hook result as mandatory structural guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts for workflow safety, but do not treat hook state as the authority for natural-language user intent.
 
-Do not quote raw hook `additionalContext`, `preflight_marker`, `turn_start_instruction`, or `.stageflow/hook-state` JSON in user-visible responses. These are internal workflow guidance. Show only the user-facing decision, question, artifact result, or next action in natural language.
+Do not quote raw hook `additionalContext`, `preflight_marker`, `turn_start_instruction`, Stop hook feedback, or `.stageflow/hook-state` JSON in user-visible responses. These are internal workflow signals that may still appear in Codex CLI. Show only the user-facing decision, question, artifact result, or next action in natural language.
 
 Use request IDs in this form:
 
@@ -195,7 +195,7 @@ Plugin hooks are read-only for durable workflow artifacts except for runtime rec
 - `PreToolUse` blocks non-Stageflow file edits until `implementation-plan` validates, while allowing `.stageflow/**` artifact creation and repair.
 - `UserPromptSubmit` checks the active stage, records structural `status`, `turn_start_action`, and the internal preflight marker under `.stageflow/hook-state/`, and passes next-turn guidance through Codex hook wire output `additionalContext` instead of top-level internal JSON fields. `additionalContext` is model guidance, not user transcript text. It does not classify natural-language user intent.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and record `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` in hook state/additional context when the gate fails.
-- `Stop` does not require the assistant response to include the preflight marker. It still blocks missing current pointers after explicit Stageflow prompts, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and completion-like responses that fail `--phase all`.
+- `Stop` does not require the assistant response to include the preflight marker. It still blocks missing current pointers after explicit Stageflow prompts, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and non-`AWAITING_USER` completion-like responses that fail `--phase all`. Stop hook feedback may be visible in Codex CLI, so it must stay short and non-diagnostic.
 - `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. The skill, not the hook, decides whether the user answered, asked a follow-up, or explicitly stopped clarification. Answer turns may revise `definition.md` and create the next pending batch; follow-up turns must restate all pending labeled choices; stop-signal turns must run the definition transition-risk goal before review, approval, or implementation-plan work.
 - Question-generation subagents may run in parallel during `AWAITING_USER` only to prepare optional `01-definition/question-backlog.md` candidates. Other subagent roles or subagent writes to stage artifacts/review/approval are blocked in that wait state.
 
