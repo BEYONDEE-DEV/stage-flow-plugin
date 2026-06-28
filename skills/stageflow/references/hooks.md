@@ -23,7 +23,7 @@ Stageflow ships plugin-provided hooks that audit the three-stage workflow model 
 - `SubagentStart`
 - `SubagentStop`
 
-Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands must not use target-relative paths such as `python hooks/stageflow_hook.py ...`. The declared commands use a small inline Python bootstrap that resolves `scripts/stageflow_hook_check.py` from `STAGEFLOW_PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT`, or the installed Codex plugin cache under `~/.codex/plugins/cache/**/stageflow*/**/scripts/stageflow_hook_check.py`. If no checker is found, the hook writes a warning and exits successfully instead of blocking the user's project because of a stale path.
+Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands must not use target-relative paths such as `python hooks/stageflow_hook.py ...`. The declared commands use a small inline Python bootstrap and try Python launchers in this order: `python3`, `py -3`, then `python`. This supports POSIX-style environments where `python3` is standard and Windows environments where the Python launcher commonly provides `py -3`. The bootstrap resolves `scripts/stageflow_hook_check.py` from `STAGEFLOW_PLUGIN_ROOT`, `CODEX_PLUGIN_ROOT`, `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT`, or the installed Codex plugin cache under `~/.codex/plugins/cache/**/stageflow*/**/scripts/stageflow_hook_check.py`. If no checker is found, the hook writes a warning and exits successfully instead of blocking the user's project because of a stale path.
 
 `stageflow_hook_check.py` resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `hooks/stageflow_hook.py` or `scripts/validate_stageflow.py`.
 
@@ -105,17 +105,23 @@ Do not treat hook-state files as durable workflow artifacts. Durable request sta
 Run a pre-tool edit gate check:
 
 ```bash
-'{"hook_event_name":"PreToolUse","session_id":"session-1","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}' | python <plugin-root>/scripts/stageflow_hook_check.py --event pre_tool_use --root <target-project-root>
+'{"hook_event_name":"PreToolUse","session_id":"session-1","tool_name":"Write","tool_input":{"file_path":"src/app.ts"}}' | python3 <plugin-root>/scripts/stageflow_hook_check.py --event pre_tool_use --root <target-project-root>
 ```
 
 Run a prompt check:
 
 ```bash
-'{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | python <plugin-root>/scripts/stageflow_hook_check.py --event user_prompt_submit --root <target-project-root>
+'{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | python3 <plugin-root>/scripts/stageflow_hook_check.py --event user_prompt_submit --root <target-project-root>
 ```
 
 Run a stop check:
 
 ```bash
-'{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"구현 완료했습니다."}' | python <plugin-root>/scripts/stageflow_hook_check.py --event stop --root <target-project-root>
+'{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"구현 완료했습니다."}' | python3 <plugin-root>/scripts/stageflow_hook_check.py --event stop --root <target-project-root>
+```
+
+On Windows native shells, use `py -3` instead of `python3` for the same manual checks:
+
+```powershell
+'{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"[$stageflow:stageflow] 상태 확인"}' | py -3 <plugin-root>/scripts/stageflow_hook_check.py --event user_prompt_submit --root <target-project-root>
 ```

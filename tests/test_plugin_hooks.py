@@ -31,6 +31,9 @@ class PluginHookDeclarationTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn("stageflow_hook_check.py", command)
                 self.assertIn("STAGEFLOW_PLUGIN_ROOT", command)
+                self.assertIn("python3 -c", command)
+                self.assertIn("py -3 -c", command)
+                self.assertIn("python -c", command)
                 self.assertNotIn("python hooks/stageflow_hook.py", command)
                 self.assertNotIn("hooks/stageflow_hook.py", command)
                 self.assertNotIn(r"hooks\stageflow_hook.py", command)
