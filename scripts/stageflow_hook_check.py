@@ -45,23 +45,11 @@ IMPLEMENTATION_TOKENS = (
     "\ud328\uce58",
 )
 COMPLETION_TOKENS = ("complete", "completed", "done", "\uc644\ub8cc", "\ub05d")
-OPTION_ITEM_RE = re.compile(r"(?:^|[;\n|]\s*)((?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:[^;\n|]+)", re.IGNORECASE)
 AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"\b(completed|done)\b|완료\s*확인|목표(?:를)?\s*(?:완료|달성)|"
     r"\bdefinition\s+(?:approved|approval|is approved)\b|정의(?:\s*단계)?(?:가|를|은|는)?\s*(?:승인|approved)|"
     r"다음\s*단계(?:로)?\s*(?:진행|이동)|서비스\s*계획(?:을)?\s*(?:작성|진행|시작)|"
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
-    re.IGNORECASE,
-)
-USER_STOP_SIGNAL_RE = re.compile(
-    r"\b(proceed|go ahead|approve|approved|yes)\b|"
-    r"구현\s*계획(?:으로|로)?\s*넘어가기|질문\s*그만|충분해?|진행|승인",
-    re.IGNORECASE,
-)
-PENDING_ANSWER_RE = re.compile(
-    r"\boption\s*[1-9]\d*\b|선택지\s*[1-9]\d*|"
-    r"(?:^|[\s,;/])(?:[1-9]\d*)(?:\s*[,/]\s*[1-9]\d*)+(?:$|[\s,;/])|"
-    r"^\s*[1-9]\d*\s*$",
     re.IGNORECASE,
 )
 PREFLIGHT_MARKER_PREFIX = "Stageflow preflight:"
@@ -136,73 +124,6 @@ def looks_like_implementation(prompt: str) -> bool:
 def looks_like_completion(text: str) -> bool:
     lowered = text.lower()
     return any(token in lowered for token in COMPLETION_TOKENS)
-
-
-def pending_output_requirements(pending_output: str) -> list[tuple[str, list[str]]]:
-    requirements: list[tuple[str, list[str]]] = []
-    for line in pending_output.splitlines():
-        if "pending clarification" not in line or "Question: " not in line or " Options: " not in line:
-            continue
-        question = line.split("Question: ", 1)[1].split(" Options: ", 1)[0].strip()
-        options = line.split(" Options: ", 1)[1].split(" Recommended: ", 1)[0].strip()
-        scope = ""
-        if "질문 범위: " in line and " Question: " in line:
-            scope = line.split("질문 범위: ", 1)[1].split(" Question: ", 1)[0].strip()
-            if " [" in scope:
-                scope = scope.split(" [", 1)[0].strip()
-        transition = ""
-        if " Transition option: " in line and " Why this matters: " in line:
-            transition = line.split(" Transition option: ", 1)[1].split(" Why this matters: ", 1)[0].strip()
-        option_items = [item.strip() for item in OPTION_ITEM_RE.findall(options)]
-        if transition.lower() in {"n/a", "none", "없음"}:
-            transition = ""
-        scope_label = f"[{scope}]" if scope else ""
-        required_parts = [part for part in (scope_label, question, transition) if part]
-        required_parts.extend(option_items)
-        if len(option_items) < 2:
-            required_parts.append("at least two explicit option labels such as Option 1: and Option 2:")
-        requirements.append((question or "pending clarification", required_parts))
-    return requirements
-
-
-def pending_output_option_items(pending_output: str) -> list[str]:
-    options: list[str] = []
-    for _question, required_parts in pending_output_requirements(pending_output):
-        for part in required_parts:
-            if OPTION_ITEM_RE.match(part):
-                options.append(part)
-    return options
-
-
-def option_body(option_item: str) -> str:
-    if ":" not in option_item:
-        return option_item.strip()
-    return option_item.split(":", 1)[1].strip()
-
-
-def classify_awaiting_user_prompt(prompt: str, pending_output: str) -> str:
-    if USER_STOP_SIGNAL_RE.search(prompt):
-        return "stop_signal"
-    if PENDING_ANSWER_RE.search(prompt):
-        return "pending_answer"
-    lowered_prompt = prompt.lower()
-    for option in pending_output_option_items(pending_output):
-        body = option_body(option)
-        if len(body) >= 8 and body.lower() in lowered_prompt:
-            return "pending_answer"
-    return "follow_up"
-
-
-def missing_pending_response_parts(last_message: str, pending_output: str) -> list[str]:
-    missing: list[str] = []
-    for question_label, required_parts in pending_output_requirements(pending_output):
-        for part in required_parts:
-            if part and part not in last_message:
-                missing.append(f"{question_label}: {part}")
-    if not missing and pending_output and not pending_output_requirements(pending_output):
-        if "pending clarification" not in last_message.lower() and "대기" not in last_message:
-            missing.append("pending clarification summary")
-    return missing
 
 
 def subagent_text(payload: dict[str, Any]) -> str:
@@ -338,7 +259,6 @@ def user_prompt_additional_context(result: dict[str, Any]) -> str:
         f"turn_start_action: {result.get('turn_start_action')}",
     ]
     for key, label in (
-        ("preflight_marker", "preflight_marker"),
         ("turn_start_instruction", "instruction"),
         ("reason", "reason"),
     ):
@@ -492,22 +412,10 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
     elif validation["status"] == "AWAITING_USER":
         status = "AWAITING_USER"
         severity = "info"
-        prompt_kind = classify_awaiting_user_prompt(prompt, validation.get("output", ""))
-        if prompt_kind == "pending_answer":
-            action = "apply_user_clarification_answer"
-            instruction = (
-                "The user answered the pending clarification batch. Reflect the answer in definition.md, compare any question-backlog.md candidates against the answer impact, then create the next pending clarification batch and stop for the user."
-            )
-        elif prompt_kind == "stop_signal":
-            action = "run_definition_transition_risk_goal"
-            instruction = (
-                "The user explicitly stopped definition clarification. Record the stop signal in Clarification History, then run only the definition transition-risk goal: create or update `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and do not start review, approval, or implementation-plan work until the transition-risk gate is satisfied."
-            )
-        else:
-            action = "answer_follow_up_and_restate_pending"
-            instruction = (
-                "The current Stageflow stage is waiting for user clarification. Answer the follow-up, restate every pending clarification question with all labeled options, and stop. Question-generation subagents may prepare question-backlog.md candidates in parallel, but the main response must not review, approve, or advance."
-            )
+        action = "handle_awaiting_user_clarification"
+        instruction = (
+            "The current Stageflow stage has an active pending clarification batch. Interpret the latest user message semantically against the pending questions: reflect answers into definition.md and create the next pending batch, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. Do not review, approve, advance, or implement while AWAITING_USER remains active."
+        )
     else:
         status = "WARNING"
         severity = "warning"
@@ -537,7 +445,6 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         result["warnings"].append("current Stageflow stage validation failed")
     elif validation["status"] == "AWAITING_USER":
         result["pending_clarification_output"] = validation.get("output", "")
-        result["awaiting_user_prompt_kind"] = classify_awaiting_user_prompt(prompt, validation.get("output", ""))
 
     if looks_like_implementation(prompt) and validation["status"] != "AWAITING_USER":
         entry_gate = run_validator(root, "implementation-plan", payload)
@@ -560,10 +467,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
 def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     turn = read_turn_state(root, payload)
     if turn.get("preflight_required"):
-        marker = str(turn.get("preflight_marker") or "")
         last_message = extract_last_assistant(payload)
-        if marker and marker not in last_message:
-            block_result(result, "assistant response is missing required Stageflow preflight marker")
 
         if turn.get("request_creation_required") and load_json(current_path(root, payload)) is None:
             block_result(result, "explicit Stageflow prompt ended without creating a session current pointer")
@@ -578,16 +482,6 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") == "AWAITING_USER":
             if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
                 block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
-            if turn.get("awaiting_user_prompt_kind") == "follow_up":
-                missing_parts = missing_pending_response_parts(
-                    last_message, str(turn.get("pending_clarification_output") or "")
-                )
-                if missing_parts:
-                    block_result(
-                        result,
-                        "AWAITING_USER follow-up response must restate pending clarification questions and labeled options: "
-                        + "; ".join(missing_parts[:20]),
-                    )
 
         if looks_like_completion(last_message):
             validation = run_validator(root, "all", payload)
@@ -689,9 +583,10 @@ def is_question_backlog_write(payload: dict[str, Any]) -> bool:
     return "question-backlog.md" in normalize_tool_path(command).lower()
 
 
-def is_transition_risk_gate_write(payload: dict[str, Any]) -> bool:
+def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
     allowed_suffixes = (
         "/01-definition/definition.md",
+        "/01-definition/question-backlog.md",
         "/01-definition/transition-risk-goal.md",
         "/01-definition/transition-risk.md",
     )
@@ -704,10 +599,17 @@ def is_transition_risk_gate_write(payload: dict[str, Any]) -> bool:
     if not command:
         return False
     return (
-        "01-definition/definition.md" in command
-        or "01-definition/transition-risk-goal.md" in command
-        or "01-definition/transition-risk.md" in command
-    ) and "02-implementation-plan" not in command and "03-implementation" not in command
+        (
+            "01-definition/definition.md" in command
+            or "01-definition/question-backlog.md" in command
+            or "01-definition/transition-risk-goal.md" in command
+            or "01-definition/transition-risk.md" in command
+        )
+        and "01-definition/review/" not in command
+        and "01-definition/approval.md" not in command
+        and "02-implementation-plan" not in command
+        and "03-implementation" not in command
+    )
 
 
 def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
@@ -733,16 +635,11 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
         block_result(result, "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates")
         return result
 
-    if (
-        turn.get("status") == "AWAITING_USER"
-        and turn.get("awaiting_user_prompt_kind") == "stop_signal"
-        and turn.get("turn_start_action") == "run_definition_transition_risk_goal"
-        and is_stageflow_artifact_write(payload)
-    ):
-        if is_transition_risk_gate_write(payload):
-            result["transition_risk_gate_write"] = True
+    if turn.get("status") == "AWAITING_USER" and is_stageflow_artifact_write(payload):
+        if is_awaiting_user_definition_write(payload):
+            result["awaiting_user_definition_write"] = True
             return result
-        block_result(result, "definition stop-signal turns may only write `01-definition/definition.md`, `01-definition/transition-risk-goal.md`, or `01-definition/transition-risk.md` before transition risk confirmation")
+        block_result(result, "AWAITING_USER turns may only write `01-definition/definition.md`, `01-definition/question-backlog.md`, `01-definition/transition-risk-goal.md`, or `01-definition/transition-risk.md` before clarification is resolved")
         return result
 
     if is_stageflow_artifact_write(payload):
@@ -788,7 +685,6 @@ def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dic
         }
     )
     if event == "subagent_start" and turn.get("status") == "AWAITING_USER":
-        result["awaiting_user_prompt_kind"] = turn.get("awaiting_user_prompt_kind")
         if is_question_generation_subagent(payload):
             result["status"] = "QUESTION_BACKLOG_SUBAGENT_ALLOWED"
             result["question_backlog_allowed"] = True

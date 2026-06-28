@@ -11,7 +11,7 @@
 - [Runtime State](#runtime-state)
 - [Manual Checks](#manual-checks)
 
-Stageflow ships plugin-provided hooks that audit the three-stage workflow model and block premature file edits. The hooks do not create or repair request artifacts. They record current state under `.stageflow/hook-state/`, write only Codex hook wire-schema output to stdout, and block non-Stageflow file edits until the implementation-plan gate passes.
+Stageflow ships plugin-provided hooks that audit the three-stage workflow model and block premature file edits. The hooks do not create or repair request artifacts and do not classify natural-language user intent. They record structural state under `.stageflow/hook-state/`, write only Codex hook wire-schema output to stdout, and block unsafe writes until the relevant workflow gate passes.
 
 ## Events
 
@@ -31,6 +31,8 @@ Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands
 
 `stageflow_hook_check.py` keeps Stageflow's internal audit result separate from the Codex hook stdout response. Internal fields such as `event`, `status`, `severity`, `turn_start_action`, `validation`, `warnings`, and pending clarification details are stored under `.stageflow/hook-state/`; they must not be emitted as top-level stdout JSON fields because Codex hook schemas reject unknown properties.
 
+Hook stdout and `additionalContext` are model-facing workflow guidance, not user-visible transcript text. Do not copy raw hook diagnostics, `.stageflow/hook-state` JSON, `turn_start_instruction`, or preflight marker strings into assistant responses.
+
 Stdout follows the generated Codex hook output schemas:
 
 - No control needed: write nothing to stdout and exit `0`.
@@ -47,7 +49,7 @@ The hook inspects write-like tools before they run.
 
 Behavior:
 
-- Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired, except that after an `AWAITING_USER` stop signal the main agent is limited to `01-definition/definition.md`, `01-definition/transition-risk-goal.md`, and `01-definition/transition-risk.md` until transition risk confirmation is handled.
+- Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired, except that while `AWAITING_USER` is active the main agent is limited to `01-definition/definition.md`, `01-definition/question-backlog.md`, `01-definition/transition-risk-goal.md`, and `01-definition/transition-risk.md`.
 - Non-write tools and read-only shell commands return `PREPASS`.
 - Non-Stageflow file edits are blocked while an active Stageflow request lacks a valid session current pointer or while the plugin-bundled validator fails `--phase implementation-plan` for the target project root.
 - Completed Stageflow requests do not authorize new file edits; start a new request first.
@@ -58,19 +60,19 @@ The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates t
 
 Behavior:
 
-- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, require a preflight marker, and store turn state for the Stop hook.
+- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, an internal preflight marker, and store turn state for the Stop hook.
 - Non-Stageflow prompts without a session current pointer, including maintenance mentions such as Stageflow plugin docs or hook debugging, record `PREPASS` and `turn_start_action: none`; stdout is empty. This PREPASS state overwrites any stale prior turn state so Stop does not block unrelated later turns.
 - Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
 - Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` so new Stageflow work does not continue on terminal state.
-- Active requests record a preflight marker:
+- Active requests record an internal preflight marker:
 
 ```text
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL|AWAITING_USER>
 ```
 
-- Active requests also record `turn_start_action`: `continue_current_stage` when validation passes; `answer_follow_up_and_restate_pending`, `apply_user_clarification_answer`, or `run_definition_transition_risk_goal` for `AWAITING_USER` definition turns; or `repair_current_stage` when the current stage fails validation.
-- These values are internal hook-state fields. `UserPromptSubmit` stdout is empty for `PREPASS`; otherwise it uses `hookSpecificOutput.hookEventName: "UserPromptSubmit"` with `additionalContext`, except true prompt blocks use top-level `decision: "block"` and `reason`.
-- Pending clarification validation records `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook classifies the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Pending-answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns must record the stop, run the definition transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, and ask the user to confirm risk cases before definition review/approval. Definition still does not use `01-definition/goal.md` for this status.
+- Active requests also record structural `turn_start_action`: `continue_current_stage` when validation passes; `handle_awaiting_user_clarification` when definition has an active pending clarification batch; or `repair_current_stage` when the current stage fails validation.
+- These values are internal hook-state fields. The preflight marker is not required in assistant responses. `UserPromptSubmit` stdout is empty for `PREPASS`; otherwise it uses `hookSpecificOutput.hookEventName: "UserPromptSubmit"` with `additionalContext`, except true prompt blocks use top-level `decision: "block"` and `reason`.
+- Pending clarification validation records `AWAITING_USER`; this is normal user-answer waiting, not artifact repair. The hook does not classify the user prompt as a follow-up, answer, or stop signal. Stageflow skill instructions must compare the latest user message with the pending batch semantically. Follow-up responses must answer and restate all pending questions/labeled options, then stop. Answer turns may update `definition.md` and use optional `01-definition/question-backlog.md` candidates for the next batch. Stop-signal turns must record the stop, run the definition transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, and ask the user to confirm risk cases before definition review/approval. Definition still does not use `01-definition/goal.md` for this status.
 - Implementation-like prompts also validate `--phase implementation-plan`. If that gate fails, the hook records `IMPLEMENTATION_BLOCKED`, `implementation_block_required: true`, and `turn_start_action: repair_implementation_plan_gate`; implementation must not proceed.
 - `turn_start_instruction` is mandatory next-action guidance for the main agent.
 ## Stop
@@ -79,10 +81,10 @@ The stop hook reads the previous turn state from `.stageflow/hook-state/`.
 
 Behavior:
 
-- If a preflight marker was required, the assistant response must include it.
-- `AWAITING_USER` follow-up responses must include every pending question in the batch with its explicit labeled options and must not claim completion or next-stage progress. Pending-answer and stop-signal turns are not forced to restate the old batch, but stop-signal turns must not claim definition approval or implementation-plan start before the transition-risk files and user confirmations satisfy validation.
+- The preflight marker is internal tracking state; the stop hook does not check whether the assistant response includes it.
+- `AWAITING_USER` responses must not claim completion or next-stage progress. The hook does not enforce pending-question restatement from a guessed user intent; that semantic contract belongs to the Stageflow skill instructions.
 - Completion-like responses validate `--phase all`.
-- Missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion validation failures return a block decision instead of silently warning.
+- Missing current pointers after explicit Stageflow prompts, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and completion validation failures return a block decision instead of silently warning.
 
 ## Subagent Hooks
 

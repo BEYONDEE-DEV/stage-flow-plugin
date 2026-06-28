@@ -105,16 +105,21 @@ At the start of every turn using this skill:
    - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before doing new workflow work.
    - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER`: classify the user prompt as `follow_up`, `pending_answer`, or `stop_signal`. For `follow_up`, answer, restate every pending question with all labeled options, and stop. For `pending_answer`, reflect the answer into `definition.md`, compare `question-backlog.md` candidates against answer impact, and create the next pending batch. For `stop_signal`, record the stop signal, create the transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and only then proceed to definition review/approval. No definition `goal.md` is required.
+   - `AWAITING_USER`: treat the hook as structural notice that `definition.md` has an active pending clarification batch. Do not rely on hook-side natural-language intent classification. Read the latest user message against the pending questions and decide semantically:
+     - If the message answers the batch, including compact forms such as `1번은 2번, 2번은 3번, 3번은 넘김`, reflect the answers into `definition.md`, compare `question-backlog.md` candidates against answer impact, create the next pending batch, and stop.
+     - If the message asks a follow-up or asks what an option means, answer the follow-up, restate every still-pending question with all labeled options, and stop.
+     - If the message explicitly stops clarification, such as `질문 그만` or `구현 계획으로 넘어가기`, record the stop signal, create the transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and only then proceed to definition review/approval. No definition `goal.md` is required.
    - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
    - `OK` / `continue_current_stage`: continue only from the validated current stage.
 3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
 4. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
 5. Decide whether the latest user message continues the current request or starts a separate request.
 6. Run the validator for the current stage when artifacts exist.
-7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; show every pending question in the batch with its explicit labeled options, then wait for the user.
+7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; handle the user message by semantic comparison with the pending batch as described above, then stop at the appropriate clarification boundary.
 
-Treat `turn_start_instruction` in the hook result as mandatory next-action guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts first.
+Treat `turn_start_instruction` in the hook result as mandatory structural guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts for workflow safety, but do not treat hook state as the authority for natural-language user intent.
+
+Do not quote raw hook `additionalContext`, `preflight_marker`, `turn_start_instruction`, or `.stageflow/hook-state` JSON in user-visible responses. These are internal workflow guidance. Show only the user-facing decision, question, artifact result, or next action in natural language.
 
 Use request IDs in this form:
 
@@ -188,10 +193,10 @@ The validator is an auditor. Treat failures as the next action to repair.
 Plugin hooks are read-only for durable workflow artifacts except for runtime records under `.stageflow/hook-state/`. They may block premature tool use.
 
 - `PreToolUse` blocks non-Stageflow file edits until `implementation-plan` validates, while allowing `.stageflow/**` artifact creation and repair.
-- `UserPromptSubmit` checks the active stage, records `status` and `turn_start_action` under `.stageflow/hook-state/`, and passes next-turn guidance through Codex hook wire output `additionalContext` instead of top-level internal JSON fields.
+- `UserPromptSubmit` checks the active stage, records structural `status`, `turn_start_action`, and the internal preflight marker under `.stageflow/hook-state/`, and passes next-turn guidance through Codex hook wire output `additionalContext` instead of top-level internal JSON fields. `additionalContext` is model guidance, not user transcript text. It does not classify natural-language user intent.
 - Implementation-like prompts validate `implementation-plan` before code work proceeds and record `IMPLEMENTATION_BLOCKED` with `turn_start_action: repair_implementation_plan_gate` in hook state/additional context when the gate fails.
-- `Stop` blocks missing preflight markers, missing current pointers after explicit Stageflow prompts, invalid current pointers, and completion-like responses that fail `--phase all`.
-- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. Follow-up turns must restate all pending labeled choices; answer turns may revise `definition.md` and create the next pending batch; stop-signal turns must run the definition transition-risk goal before review, approval, or implementation-plan work.
+- `Stop` does not require the assistant response to include the preflight marker. It still blocks missing current pointers after explicit Stageflow prompts, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and completion-like responses that fail `--phase all`.
+- `AWAITING_USER` means a definition artifact has an active `Pending Clarifications` batch. The main response must not claim completion or next-stage progress. The skill, not the hook, decides whether the user answered, asked a follow-up, or explicitly stopped clarification. Answer turns may revise `definition.md` and create the next pending batch; follow-up turns must restate all pending labeled choices; stop-signal turns must run the definition transition-risk goal before review, approval, or implementation-plan work.
 - Question-generation subagents may run in parallel during `AWAITING_USER` only to prepare optional `01-definition/question-backlog.md` candidates. Other subagent roles or subagent writes to stage artifacts/review/approval are blocked in that wait state.
 
 See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.
