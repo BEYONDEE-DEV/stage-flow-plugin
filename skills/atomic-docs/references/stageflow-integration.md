@@ -19,6 +19,14 @@ This reference defines how the `atomic-docs` skill behaves when invoked during S
 - Stageflow artifacts are not the default docs refresh evidence source.
 - Docs submodule files own durable externalized project knowledge.
 
+## Requirement Evidence
+
+Use a Stageflow artifact as required behavior evidence only when it is an approved definition, approved implementation plan, approved policy/rule, or approved user decision that explicitly names the requirement, boundary, or affected docs path. Draft artifacts, workflow notes, review comments, pending plans, and unapproved implementation notes are not confirmed requirements.
+
+When an approved Stageflow plan is implemented, move the confirmed implemented behavior from `Planned Changes` to `Current Implementation` during the docs operation. Any remaining difference must be recorded with a judgment label from `change-judgment-policy.md`, such as `missing_required_behavior`, `bug_or_regression`, `unapproved_implemented_behavior`, or `confirmation_needed`.
+
+Do not promote a Stageflow implementation detail into confirmed `Intent` or `Rules` unless the approved Stageflow artifact or user decision states that the detail is required behavior.
+
 ## Output Scope
 
 By default, `atomic-docs` write operations modify only files inside the configured documentation submodule root. Plugin code, Stageflow request artifacts, and source files are outside docs output scope unless a separate approved request expands scope.
@@ -27,4 +35,4 @@ By default, `atomic-docs` write operations modify only files inside the configur
 
 If a full refresh overlaps with a targeted docs request, prioritize the current explicit user-requested scope. Put other impacted domains or atomic docs in follow-up proposals or `Gaps`.
 
-If source behavior, confirmed intent, planned changes, and current implementation conflict, preserve the conflict instead of collapsing it into one claim. Use `Gaps`, bug candidates, implemented-plan candidates, or confirmation-needed notes.
+If source behavior, confirmed intent, planned changes, and current implementation conflict, preserve the conflict instead of collapsing it into one claim. Use judgment-labeled `Gaps`, bug candidates, missing required behavior candidates, unapproved implementation candidates, implemented-plan candidates, or confirmation-needed notes.

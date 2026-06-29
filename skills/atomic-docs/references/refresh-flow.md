@@ -10,6 +10,8 @@ Freshness is tracked with one source-code commit hash stored in metadata at the 
 
 The baseline records the last source-code commit hash used for a confirmed docs refresh. The `atomic-docs` skill should compare `git diff <stored-source-hash>..HEAD` or the equivalent source-root diff to prioritize changed source behavior files.
 
+When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
+
 ## Domain Context Discovery
 
 Before assigning changed source behavior to a domain, inspect the context atoms that exist:
@@ -35,9 +37,9 @@ The user reviews, adds, removes, revises, and approves the criteria through the 
 
 ## Domain Subagent Workflow
 
-When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved. Each writer subagent must read the approved criteria atom and produce a domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, `Current Implementation` facts, `Gaps`, graph candidates, and split/merge proposals.
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved. Each writer subagent must read the approved criteria atom and produce a judgment-labeled domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
 
-Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, an atom is too broad, a split gap is vague, inferred intent/rules are unmarked, source evidence is missing, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, or atom draft as needed and rerun review.
+Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom and `change-judgment-policy.md`. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, an atom is too broad, a split gap is vague, inferred intent/rules are unmarked, source evidence is missing, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, or atom draft as needed and rerun review.
 
 ## Full Refresh
 
@@ -46,7 +48,7 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 1. Read the configured docs root and source root.
 2. Read the docs-root source commit baseline metadata.
 3. If atomization criteria are needed and no approved criteria atom exists, create or update the draft criteria atom through the file-first flow before domain atom work.
-4. Inspect changed source behavior files since the stored source commit hash to enrich the criteria atom and later atom candidates.
+4. Inspect changed source behavior files since the stored source commit hash and map baseline diffs to affected atoms through source-to-atom discovery and graph traversal.
 5. Ignore tests, settings, schema, build, and auxiliary files by default unless the user requested auxiliary-file reflection.
 6. Inspect project, common, and relevant domain context atoms when they exist.
 7. Use source-to-atom seed discovery to find likely domain and atom candidates.
@@ -73,6 +75,7 @@ A change plan should group by domain and list:
 - source behavior files inspected
 - affected atom files
 - affected atom sections
+- judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `confirmation_needed`, or `docs_stale`
 - new domains, domain moves, atom splits, atom merges, and split proposals
 - project goal, project glossary, common context, or domain context changes
 - core business terms that require glossary or domain atom coverage before derived behavior is treated as covered
@@ -89,4 +92,6 @@ The accepted change plan defines the only paths and write actions allowed for th
 
 ## Inference And Gaps
 
-The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `Rules` from code. Inferred `Intent` and `Rules` remain inferred until confirmed by the user. If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a gap or bug candidate.
+The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `Rules` from code. Inferred `Intent` and `Rules` remain inferred until confirmed by the user. Inferred `Intent` or inferred `Rules` alone cannot create confirmed required behavior, confirmed out-of-scope behavior, or `matches_confirmed_intent`; use `confirmation_needed` until the user or approved workflow confirms the basis.
+
+If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.

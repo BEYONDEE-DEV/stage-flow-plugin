@@ -5,7 +5,7 @@ description: "Use when the user says atomic-docs, atomic docs, atomic docs, the 
 
 # Atomic Docs
 
-Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve user intent, rules, current implementation facts, planned changes, and gaps so future AI/code review can distinguish intended behavior from bugs or uncertain inference.
+Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve user intent, rules, current implementation facts, planned changes, and gaps so future AI/code review can distinguish intended behavior, bugs, missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, and uncertain inference.
 
 ## Core Contract
 
@@ -22,6 +22,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 - Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria atom as required input for domain writer and review subagents.
+- Use controlled judgment labels from `references/change-judgment-policy.md` for code review findings, `Gaps`, and change plan items. Do not infer healthy behavior from the absence of a gap.
 
 ## Required References
 
@@ -31,6 +32,7 @@ Before acting, read only the references needed for the requested operation:
 - `references/atomic-document-contract.md` for domain folders, file-based `*-atom.md` atoms, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
 - `references/language-policy.md` for choosing the natural language used in docs content while preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
+- `references/change-judgment-policy.md` for classifying source behavior as matching confirmed intent, bug/regression, missing required behavior, unapproved implementation, out-of-scope behavior, confirmation needed, or stale docs.
 - `references/atomic-graph.md` for `graph_edges`, target keys, traversal, edge validity, duplicate-key conflicts, and path-drift correction.
 - `references/stageflow-integration.md` for behavior inside Stageflow requests and approval gates.
 
@@ -45,9 +47,10 @@ Before acting, read only the references needed for the requested operation:
 7. Use the criteria atom itself as the center of review, user revision, and approval. Do not start domain atom writing or domain subagent work until the criteria atom is approved.
 8. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
 9. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
-10. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-11. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-12. Write only the paths and actions accepted by the user for the current docs operation.
+10. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
+11. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+12. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+13. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

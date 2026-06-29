@@ -10,6 +10,7 @@
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Required Atom Sections](#required-atom-sections)
+- [Judgment Evidence Policy](#judgment-evidence-policy)
 - [Forbidden Shapes](#forbidden-shapes)
 - [Atomicity Policy](#atomicity-policy)
 
@@ -157,9 +158,26 @@ Each atom file must preserve these sections:
 - `Planned Changes`
 - `Gaps`
 
-`Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`.
+`Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining. Include acceptance criteria when the behavior can be judged by observable source behavior.
 
-`Current Implementation` records source-observed implementation facts. `Planned Changes` records future intended work that is not yet confirmed as implemented. `Gaps` records mismatches, uncertain inference, bug candidates, missing intent, implemented-plan candidates, rename/merge candidates, and confirmation-needed boundaries.
+`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points. `Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, or `implemented_pending_confirmation`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, rename/merge candidates, and confirmation-needed boundaries.
+
+## Judgment Evidence Policy
+
+Atomic docs should let a reviewer determine what is implemented, what should be implemented, what is missing, what is buggy, what is unapproved or out of scope, and what still needs confirmation for the documented source baseline.
+
+Do not add top-level per-atom status fields for these judgments. Instead, attach controlled judgment labels from `change-judgment-policy.md` to specific `Gaps`, change plan items, review findings, or domain evidence packet items.
+
+Each judgment-bearing item must include:
+
+- one judgment label, such as `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `confirmation_needed`, or `docs_stale`
+- source evidence for the observed behavior or missing behavior
+- confirmed or inferred basis, such as `Intent`, `Rules`, approved `Planned Changes`, non-goals, excluded behavior, adjacent-domain boundary, source baseline metadata, or user approval
+- next action, such as fix implementation, confirm intent, update docs, refresh docs, or move scope
+
+`matches_confirmed_intent` is allowed only as an explicit review finding after the reviewer inspects source evidence and confirms that no higher-priority judgment label applies. Do not treat the lack of a `Gaps` item as proof that code matches confirmed intent.
+
+Project and domain context atoms must preserve non-goals, excluded behavior, and adjacent-domain boundaries clearly enough for `out_of_scope_behavior` judgments.
 
 ## Forbidden Shapes
 

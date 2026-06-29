@@ -22,6 +22,7 @@ class DocsSkillTests(unittest.TestCase):
             "atomic-document-contract.md",
             "language-policy.md",
             "refresh-flow.md",
+            "change-judgment-policy.md",
             "atomic-graph.md",
             "stageflow-integration.md",
         ]:
@@ -30,6 +31,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("source-code commit hash baseline", text)
         self.assertIn("Respect Stageflow gates", text)
         self.assertIn("language policy", text)
+        self.assertIn("controlled judgment labels", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -119,6 +121,49 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not store per-file commit status", text)
         self.assertNotIn("<doc-root>/<domain>/current-state", text)
 
+    def test_change_judgment_policy_labels_and_priority(self) -> None:
+        text = read(DOCS_REFS / "change-judgment-policy.md")
+        self.assertIn("Change Judgment Policy", text)
+        self.assertIn("does not add top-level per-atom status fields", text)
+        for label in [
+            "matches_confirmed_intent",
+            "bug_or_regression",
+            "missing_required_behavior",
+            "unapproved_implemented_behavior",
+            "out_of_scope_behavior",
+            "confirmation_needed",
+            "docs_stale",
+        ]:
+            self.assertIn(label, text)
+        self.assertIn("Apply the first matching judgment", text)
+        self.assertIn("docs baseline is older", text)
+        self.assertIn("relevant `Intent`, `Rules`, requirement, boundary, or source mapping is inferred or ambiguous", text)
+        self.assertIn("confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary", text)
+        self.assertIn("confirmed required behavior is missing", text)
+        self.assertIn("conflicts with confirmed `Intent`, `Rules`, acceptance criteria", text)
+        self.assertIn("inferred `Intent` or inferred `Rules` alone", text)
+
+    def test_change_judgment_policy_evidence_and_planned_change_types(self) -> None:
+        text = read(DOCS_REFS / "change-judgment-policy.md")
+        for required in [
+            "atom, source evidence, judgment label, reason",
+            "confirmed `Intent`",
+            "approved required `Planned Changes`",
+            "non-goals",
+            "excluded behavior",
+            "source baseline metadata",
+            "not the absence of a `Gaps` item",
+        ]:
+            self.assertIn(required, text)
+        for planned_type in [
+            "approved_required_change",
+            "approved_optional_change",
+            "tentative_future_change",
+            "implemented_pending_confirmation",
+        ]:
+            self.assertIn(planned_type, text)
+        self.assertIn("Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior", text)
+
     def test_atomization_criteria_atom_contract_is_persisted(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Atomization Criteria Atom", text)
@@ -156,6 +201,32 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("not fixed document types", text)
         self.assertIn("Do not accept a criteria atom that only lists perspective names", text)
         self.assertNotIn("endpoint document", text)
+
+    def test_atomic_document_contract_supports_code_judgment_evidence(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Judgment Evidence Policy", text)
+        self.assertIn("required, optional, excluded, or boundary-defining", text)
+        self.assertIn("acceptance criteria", text)
+        self.assertIn("source-observed implementation facts with source evidence", text)
+        for planned_type in [
+            "approved_required_change",
+            "approved_optional_change",
+            "tentative_future_change",
+            "implemented_pending_confirmation",
+        ]:
+            self.assertIn(planned_type, text)
+        for label in [
+            "bug_or_regression",
+            "missing_required_behavior",
+            "unapproved_implemented_behavior",
+            "out_of_scope_behavior",
+            "confirmation_needed",
+            "docs_stale",
+        ]:
+            self.assertIn(label, text)
+        self.assertIn("Do not add top-level per-atom status fields", text)
+        self.assertIn("lack of a `Gaps` item", text)
+        self.assertIn("non-goals, excluded behavior, and adjacent-domain boundaries", text)
 
     def test_domain_boundary_policy_uses_general_quality_gate(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -219,6 +290,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("one source-code commit hash", text)
         self.assertIn("metadata at the documentation submodule root", text)
         self.assertIn("git diff <stored-source-hash>..HEAD", text)
+        self.assertIn("classify the finding as `docs_stale`", text)
+        self.assertIn("map baseline diffs to affected atoms", text)
         self.assertIn("changed source behavior files", text)
         self.assertIn("auxiliary files by default unless the user requested", text)
         self.assertIn("source-to-atom seed discovery", text)
@@ -248,6 +321,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria atom is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria atom", text)
+        self.assertIn("judgment-labeled domain evidence packet", text)
+        self.assertIn("change-judgment-policy.md", text)
+        self.assertIn("judgment labels are absent or unsupported", text)
+        self.assertIn("missing required behavior is confused with out-of-scope behavior", text)
         self.assertIn("independent review subagents", text)
         self.assertIn("review subagent fails", text)
         self.assertIn("rerun review", text)
@@ -258,6 +335,18 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("whether the criteria atom is draft or approved", text)
         self.assertIn("user-conversation criteria that must be recorded in the criteria atom", text)
         self.assertIn("source exploration results that update the criteria atom", text)
+        self.assertIn("judgment labels for review findings", text)
+        self.assertIn("matches_confirmed_intent", text)
+        self.assertIn("unapproved_implemented_behavior", text)
+        self.assertIn("out_of_scope_behavior", text)
+
+    def test_refresh_flow_rejects_generic_or_absence_based_judgment(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Inferred `Intent` or inferred `Rules` alone cannot create confirmed required behavior", text)
+        self.assertIn("use `confirmation_needed`", text)
+        self.assertIn("Do not write a generic gap", text)
+        self.assertIn("missing required behavior, unapproved implementation, out-of-scope behavior, stale docs", text)
+        self.assertIn("Do not classify behavior as healthy only because no related gap exists", text)
 
     def test_atomicity_policy_rejects_vague_split_gap(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -301,6 +390,13 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Stageflow plan approval alone is not docs-submodule approval", text)
         self.assertIn("names the affected docs paths and write actions", text)
         self.assertIn("Gaps", text)
+        self.assertIn("Use a Stageflow artifact as required behavior evidence only when", text)
+        self.assertIn("approved definition", text)
+        self.assertIn("approved implementation plan", text)
+        self.assertIn("Draft artifacts, workflow notes, review comments, pending plans", text)
+        self.assertIn("not confirmed requirements", text)
+        self.assertIn("move the confirmed implemented behavior from `Planned Changes` to `Current Implementation`", text)
+        self.assertIn("judgment label from `change-judgment-policy.md`", text)
 
 
 if __name__ == "__main__":
