@@ -9,7 +9,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 
 ## Core Contract
 
-- Inspect the target project before writing docs.
+- Inspect the target project before writing confirmed atom docs. A criteria draft may be created first from the user's conversation after the docs root and limited draft write action are accepted.
 - Do not assume a hardcoded `docs/` root.
 - Use the documentation submodule root selected through the docs-root discovery contract.
 - Ask the user to confirm the docs submodule root even when `.gitmodules` contains exactly one candidate.
@@ -20,7 +20,8 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Respect Stageflow gates when invoked during Stageflow-controlled work.
 - Do not write managed docs, atom files, graph corrections, source-baseline metadata, migrations, or `.stageflow/docs-submodule.json` until the user has accepted the explicit docs operation scope and change plan.
 - Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
-- Persist user-approved atomization criteria as the docs-submodule criteria atom before using those criteria for domain writing or review subagents.
+- Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
+- Use only an approved criteria atom as required input for domain writer and review subagents.
 
 ## Required References
 
@@ -37,14 +38,16 @@ Before acting, read only the references needed for the requested operation:
 
 1. Identify whether the user wants root setup, full refresh, targeted docs work, inspection, graph maintenance, or Stageflow-adjacent documentation.
 2. Read the relevant reference files before making changes.
-3. Inspect source state and docs-submodule state.
-4. Present a change plan before any write to docs config, atom files, graph edges, baseline metadata, or docs-submodule structure.
-5. When atomization criteria are proposed, show the reviewed perspectives to the user, persist approved criteria in the criteria atom, and use that atom as required input for domain writer and review subagents.
-6. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
-7. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
-8. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-9. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-10. Write only the paths and actions accepted by the user for the current docs operation.
+3. Confirm the docs-submodule root and inspect existing docs-submodule state.
+4. If atomization criteria are needed, make the first atomic-docs write action a limited draft creation or update of `project/atomization-criteria-atom.md`.
+5. Put user conversation criteria, prohibitions, atomization concerns, and pending approval state into that criteria draft before relying on chat summaries.
+6. Inspect source state to enrich the criteria draft with evidence, not just the change plan.
+7. Use the criteria atom itself as the center of review, user revision, and approval. Do not start domain atom writing or domain subagent work until the criteria atom is approved.
+8. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
+9. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
+10. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+11. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+12. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

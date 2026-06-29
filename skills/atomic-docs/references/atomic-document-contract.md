@@ -46,7 +46,7 @@ Default project-level atoms:
 
 - `project-goal-atom.md` records the project-wide purpose, target users, success criteria, non-goals, current direction, planned direction, and uncertain project intent.
 - `project-glossary-atom.md` records terms used across the project. Each term should include its definition, relevant domains, aliases, forbidden conflations, related source identifiers, and uncertainty when applicable.
-- `atomization-criteria-atom.md` records the user-approved criteria used to split, merge, draft, and review atom files.
+- `atomization-criteria-atom.md` records draft or approved criteria used to split, merge, draft, and review atom files. Draft criteria are user review artifacts, not approved writing criteria.
 
 Default shared-domain atom:
 
@@ -77,11 +77,16 @@ The default criteria atom path is:
 <doc-root>/project/atomization-criteria-atom.md
 ```
 
-Create or update this atom after the user approves atomization criteria in the docs operation change plan and before domain writer or review subagents use those criteria to create or update atom files. The criteria atom follows the same required atom sections as every atom: `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
+After the docs root is confirmed and the user accepts the limited draft write action, create or update this atom as the first atomic-docs write action when atomization criteria are needed. Use the draft criteria atom to capture the user's conversation, prohibitions, atomization concerns, and review questions before relying on chat summaries or drafting domain atoms. The criteria atom follows the same required atom sections as every atom: `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
+
+A draft criteria atom is a review artifact. It must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing until the user approves the criteria. In draft state, record `Criteria approval: draft, pending user approval` in `Current Implementation` or `Gaps`. After the user approves the criteria, update the atom to `Criteria approval: approved by user` and remove obsolete draft-only or pending-approval gaps.
+
+Record user-conversation criteria in the draft before code exploration if they affect atomization. Examples include prohibiting endpoint-based document structure, prohibiting vague service state-transition split gaps, requiring domain-by-domain writer and review subagents, and requiring source evidence for split proposals.
 
 The criteria atom records:
 
 - atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery
+- for each perspective: atom candidate criteria, source evidence only criteria, not applicable reason, split/merge criteria, source evidence requirement, and unresolved questions
 - which perspectives create atom candidates, which are source evidence only, and which are not applicable for the current source shape
 - split and merge criteria, including how to decide when behavior belongs in one atom versus multiple atoms
 - source evidence requirements for each atom candidate
@@ -89,6 +94,8 @@ The criteria atom records:
 - writer subagent and review subagent checklists that future docs operations must read before drafting or reviewing atom files
 
 These perspectives are not fixed document types. For example, a route, controller, command, public library API, job trigger, or message handler may be entry surface evidence depending on the source project, but the criteria atom must not force a separate atom merely because that surface exists.
+
+Do not accept a criteria atom that only lists perspective names. If a perspective has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
 
 ## Domain Discovery Policy
 
