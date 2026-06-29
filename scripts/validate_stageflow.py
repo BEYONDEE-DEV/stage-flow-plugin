@@ -259,6 +259,21 @@ ACCEPTED_RISK_CONFIRMATION_RE = re.compile(
     r"\b(accept|accepted|accepts|explicitly accepts|residual risk)\b|감수|수용",
     re.IGNORECASE,
 )
+SCOPE_NARROWING_LIMIT_RE = re.compile(
+    r"\b("
+    r"out[-\s]+of[-\s]+scope|outside\s+scope|excluded?|exclusion|"
+    r"read[-\s]*only|readonly|"
+    r"manual\s+(?:(?:operation|operations|process|registration|handling|work)\s+(?:only|required|deferred|future)|only)|"
+    r"manually\s+(?:registered|created|managed|handled)|"
+    r"future\s+(?:work|scope|request|phase)|deferred?|assignment[-\s]*only"
+    r")\b"
+    r"|범위\s*(?:밖|외|아님|아니다)|제외|읽기\s*전용|조회\s*전용|"
+    r"수동(?:\s*(?:처리|등록|생성|관리|운영))?\s*(?:만|으로만|으로\s*한정|으로\s*제한)|"
+    r"(?:향후|예정|나중)(?:\s*(?:작업|범위|요청|단계|phase))?\s*(?:로|으로)?\s*(?:미룬다|넘긴다|제외|처리|한정)|"
+    r"배정만",
+    re.IGNORECASE,
+)
+TRACEABLE_SCOPE_SOURCE_RE = re.compile(r"\b(?:DEC|REQ|SP|INTENT)-\d+\b", re.IGNORECASE)
 PURPOSE_CONFIDENCES = {"confirmed", "inferred", "unknown"}
 PURPOSE_KEYWORD_RE = re.compile(
     r"\b(purpose|why|intent|value|goal|outcome|success)\b|목적|왜|의도|가치|목표|성과|성공",
@@ -436,6 +451,8 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     if artifact_text is not None:
         pending_messages = pending_clarification_messages(stage, artifact_text, artifact_path, errors)
         validate_artifact(stage, artifact_text, artifact_path, errors, bool(pending_messages))
+        if stage.phase == "implementation-plan":
+            validate_implementation_plan_against_definition(context, artifact_path, artifact_text, errors)
         artifact_fingerprint = sha256_file(artifact_path)
     else:
         artifact_fingerprint = None
@@ -566,6 +583,7 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str], ha
         validate_definition_purpose(path, text, errors, has_pending_clarifications)
         validate_definition_blocking_questions(path, text, errors)
         validate_definition_clarification_history(path, text, errors, has_pending_clarifications)
+        validate_definition_scope_narrowing_evidence(path, text, errors, has_pending_clarifications)
     if stage.phase == "implementation-plan":
         validate_implementation_plan_depth(path, text, errors)
 
@@ -880,6 +898,114 @@ def validate_implementation_plan_depth(path: Path, text: str, errors: list[str])
         ).lower()
         if any(phrase in combined for phrase in shallow_phrases):
             errors.append(f"`{display_path(path)}` Work Items row `{work_id}` is too generic for execution")
+
+
+def traceable_scope_source_ids(text: str, *, narrowing_only: bool = False) -> set[str]:
+    ids: set[str] = set()
+    table_sources = (
+        ("## Resolved Decisions", "ID"),
+        ("## Requirements", "ID"),
+        ("## Policy Rules", "Rule ID"),
+        ("## Intent Fidelity", "ID"),
+    )
+    for section, column in table_sources:
+        table = parse_first_markdown_table(section_text(text, section))
+        for row in table.rows:
+            value = row.get(column, "").strip()
+            joined = " ".join(row.values()).lower()
+            if "no resolved decision" in joined or "확정된 결정 없음" in joined:
+                continue
+            if TRACEABLE_SCOPE_SOURCE_RE.fullmatch(value):
+                if narrowing_only and not contains_scope_narrowing_limit(" ".join(row.values())):
+                    continue
+                ids.add(value.upper())
+    return ids
+
+
+def referenced_scope_source_ids(text: str) -> set[str]:
+    return {match.group(0).upper() for match in TRACEABLE_SCOPE_SOURCE_RE.finditer(text)}
+
+
+def contains_scope_narrowing_limit(text: str) -> bool:
+    return bool(SCOPE_NARROWING_LIMIT_RE.search(text))
+
+
+def validate_definition_scope_narrowing_evidence(
+    path: Path,
+    text: str,
+    errors: list[str],
+    has_pending_clarifications: bool,
+) -> None:
+    if has_pending_clarifications:
+        return
+    source_ids = traceable_scope_source_ids(text)
+    chunks: list[tuple[str, str, set[str]]] = [
+        ("Boundaries", section_text(text, "## Boundaries"), set()),
+    ]
+    for section, id_column in (
+        ("## Requirements", "ID"),
+        ("## Policy Rules", "Rule ID"),
+        ("## Resolved Decisions", "ID"),
+        ("## Intent Fidelity", "ID"),
+    ):
+        table = parse_first_markdown_table(section_text(text, section))
+        for row in table.rows:
+            row_id = row.get(id_column, "").strip()
+            local_ids = {row_id.upper()} if TRACEABLE_SCOPE_SOURCE_RE.fullmatch(row_id) else set()
+            chunks.append((f"{section.removeprefix('## ')} row `{row_id or '<unknown>'}`", " ".join(row.values()), local_ids))
+
+    for label, chunk_text, local_ids in chunks:
+        if not chunk_text or not contains_scope_narrowing_limit(chunk_text):
+            continue
+        referenced_ids = referenced_scope_source_ids(chunk_text)
+        if source_ids.intersection(referenced_ids) or source_ids.intersection(local_ids):
+            continue
+        errors.append(
+            f"`{display_path(path)}` {label} records a scope narrowing or exclusion without a traceable source ID; "
+            "cite one of `DEC-*`, `REQ-*`, `SP-*`, or `INTENT-*`, or keep the decision in Pending Clarifications/transition-risk before approval"
+        )
+
+
+def validate_implementation_plan_scope_narrowing_evidence(
+    path: Path,
+    text: str,
+    definition_text: str,
+    errors: list[str],
+) -> None:
+    valid_source_ids = traceable_scope_source_ids(definition_text, narrowing_only=True)
+    table = parse_first_markdown_table(section_text(text, "## Definition Fidelity Matrix"))
+    for row in table.rows:
+        work_id = row.get("Work Item ID", "").strip() or "<unknown>"
+        combined = " ".join(row.values())
+        if not contains_scope_narrowing_limit(combined):
+            continue
+        definition_source_ids = referenced_scope_source_ids(row.get("Definition Source", ""))
+        if valid_source_ids.intersection(definition_source_ids):
+            continue
+        errors.append(
+            f"`{display_path(path)}` Definition Fidelity Matrix row `{work_id}` records a scope narrowing or exclusion without a valid definition source ID in `Definition Source`; "
+            "cite an approved `DEC-*`, `REQ-*`, `SP-*`, or `INTENT-*` from the definition, or return to definition before narrowing the plan"
+        )
+
+
+def validate_implementation_plan_against_definition(
+    context: ValidationContext,
+    artifact_path: Path,
+    artifact_text: str,
+    errors: list[str],
+) -> None:
+    definition_path = context.request_dir / "01-definition" / "definition.md"
+    definition_text = read_required_text(definition_path, errors)
+    if definition_text is None:
+        return
+    validate_implementation_plan_scope_narrowing_evidence(
+        artifact_path,
+        artifact_text,
+        definition_text,
+        errors,
+    )
+
+
 def validate_table_columns(path: Path, text: str, requirement: TableRequirement, errors: list[str]) -> None:
     parse_required_table(
         path,

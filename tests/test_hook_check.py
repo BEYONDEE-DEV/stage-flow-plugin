@@ -31,7 +31,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 18)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
 }

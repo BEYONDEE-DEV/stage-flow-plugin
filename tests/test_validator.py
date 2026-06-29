@@ -32,7 +32,7 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 17)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 18)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
 }
@@ -620,6 +620,9 @@ Approved.
             "Clarification History",
             "already answered/reflected user answers must move to implementation-plan coverage or constraints instead",
             "Intent Fidelity",
+            "Scope Narrowing Evidence",
+            "DEF-RULE-017",
+            "not a literal keyword rule",
             "references/intent-fidelity.md",
             "## Implementation-Plan Deferral Gate",
             "implementation-plan-only questions",
@@ -636,6 +639,8 @@ Approved.
             "Self-review never satisfies",
             "goal-achievement decision readiness evidence",
             "Intent Fidelity is missing for core user wording",
+            "scope narrowing semantically rather than by literal trigger words",
+            "assignment-only behavior",
         ):
             self.assertIn(phrase, definition_prompt)
 
@@ -668,7 +673,10 @@ Approved.
             (implementation_plan_rules, "work item split"),
             (skill_text, "defer implementation-plan-only decisions"),
             (implementation_plan_rules, "return-to-definition"),
+            (implementation_plan_rules, "read-only/manual/future/out-of-scope narrowing"),
             (implementation_plan_rules, "references/intent-fidelity.md"),
+            (intent_fidelity, "Intent fidelity is semantic, not lexical"),
+            (intent_fidelity, "not a keyword list"),
             (skill_text, "references/language-policy.md"),
             (artifact_text, "references/language-policy.md"),
             (definition_rules, "For a Korean workflow, new definition prose should default to Korean"),
@@ -1500,6 +1508,105 @@ Already-decided content was incorrectly listed as risk.
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
 
+    def test_definition_boundary_scope_narrowing_requires_traceable_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "Organizer account lifecycle is out of scope for this request.",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Boundaries records a scope narrowing or exclusion without a traceable source ID", result.stdout)
+
+    def test_definition_boundary_scope_narrowing_accepts_traceable_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "Organizer account lifecycle is out of scope for this request per REQ-001.",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_definition_boundary_does_not_flag_non_narrowing_manual_language(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "Manual operation remains supported for existing workflows.",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_definition_boundary_does_not_flag_non_narrowing_korean_future_language(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "향후 운영에서도 기존 수동 절차는 계속 지원된다.",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_definition_boundary_flags_korean_scope_narrowing_without_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "계정 관리는 향후 범위로 미룬다.",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Boundaries records a scope narrowing or exclusion without a traceable source ID", result.stdout)
+
+    def test_definition_pending_clarification_can_hold_unresolved_scope_narrowing(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "Only approved behavior is included.",
+                    "Organizer account lifecycle is out of scope unless the user chooses to include it.",
+                ).replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Should the lifecycle boundary be included or excluded? | Option 1: Include lifecycle behavior; Option 2: Exclude lifecycle behavior | Option 2 | N/A | This changes the approved scope boundary. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("AWAITING_USER definition", result.stdout)
+
     def test_implementation_plan_requires_definition_fidelity_matrix(self) -> None:
         with temp_project() as root:
             self.create_project(root)
@@ -1529,6 +1636,103 @@ Already-decided content was incorrectly listed as risk.
             result = self.run_validator(root, "implementation-plan")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("too generic", result.stdout)
+
+    def test_implementation_plan_scope_narrowing_requires_definition_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                    "| WORK-001 | N/A | Enforce the approved artifact quality gate. | Implement read-only lookup behavior for the narrowed plan. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Definition Fidelity Matrix row `WORK-001` records a scope narrowing or exclusion without a valid definition source ID in `Definition Source`", result.stdout)
+
+    def test_implementation_plan_scope_narrowing_rejects_unknown_definition_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                    "| WORK-001 | REQ-999 | Enforce the approved artifact quality gate. | Implement read-only lookup behavior for the narrowed plan. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("without a valid definition source ID in `Definition Source`", result.stdout)
+
+    def test_implementation_plan_scope_narrowing_rejects_source_outside_definition_source_column(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                    "| WORK-001 | N/A | Enforce the approved artifact quality gate. | Implement read-only lookup behavior for the narrowed plan per REQ-001. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("without a valid definition source ID in `Definition Source`", result.stdout)
+
+    def test_implementation_plan_scope_narrowing_rejects_existing_unrelated_definition_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            definition = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            definition.write_text(
+                DEFINITION_TEXT.replace(
+                    "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |",
+                    "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n| REQ-002 | feature | User answer. | Organizer lookup is read-only for this request. | Account lifecycle is out of scope. | OUT-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                    "| WORK-001 | REQ-001 | Enforce the approved artifact quality gate. | Implement read-only lookup behavior for the narrowed plan. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("without a valid definition source ID in `Definition Source`", result.stdout)
+
+    def test_implementation_plan_scope_narrowing_accepts_definition_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            definition = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            definition.write_text(
+                DEFINITION_TEXT.replace(
+                    "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |",
+                    "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n| REQ-002 | feature | User answer. | Organizer lookup is read-only for this request. | Account lifecycle is out of scope. | OUT-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| WORK-001 | REQ-001, SP-001, INTENT-001 | Enforce the approved artifact quality gate. | Add validator metadata, rule docs, prompts, and tests for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                    "| WORK-001 | REQ-002 | Enforce the approved artifact quality gate. | Implement read-only compatibility behavior for that gate. | New product behavior, new approval semantics, or unrelated workflow changes. | Return to definition before planning a new meaning. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_later_stage_validation_requires_earlier_approval(self) -> None:
         with temp_project() as root:
