@@ -5,6 +5,7 @@
 - [Responsibility](#responsibility)
 - [Path Contract](#path-contract)
 - [Project And Domain Context Policy](#project-and-domain-context-policy)
+- [Atomization Criteria Atom](#atomization-criteria-atom)
 - [Domain Discovery Policy](#domain-discovery-policy)
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
@@ -40,10 +41,12 @@ Default project-level atoms:
 ```text
 <doc-root>/project/project-goal-atom.md
 <doc-root>/project/project-glossary-atom.md
+<doc-root>/project/atomization-criteria-atom.md
 ```
 
 - `project-goal-atom.md` records the project-wide purpose, target users, success criteria, non-goals, current direction, planned direction, and uncertain project intent.
 - `project-glossary-atom.md` records terms used across the project. Each term should include its definition, relevant domains, aliases, forbidden conflations, related source identifiers, and uncertainty when applicable.
+- `atomization-criteria-atom.md` records the user-approved criteria used to split, merge, draft, and review atom files.
 
 Default shared-domain atom:
 
@@ -65,6 +68,27 @@ Default domain-level atom:
 - It records the domain purpose, responsibilities, included behavior, excluded behavior, adjacent-domain boundaries, and conditions for promoting shared concepts to `common`.
 - When creating a new domain, create or update its context atom in the same accepted change plan. If the domain goal or boundary is unclear, present candidate boundaries and ask instead of writing confirmed intent.
 - Do not create a domain-specific glossary by default. Add domain-only terms to `project/project-glossary-atom.md` with their domain scope unless the user explicitly wants separate glossary atoms.
+
+## Atomization Criteria Atom
+
+The default criteria atom path is:
+
+```text
+<doc-root>/project/atomization-criteria-atom.md
+```
+
+Create or update this atom after the user approves atomization criteria in the docs operation change plan and before domain writer or review subagents use those criteria to create or update atom files. The criteria atom follows the same required atom sections as every atom: `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
+
+The criteria atom records:
+
+- atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery
+- which perspectives create atom candidates, which are source evidence only, and which are not applicable for the current source shape
+- split and merge criteria, including how to decide when behavior belongs in one atom versus multiple atoms
+- source evidence requirements for each atom candidate
+- forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
+- writer subagent and review subagent checklists that future docs operations must read before drafting or reviewing atom files
+
+These perspectives are not fixed document types. For example, a route, controller, command, public library API, job trigger, or message handler may be entry surface evidence depending on the source project, but the criteria atom must not force a separate atom merely because that surface exists.
 
 ## Domain Discovery Policy
 
@@ -142,3 +166,5 @@ Each atom file must preserve these sections:
 ## Atomicity Policy
 
 An atom is too broad when it covers unrelated behaviors, policies, rules, states, planned changes, or gap boundaries. Split or propose a split before writing confirmed docs. If the split is ambiguous, keep candidates in the change plan or `Gaps` and ask the user.
+
+Do not write a vague split gap such as "this service's detailed state transitions should be split into separate atoms" without concrete evidence. A split proposal must name candidate atom slugs, owning domain, source files/classes/functions, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.

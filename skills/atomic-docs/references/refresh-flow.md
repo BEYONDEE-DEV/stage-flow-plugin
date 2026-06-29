@@ -23,6 +23,18 @@ If a new domain, new common atom, or domain move is plausible, include the candi
 
 If a domain candidate looks like a broad grouping instead of a durable ownership boundary, do not write it as confirmed structure. Present a split proposal using observed capabilities, workflows, responsibilities, contracts, or policies, and keep unresolved boundary questions in the change plan or `Gaps`.
 
+## Atomization Criteria Approval Flow
+
+Before drafting atom files from source evidence, propose `Atomization Perspectives Reviewed` in the change plan. Show the user which perspectives were considered for atomization, including domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective, list source evidence, proposed atom candidates, whether the perspective is source evidence only, not applicable reasons, and unresolved questions.
+
+After the user adds, removes, revises, and approves the criteria, create or update `<doc-root>/project/atomization-criteria-atom.md` as an explicit write action in the accepted change plan. Do not let domain writer or review subagents draft or approve atom changes from those criteria until the criteria atom has been created or refreshed.
+
+## Domain Subagent Workflow
+
+When the docs operation is large enough to split by domain, use domain writer subagents after the criteria atom exists or is part of the accepted write plan. Each writer subagent must read the criteria atom and produce a domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, `Current Implementation` facts, `Gaps`, graph candidates, and split/merge proposals.
+
+Use independent review subagents to review writer packets or atom drafts against the same criteria atom. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, an atom is too broad, a split gap is vague, inferred intent/rules are unmarked, source evidence is missing, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, or atom draft as needed and rerun review.
+
 ## Full Refresh
 
 A full refresh is a first-class operation when the user explicitly asks for it.
@@ -49,6 +61,8 @@ For domain-level work, update the domain context atom when the domain goal, resp
 
 A change plan should group by domain and list:
 
+- `Atomization Perspectives Reviewed`, including user-visible criteria additions, removals, revisions, and approval status
+- criteria atom creation or update at `project/atomization-criteria-atom.md` when criteria are new or changed
 - source behavior files inspected
 - affected atom files
 - affected atom sections

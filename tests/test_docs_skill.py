@@ -82,6 +82,8 @@ class DocsSkillTests(unittest.TestCase):
     def test_docs_skill_requires_write_approval_for_managed_state(self) -> None:
         text = read(DOCS_SKILL)
         self.assertIn("accepted the explicit docs operation scope and change plan", text)
+        self.assertIn("Persist user-approved atomization criteria", text)
+        self.assertIn("criteria atom", text)
         for write_target in [
             "managed docs",
             "atom files",
@@ -93,9 +95,16 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Stageflow plan approval as separate from docs-submodule approval", text)
         self.assertIn("Write only the paths and actions accepted by the user", text)
 
+    def test_docs_skill_uses_criteria_atom_before_subagent_writing_and_review(self) -> None:
+        text = read(DOCS_SKILL)
+        self.assertIn("show the reviewed perspectives to the user", text)
+        self.assertIn("persist approved criteria in the criteria atom", text)
+        self.assertIn("required input for domain writer and review subagents", text)
+
     def test_atomic_document_contract_sections_and_boundaries(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("<doc-root>/<domain>/<atomic-target>-atom.md", text)
+        self.assertIn("<doc-root>/project/atomization-criteria-atom.md", text)
         self.assertIn("domain folder", text)
         self.assertIn("Every atom file must end with `-atom.md`", text)
         self.assertIn("globally unique", text)
@@ -106,6 +115,29 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not put per-atomic freshness/status fields inside atom files", text)
         self.assertIn("Do not store per-file commit status", text)
         self.assertNotIn("<doc-root>/<domain>/current-state", text)
+
+    def test_atomization_criteria_atom_contract_is_persisted(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Atomization Criteria Atom", text)
+        self.assertIn("<doc-root>/project/atomization-criteria-atom.md", text)
+        self.assertIn("Create or update this atom after the user approves atomization criteria", text)
+        for section in ["Intent", "Rules", "Current Implementation", "Planned Changes", "Gaps"]:
+            self.assertIn(section, text)
+        for perspective in [
+            "domain capability",
+            "entry surface",
+            "service/application flow",
+            "state transition",
+            "policy/rule",
+            "integration contract",
+            "persistence/side effect",
+            "core business term",
+            "failure/recovery",
+        ]:
+            self.assertIn(perspective, text)
+        self.assertIn("writer subagent and review subagent checklists", text)
+        self.assertIn("not fixed document types", text)
+        self.assertNotIn("endpoint document", text)
 
     def test_domain_boundary_policy_uses_general_quality_gate(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -182,6 +214,32 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("accepted change plan defines the only paths and write actions", text)
         self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 
+    def test_refresh_flow_persists_atomization_criteria_before_subagents(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Atomization Criteria Approval Flow", text)
+        self.assertIn("Atomization Perspectives Reviewed", text)
+        self.assertIn("project/atomization-criteria-atom.md", text)
+        self.assertIn("After the user adds, removes, revises, and approves the criteria", text)
+        self.assertIn("Do not let domain writer or review subagents draft or approve atom changes", text)
+        self.assertIn("Domain Subagent Workflow", text)
+        self.assertIn("Each writer subagent must read the criteria atom", text)
+        self.assertIn("independent review subagents", text)
+        self.assertIn("review subagent fails", text)
+        self.assertIn("rerun review", text)
+
+    def test_atomicity_policy_rejects_vague_split_gap(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Do not write a vague split gap", text)
+        for required in [
+            "candidate atom slugs",
+            "owning domain",
+            "source files/classes/functions",
+            "the split criterion",
+            "each candidate atom's behavior/state/rule responsibility",
+            "unresolved questions",
+        ]:
+            self.assertIn(required, text)
+
     def test_atomic_graph_contract_fields_and_traversal(self) -> None:
         text = read(DOCS_REFS / "atomic-graph.md")
         self.assertIn("graph_edges", text)
@@ -215,4 +273,3 @@ class DocsSkillTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
