@@ -26,15 +26,17 @@ This reference defines the managed documentation shape inside the configured doc
 Every atom uses this exact organization:
 
 ```text
-<doc-root>/<domain>/<atomic-target>-atom.md
+<doc-root>/<domain-path>/<file-slug>-atom.md
 ```
 
 - `<doc-root>` is the confirmed documentation submodule root.
-- `<domain>` is the first-level domain folder below the docs root.
-- `<atomic-target>` is a file slug for one user-visible behavior, policy, rule, state, plan, context, or gap boundary.
+- `<domain-path>` is one or more folder segments below the docs root. It may include category or subdomain segments, but it is a mutable placement path, not atom identity.
+- `<file-slug>` is a readable file slug for one user-visible behavior, policy, rule, state, plan, context, or gap boundary. It is a mutable locator, not atom identity.
 - Every atom file must end with `-atom.md`.
-- The atom file slug without `-atom.md` creates the default `target_key` and must be globally unique across the docs set.
-- Do not create new `<atomic-target>/atomic.md` folder-shaped atoms. If an existing docs set uses that older shape, propose a migration before changing paths.
+- Every new atom file must include frontmatter `atom_key`.
+- `atom_key` is the stable atom identity. It must be globally unique across the docs set, lower-kebab-case, and unchanged by category moves, domain-path moves, file-slug changes, or file renames.
+- Existing atoms without `atom_key` use slug-derived identity only as a legacy fallback for discovery. Treat them as explicit `atom_key` migration candidates in refresh or change plans before relying on them for new graph/AID work.
+- Do not create new `<file-slug>/atomic.md` folder-shaped atoms. If an existing docs set uses that older shape, propose a migration before changing paths.
 - The atomization criteria document is not an atom and is exempt from this path contract.
 
 ## Project And Domain Context Policy
@@ -50,6 +52,7 @@ Default project-level atoms:
 
 - `project-goal-atom.md` records the project-wide purpose, target users, success criteria, non-goals, current direction, planned direction, and uncertain project intent.
 - `project-glossary-atom.md` records terms used across the project. Each term should include its definition, relevant domains, aliases, forbidden conflations, related source identifiers, and uncertainty when applicable.
+- These default context atom paths are locator examples only. When created as atom files, they still require stable frontmatter `atom_key` values such as `project-goal`, `project-glossary`, `common-context`, or a similarly durable lower-kebab-case key.
 
 Default project-level criteria document:
 
@@ -119,8 +122,11 @@ The criteria document records:
 - atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery
 - every entry under `Atom화 관점` with these exact visible subfields: `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문`
 - which perspectives create atom candidates, which are source evidence only, and which are not applicable for the current source shape
-- domain partitioning criteria for deciding first-level domain folders
-- a candidate or approved domain map that records each domain name with Korean field labels for `승인 상태`, `소유 동작`, `제외 동작`, `인접 도메인 경계`, `함께 변경되는 이유`, `소스 근거`, and `미해결 질문`
+- domain partitioning criteria for deciding domain paths, category boundaries, and durable ownership boundaries
+- a full discovery candidate map separated from the current accepted write scope, so discovered possibilities do not masquerade as accepted domain structure
+- operation-local current accepted write scope recorded separately from durable domain approval status, usually under `문서 루트와 작업 범위` or the current change plan
+- a candidate or approved domain map that records each domain name with Korean field labels for `승인 상태`, `소유 동작`, `제외 동작`, `인접 도메인 경계`, `함께 변경되는 이유`, `소스 근거`, `근거 성격`, and `미해결 질문`
+- domain-boundary evidence that includes observed behavior summary, excluded behavior, adjacent boundary, why the records change together, and whether the basis is user-confirmed, source-inferred, or blocked by `needs_confirmation`
 - split and merge criteria, including how to decide when behavior belongs in one atom versus multiple atoms
 - source evidence requirements for each atom candidate
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
@@ -129,7 +135,20 @@ The criteria document records:
 
 These perspectives are not fixed document types. Entry surfaces discovered in the target source may be evidence, but the criteria document must not force a separate atom merely because that surface exists.
 
-Domain approval state values are limited to `candidate`, `approved`, `rejected`, and `needs_confirmation`; keep these values unchanged, but use the Korean field label `승인 상태`. Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
+Domain approval state values are limited to `candidate`, `approved`, `rejected`, and `needs_confirmation`; keep these values unchanged, but use the Korean field label `승인 상태`.
+
+- `candidate` means a narrow durable boundary candidate with enough observed behavior and boundary rationale to review, but not yet approved for docs writing.
+- `approved` means the user approved that durable boundary as part of the criteria's durable domain map. It does not mean the domain is inside the current operation's accepted write scope.
+- `needs_confirmation` means there is source evidence and boundary rationale, but a blocking user/source ownership question must be answered before approval.
+- `rejected` means a broad, unsupported, excluded, or otherwise invalid grouping that must not become a docs domain unless later split or redefined.
+
+Current accepted write scope is operation-local. Record it separately under `문서 루트와 작업 범위` or the current change plan, and never change a domain's `승인 상태` merely because the current operation includes or excludes that domain.
+
+Broad domains and broad category groupings are unconditional criteria-review failures when marked `candidate`, `approved`, or `needs_confirmation`. Record a broad grouping only as `rejected` with the reason, or replace it with concrete split proposals based on observed capabilities, workflows, responsibilities, contracts, or policies.
+
+Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, category folder, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
+
+Criteria source evidence does not need to describe every service logic branch at atom-level depth. However, source identifiers alone are not valid domain-boundary evidence. If a candidate has only source paths, endpoint names, class names, or method names without observed behavior summary and boundary rationale, criteria-review must fail it as identifier-only evidence.
 
 The criteria document must not maintain separate writer-only and reviewer-only quality rules. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map use, atomization perspectives, service logic inventory, natural-language implementation coverage, source evidence, inferred/confirmed basis, AID assignment, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
 
@@ -143,11 +162,13 @@ Every writer obligation must be reviewable by the same shared criterion, and eve
 
 Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required Korean subfields, when a required subfield is empty or placeholder-only, when a Korean managed criteria draft uses English visible labels for criteria sections or fields, when writer and reviewer rules appear as divergent role-specific checklists instead of one shared quality standard, or when a perspective with no current source evidence fails to record a concrete `해당 없음 사유` or `미해결 질문` entry.
 
+Criteria-review must also fail when full discovery candidates are mixed with current accepted write scope, when durable domain approval status is used to encode operation-local write scope, when a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`, when category structure hides a broad grouping, or when domain-boundary evidence is only source identifiers without observed behavior summary and boundary rationale.
+
 If a perspective or domain candidate has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
 
 ## Domain Discovery Policy
 
-Choose domain folders from project evidence, not from a fixed project-specific list.
+Choose domain paths from project evidence, not from a fixed project-specific list.
 
 Use this priority order:
 
@@ -157,6 +178,8 @@ Use this priority order:
 4. Cross-cutting boundaries such as shared platform, integration contract, infrastructure, or policy only when the content coherently affects multiple domains.
 
 Do not confirm a domain solely from a code folder name.
+
+Category and subdomain folders are allowed only as organization inside an approved durable boundary. They must not hide a broad domain, generic bucket, lifecycle status group, or code-layer grouping. If a category label is broad, record it as `rejected` or split it into concrete durable boundary proposals before atom writing.
 
 ## Domain Boundary Quality Gate
 
@@ -175,7 +198,7 @@ Before creating or moving a domain, the domain context or change plan must state
 - the adjacent-domain boundary
 - why the atom files in the domain tend to change together
 
-Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, present a split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
+Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, criteria-review must fail it unless it is recorded as `rejected` broad grouping or as a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
 
 ## Core Business Term Coverage Gate
 
@@ -232,7 +255,7 @@ Every `*-atom.md` file must assign a stable unique ID to each judgment-relevant 
 Use this format:
 
 ```text
-[AID:<atom-target-key>.<section-code>.<NNN>]
+[AID:<atom_key>.<section-code>.<NNN>]
 ```
 
 For example:
@@ -250,11 +273,11 @@ Section codes are:
 - `gap` for `Gaps`
 - `source` for source evidence rows
 
-Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. AID values must be globally unique across the docs set, not just unique within one atom.
+Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. New AID values use the target atom's stable `atom_key` as the prefix and must be globally unique across the docs set, not just unique within one atom.
 
 Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. The criteria document at `project/atomization-criteria.md` is not an atom and is not required to use AID values.
 
-Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, or retained after an atom rename, keep its existing AID when the meaning is still traceable. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record the migration explicitly in the change plan and review findings.
+Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. Category moves, file renames, path drift, and atom slug changes are not AID change reasons. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record the migration explicitly in the change plan and review findings. Do not infer the current owning atom only from an older preserved AID prefix; use frontmatter `atom_key` for current identity.
 
 ## Required Atom Sections
 
@@ -315,4 +338,4 @@ Project and domain context atoms must preserve non-goals, excluded behavior, and
 
 An atom is too broad when it covers unrelated behaviors, policies, rules, states, planned changes, or gap boundaries. Split or propose a split before writing confirmed docs. If the split is ambiguous, keep candidates in the change plan or `Gaps` and ask the user.
 
-Do not write a vague split gap that says more precision is needed without concrete evidence. A split proposal must name candidate atom slugs, owning domain, source files/classes/functions, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.
+Do not write a vague split gap that says more precision is needed without concrete evidence. A split proposal must name candidate atom keys, tentative paths or slugs, owning domain path, source files/classes/functions or other source identifiers, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.

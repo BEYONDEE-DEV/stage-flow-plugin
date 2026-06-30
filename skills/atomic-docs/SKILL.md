@@ -28,6 +28,8 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - A Codex Goal does not replace criteria approval, accepted docs scope, judgment labels, source evidence, or user review. Complete the Goal only after the accepted docs operation is actually complete; do not complete it while work is incomplete, waiting for user input, or failing review.
 - Treat approved criteria as the rule for producing docs, not as the docs themselves or direct code suitability evidence. The criteria document must include domain partitioning criteria and a candidate or approved domain map, but the generated docs set must contain the meaningful service logic in natural language before it can be used as a code suitability standard.
 - Define one shared writer/reviewer quality standard in the criteria document. Writer subagents produce docs and evidence that satisfy that standard; reviewer subagents verify the same standard. Do not create separate writer-only and reviewer-only quality rules that can drift.
+- Separate the criteria document's full discovery candidate map from the current accepted write scope. Do not encode operation-local write scope in durable domain approval status. Broad domains or broad category groupings are never valid as `candidate`, `approved`, or `needs_confirmation`; record them only as `rejected` broad groupings or convert them into concrete split proposals.
+- Treat atom identity as stable frontmatter `atom_key`, not the folder path, category path, or file slug. New atoms must use globally unique lower-kebab-case `atom_key` values that do not change when category folders, domain paths, file slugs, or filenames move.
 - After `project/atomization-criteria.md` passes criteria-review, summarize its contents for the user, provide the file path, and ask the user to inspect the file and approve or request changes. Do not proceed to docs generation, Goal creation, inventory, or domain subagents until the user confirms the criteria content has no issue.
 - Document meaningful application, service, and domain logic in natural language, including conditions, branches, state transitions, validation, permissions, policy rules, persistence effects, external integrations, errors, and recovery behavior when they affect runtime or product/operations meaning.
 - Do not count endpoint lists, controller summaries, service class summaries, file names, method names, or source identifiers alone as coverage.
@@ -39,7 +41,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 Before acting, read only the references needed for the requested operation:
 
 - `references/docs-root-and-config.md` for docs submodule discovery, confirmation, config, and recovery.
-- `references/atomic-document-contract.md` for domain folders, file-based `*-atom.md` atoms, the non-atom criteria document, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
+- `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, the non-atom criteria document, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
 - `references/language-policy.md` for choosing the natural language used in docs content, preventing reference-example leakage into managed docs, and preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
 - `references/change-judgment-policy.md` for classifying source behavior as matching confirmed intent, bug/regression, missing required behavior, unapproved implementation, out-of-scope behavior, confirmation needed, or stale docs.
@@ -55,16 +57,17 @@ Before acting, read only the references needed for the requested operation:
 5. Put user conversation criteria, prohibitions, atomization concerns, and pending approval state into that criteria draft before relying on chat summaries.
 6. Inspect source state to enrich the criteria draft with evidence, not just the change plan.
 7. Before asking the user to approve the criteria, run an independent criteria-review subagent against the draft and revise `project/atomization-criteria.md` until the reviewer reports no blocking issues.
-8. Use the criteria document itself as the center of user revision and approval after criteria-review PASS: summarize the written criteria, provide the `project/atomization-criteria.md` path, ask the user to inspect it, and proceed only after the user confirms the content has no issue or approves it. The criteria must express writer/reviewer expectations as a shared quality standard plus role mapping, not divergent role-specific checklists. Do not start domain atom writing or domain writer/reviewer subagent work until the criteria document is approved.
+8. Use the criteria document itself as the center of user revision and approval after criteria-review PASS: summarize the written criteria, provide the `project/atomization-criteria.md` path, ask the user to inspect it, and proceed only after the user confirms the content has no issue or approves it. The criteria must express writer/reviewer expectations as a shared quality standard plus role mapping, not divergent role-specific checklists. It must also separate full discovery candidates from the current accepted write scope, keep operation-local scope out of durable domain approval status, and reject broad domains or broad category groupings instead of treating them as candidates. Do not start domain atom writing or domain writer/reviewer subagent work until the criteria document is approved.
 9. After criteria approval and accepted docs write scope, create or reuse a Codex Goal before starting docs generation work; stop if Goal creation is unavailable or fails.
 10. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
 11. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
 12. Build a service logic inventory before domain atom drafting when source behavior is being documented. Map each meaningful logic item to an owning atom or record a coverage gap.
 13. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
 14. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
-15. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-16. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-17. Write only the paths and actions accepted by the user for the current docs operation.
+15. For new atom files, set frontmatter `atom_key` and use it for AID prefixes and graph `target_key` references; treat category/domain paths and file slugs as mutable locators.
+16. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+17. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+18. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

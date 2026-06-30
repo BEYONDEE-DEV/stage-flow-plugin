@@ -21,9 +21,9 @@ Before assigning changed source behavior to a domain, inspect the context atoms 
 - `common/common-context-atom.md` for shared concepts, policies, and code structures
 - `<domain>/<domain>-context-atom.md` for existing domain goals and boundaries
 
-If a new domain, new common atom, or domain move is plausible, include the candidate domain, evidence, affected atom files, and unresolved boundary questions in the change plan before writing docs.
+If a new domain, new common atom, category/subdomain path, or domain move is plausible, include the candidate domain path, evidence, affected atom files, and unresolved boundary questions in the change plan before writing docs.
 
-If a domain candidate looks like a broad grouping instead of a durable ownership boundary, do not write it as confirmed structure. Present a split proposal using observed capabilities, workflows, responsibilities, contracts, or policies, and keep unresolved boundary questions in the change plan or `Gaps`.
+If a domain candidate or category grouping looks broad instead of being a durable ownership boundary, do not write it as confirmed structure and do not keep it as `candidate`, `approved`, or `needs_confirmation`. Record it as a `rejected` broad grouping or present a split proposal using observed capabilities, workflows, responsibilities, contracts, or policies, and keep unresolved boundary questions in the change plan or `Gaps`.
 
 ## Atomization Criteria File-First Flow
 
@@ -35,11 +35,11 @@ Before that first draft write, present a narrow change plan that names only the 
 
 The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
-After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should add or revise `도메인 분할 기준`, `후보/승인 도메인 맵`, `검토된 Atom화 관점`, and `작성/리뷰 공통 품질 기준` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective in Korean managed docs, record `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문` in the criteria document. Use `서브에이전트 역할 분담` only to explain how writer subagents produce artifacts for the shared criteria and reviewer subagents verify the same criteria.
+After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should add or revise `도메인 분할 기준`, `후보/승인 도메인 맵`, `검토된 Atom화 관점`, and `작성/리뷰 공통 품질 기준` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. The criteria document must keep the full discovery candidate map separate from the current accepted write scope so broad or unapproved findings do not look like accepted domain structure. The current accepted write scope is operation-local and must not be encoded in durable domain approval status. For each perspective in Korean managed docs, record `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문` in the criteria document. Use `서브에이전트 역할 분담` only to explain how writer subagents produce artifacts for the shared criteria and reviewer subagents verify the same criteria.
 
 Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate below. After criteria-review PASS, tell the user the criteria document path, summarize the actual written content, and ask the user to inspect the file and approve it or request changes. The summary should cover the docs root and scope, domain partitioning criteria, candidate or approved domain map, atomization perspectives, shared writer/reviewer quality criteria, service logic coverage requirements, judgment policy usage, and open blockers. Do not treat the summary as a substitute for the file. The user reviews, adds, removes, revises, and approves the criteria through the criteria document only after that gate passes. Until the criteria document is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria document from draft/pending state to approved state before starting domain atom work.
 
-Expected project domains found during exploration are candidates until the approved criteria and accepted change plan confirm them. Do not treat candidate names as confirmed domain structure before criteria approval.
+Expected project domains found during exploration are candidates only when they are narrow durable boundary candidates with observed behavior and boundary rationale. Do not treat candidate names as confirmed domain structure before criteria approval. Broad discoveries are not candidates; they must be recorded as `rejected` broad groupings or converted into concrete split proposals.
 
 If a legacy `<doc-root>/project/atomization-criteria-atom.md` exists, treat it as a migration/update candidate. Do not write new criteria to the legacy path unless the accepted change plan explicitly covers migration from that legacy artifact.
 
@@ -56,9 +56,16 @@ The criteria-review subagent must fail the draft when:
 - Korean managed criteria docs use English visible labels for criteria sections or fields, such as `Purpose`, `Approval Status`, `Atomization Perspectives`, `Atom candidate criteria`, `Source evidence only criteria`, or `Unresolved questions`
 - source evidence is absent and the perspective does not record a concrete `해당 없음 사유` or `미해결 질문`
 - the domain map is missing, source-unsupported, or treats candidate domains as approved before user approval
+- full discovery candidates and current accepted write scope are mixed together so the reader cannot tell what is merely discovered versus accepted for the current operation
+- durable domain approval status is used to encode operation-local write scope
+- a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation` instead of `rejected` or a concrete split proposal
+- a category or subdomain structure hides a broad domain, generic bucket, lifecycle status group, code-layer grouping, or screen grouping
+- domain-boundary evidence is only source identifiers without observed behavior summary, excluded behavior, adjacent boundary, why the records change together, and confirmed/inferred/needs_confirmation basis
+- criteria state semantics for `candidate`, `approved`, `rejected`, or `needs_confirmation` are ambiguous or used inconsistently
 - writer and reviewer rules are written as divergent role-specific checklists instead of one `작성/리뷰 공통 품질 기준`
 - any reviewer FAIL condition lacks a matching shared criterion or explicit phase gate, or any writer obligation is not reviewable by the same shared criterion
 - the draft makes unapproved destructive claims about legacy artifacts, including deleting `atomization-criteria-atom.md` without an accepted migration/delete action
+- an approved criteria document still contains one-off draft operation logs such as cache paths, reset/delete notes, or stale "currently none" status, unless the note is an active approval blocker
 - reference example prose leaks into the criteria document without target-project user or source trace
 - source-derived intent, rules, domain ownership, or boundaries are not marked as inferred or `needs_confirmation` while still unapproved
 
@@ -88,7 +95,7 @@ Complete the Goal only after the accepted docs operation is actually complete. D
 
 When documenting source behavior, create a service logic inventory before drafting domain atoms. The inventory is behavior-oriented, not method-oriented: group source observations by meaningful runtime behavior rather than by endpoint, controller, service class, method, or file.
 
-For each inventory item, record the inspected source identifiers, the natural-language behavior, conditions and branches, validation or permission checks, state transitions, persistence side effects, integration calls, emitted events, error handling, recovery behavior, inferred or confirmed basis, candidate owning atom, candidate or assigned AID, and judgment label when applicable.
+For each inventory item, record the inspected source identifiers, the natural-language behavior, conditions and branches, validation or permission checks, state transitions, persistence side effects, integration calls, emitted events, error handling, recovery behavior, inferred or confirmed basis, candidate owning atom key, candidate or assigned AID, and judgment label when applicable.
 
 Map every meaningful application, service, and domain logic item to an owning atom before claiming docs coverage. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`; do not treat unmapped source behavior as healthy or covered.
 
@@ -96,11 +103,11 @@ Domain atom drafting must use the service logic inventory as input. A domain ato
 
 ## Domain Subagent Workflow
 
-When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce a service logic inventory plus a judgment-labeled domain evidence packet that maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers. The packet must include inspected source files, domain-map coverage, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, stable AID assignments for each meaning line, and relevant labels from `change-judgment-policy.md`.
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce a service logic inventory plus a judgment-labeled domain evidence packet that maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers. The packet must include inspected source files, domain-map coverage, perspectives reviewed, atom candidates with stable `atom_key` values, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates with `target_key`/`target_path` relationships, split/merge proposals, stable AID assignments for each meaning line, and relevant labels from `change-judgment-policy.md`.
 
 For Korean managed docs, writer subagents must draft directly with Korean-first templates, Korean checklist wording, and Korean behavior substructure under fixed schema headings. Do not produce an English skeleton and translate it afterward.
 
-Use independent review subagents to review writer packets or atom drafts against the same approved criteria document, `작성/리뷰 공통 품질 기준`, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent must not invent hidden reviewer-only quality bars. It fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied, including when required perspectives are missing without a not-applicable reason, the domain map is missing or unsupported, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, Korean docs retain English template residue, translated-English phrasing, English placeholders, or method-call-sequence-only `Current Implementation`, any judgment-relevant meaning line is missing an AID, any AID is duplicated across the docs set, existing AID values are renumbered instead of preserved, judgment-bearing lines or source evidence lines have no AID, change plans or review findings omit related AID values when they can be known, the reviewer cannot explain the implemented behavior from the docs alone, the docs cannot be used as code judgment criteria, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
+Use independent review subagents to review writer packets or atom drafts against the same approved criteria document, `작성/리뷰 공통 품질 기준`, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent must not invent hidden reviewer-only quality bars. It fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied, including when required perspectives are missing without a not-applicable reason, the domain map is missing or unsupported, category structure hides a broad domain, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, Korean docs retain English template residue, translated-English phrasing, English placeholders, or method-call-sequence-only `Current Implementation`, a new atom is missing frontmatter `atom_key`, an `atom_key` is duplicated across the docs set, an `atom_key` changes only because of category move, file rename, or path drift, graph `target_key` does not reference a target atom's `atom_key`, stale `target_path` is not corrected when `target_key` resolves to the same atom, any judgment-relevant meaning line is missing an AID, any AID is duplicated across the docs set, existing AID values are renumbered instead of preserved, judgment-bearing lines or source evidence lines have no AID, change plans or review findings omit related AID values when they can be known, the reviewer cannot explain the implemented behavior from the docs alone, the docs cannot be used as code judgment criteria, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
 
 ## Full Refresh
 
@@ -137,13 +144,14 @@ A change plan should group by domain and list:
 - source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
 - source behavior files inspected
-- service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom, and coverage gaps
+- service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
 - AID assignments for new or changed atom meaning lines, and explicit AID migrations when existing IDs cannot be preserved
 - affected atom files
 - affected atom sections
 - judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `confirmation_needed`, or `docs_stale`
 - related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings whenever the referenced atom lines are known
-- new domains, domain moves, atom splits, atom merges, and split proposals
+- new domains, category or domain-path moves, atom splits, atom merges, and split proposals
+- atom identity changes, including `atom_key` preservation for moves/renames/splits/merges, legacy slug-derived fallback migrations, and duplicate `atom_key` conflicts
 - project goal, project glossary, common context, or domain context changes
 - core business terms that require glossary or domain atom coverage before derived behavior is treated as covered
 - parent business terms missing or underdefined in the glossary, including their source evidence and whether they belong in `Gaps`
@@ -151,7 +159,7 @@ A change plan should group by domain and list:
 - natural-language `Current Implementation` changes
 - `Planned Changes` reconciliation candidates
 - `Gaps`, bug candidates, uncertain mappings, rename/merge proposals, and implemented-plan candidates
-- graph path corrections or target-key conflicts
+- graph path corrections, `target_key`/`target_path` consistency, or target-key conflicts
 - source-baseline metadata updates and docs-root config writes
 - unresolved boundary questions that must be accepted before writing confirmed structure
 

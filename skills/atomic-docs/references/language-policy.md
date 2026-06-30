@@ -19,7 +19,7 @@ For the current Korean workflow, managed docs prose, docs change plans, review n
 Keep these values unchanged even when the surrounding prose is written in another language:
 
 - schema headings such as `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
-- frontmatter keys such as `graph_edges`, `type`, `target_key`, `target_path`, and `reason`
+- frontmatter keys such as `atom_key`, `graph_edges`, `type`, `target_key`, `target_path`, and `reason`
 - config keys such as `docs_root`, `source_root`, and `baseline_metadata_path`
 - source-code identifiers, API names, file paths, enum values, commands, package names, and commit hashes
 - atom line ID tokens such as `[AID:paid-order-processing.impl.003]`
@@ -48,7 +48,7 @@ Reference prose that illustrates how the skill works is not managed docs content
 
 When a docs item needs a concrete phrase, write it from the target project's user wording, source identifiers, inspected behavior, or approved workflow evidence. If that evidence is missing, record a confirmation-needed gap instead of borrowing wording from a skill reference.
 
-Controlled judgment labels, fixed headings, schema keys, and source-code identifiers may be reused exactly. Explanatory prose from references must be rewritten from target-project evidence.
+Controlled judgment labels, fixed headings, schema keys, `atom_key` values, AID tokens, and source-code identifiers may be reused exactly. Explanatory prose from references must be rewritten from target-project evidence.
 
 ## Mixed-Language Handling
 

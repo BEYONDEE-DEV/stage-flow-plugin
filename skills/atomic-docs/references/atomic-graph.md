@@ -21,11 +21,12 @@ Graph frontmatter is structural metadata. Do not assign atom line IDs to `graph_
 
 ## Target Keys And Paths
 
-- `target_key` is derived from the atom file slug by removing the `-atom.md` suffix and must be globally unique across the docs set.
-- Duplicate `target_key` values are invalid conflicts. Do not silently auto-prefix with a domain or generated suffix.
-- If a likely atom slug would conflict, choose a clearer file slug before writing or ask the user when the boundary is ambiguous.
-- `target_path` points to the existing target `*-atom.md` file relative to the docs root.
-- If `target_path` is stale but `target_key` resolves to an existing atom file, correct the path during refresh and show the path correction in the change plan.
+- `target_key` is the target atom's stable frontmatter `atom_key`, not the atom file slug, category path, domain path, or filename.
+- Duplicate `atom_key` values and duplicate graph `target_key` references that resolve to different atom files are invalid conflicts. Do not silently auto-prefix with a domain, category, or generated suffix.
+- If a likely `atom_key` would conflict, choose a clearer stable key before writing or ask the user when the boundary is ambiguous.
+- Existing atoms without frontmatter `atom_key` may use slug-derived identity only as a legacy fallback for discovery. Treat that fallback as an explicit `atom_key` migration candidate before adding new graph relationships.
+- `target_path` is a mutable locator that points to the current existing target `*-atom.md` file relative to the docs root.
+- If `target_path` is stale but `target_key` resolves to an existing atom with the same `atom_key`, correct the path during refresh and show the path correction in the change plan.
 - Graph edges may only target existing atom files. Future, missing, rename, or merge candidates belong in a change plan or `Gaps` until the target file exists.
 - The criteria document at `project/atomization-criteria.md` is not an atom file and must not be used as a `graph_edges` source or target.
 

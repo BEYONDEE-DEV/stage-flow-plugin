@@ -37,9 +37,9 @@ Do not classify behavior as required, out-of-scope, or matching from inferred `I
 
 ## Evidence Requirements
 
-Every judgment item must name the atom, related AID values, source evidence, judgment label, reason, and the confirmed or inferred basis for the judgment. The basis may be confirmed `Intent`, confirmed `Rules`, approved required `Planned Changes`, non-goals, excluded behavior, adjacent-domain boundaries, source baseline metadata, or explicit user approval.
+Every judgment item must name the atom path, stable `atom_key` when available, related AID values, source evidence, judgment label, reason, and the confirmed or inferred basis for the judgment. The basis may be confirmed `Intent`, confirmed `Rules`, approved required `Planned Changes`, non-goals, excluded behavior, adjacent-domain boundaries, source baseline metadata, or explicit user approval.
 
-Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior` are sufficiently traceable only when they link to the specific AID lines that state the relevant intent, rule, current implementation, planned change, or gap. If no AID-backed natural-language service logic exists for the behavior, use `confirmation_needed` or a coverage gap instead of a stronger judgment.
+Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior` are sufficiently traceable only when they link to the specific AID lines that state the relevant intent, rule, current implementation, planned change, or gap. Those AID lines should live under a stable `atom_key`; path-only or slug-only references are insufficient for new atoms. If no AID-backed natural-language service logic exists for the behavior, use `confirmation_needed` or a coverage gap instead of a stronger judgment.
 
 `matches_confirmed_intent` is an explicit review judgment, not the absence of a `Gaps` item. Do not mark behavior as matching unless the review inspected relevant source evidence and confirmed no higher-priority label applies.
 
@@ -57,6 +57,7 @@ When the source behavior is present in code but absent from natural-language doc
 Use natural-language prose, but each judgment-bearing `Gaps` item or review finding must include:
 
 - one judgment label from this policy
+- the stable `atom_key` when the affected atom has one
 - related AID values from the atom lines that support or are affected by the finding
 - source evidence identifiers from the target project
 - the confirmed or inferred basis
