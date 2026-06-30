@@ -107,12 +107,12 @@ For Korean managed docs, the criteria document must use these visible section he
 - `후보/승인 도메인 맵`
 - `Atom화 관점`
 - `서비스 로직 커버리지 요구사항`
-- `작성 서브에이전트 지침`
-- `리뷰 서브에이전트 지침`
+- `작성/리뷰 공통 품질 기준`
+- `서브에이전트 역할 분담`
 - `판정 라벨 사용 기준`
 - `미해결 질문과 승인 차단 항목`
 
-Do not use English visible criteria headings such as `Purpose`, `Approval Status`, `Managed Docs Root And Scope`, `Domain Partitioning Criteria`, `Candidate / Approved Domain Map`, `Atomization Perspectives`, `Service Logic Coverage Requirements`, `Writer Subagent Instructions`, `Reviewer Subagent Instructions`, `Judgment Policy Usage`, or `Open Questions And Approval Blockers` in Korean managed docs.
+Do not use English visible criteria headings such as `Purpose`, `Approval Status`, `Managed Docs Root And Scope`, `Domain Partitioning Criteria`, `Candidate / Approved Domain Map`, `Atomization Perspectives`, `Service Logic Coverage Requirements`, `Shared Writer/Reviewer Quality Criteria`, `Subagent Role Mapping`, `Writer Subagent Instructions`, `Reviewer Subagent Instructions`, `Judgment Policy Usage`, or `Open Questions And Approval Blockers` in Korean managed docs.
 
 The criteria document records:
 
@@ -124,13 +124,24 @@ The criteria document records:
 - split and merge criteria, including how to decide when behavior belongs in one atom versus multiple atoms
 - source evidence requirements for each atom candidate
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
-- writer subagent and review subagent checklists that future docs operations must read before drafting or reviewing atom files
+- one shared writer/reviewer quality standard that future docs operations must use both for drafting and reviewing atom files
+- subagent role mapping that explains how writer subagents produce artifacts for the shared standard and how reviewer subagents verify that same standard
 
 These perspectives are not fixed document types. Entry surfaces discovered in the target source may be evidence, but the criteria document must not force a separate atom merely because that surface exists.
 
 Domain approval state values are limited to `candidate`, `approved`, `rejected`, and `needs_confirmation`; keep these values unchanged, but use the Korean field label `승인 상태`. Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
 
-Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required Korean subfields, when a required subfield is empty or placeholder-only, when a Korean managed criteria draft uses English visible labels for criteria sections or fields, or when a perspective with no current source evidence fails to record a concrete `해당 없음 사유` or `미해결 질문` entry.
+The criteria document must not maintain separate writer-only and reviewer-only quality rules. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map use, atomization perspectives, service logic inventory, natural-language implementation coverage, source evidence, inferred/confirmed basis, AID assignment, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
+
+The section `서브에이전트 역할 분담` may describe workflow roles only:
+
+- writer subagents produce service logic inventories, evidence packets, and atom drafts that satisfy each item in `작성/리뷰 공통 품질 기준`
+- reviewer subagents verify the same items in `작성/리뷰 공통 품질 기준` and report missing or unsupported evidence
+- criteria-review subagents verify whether the criteria draft itself contains enough shared criteria before user approval
+
+Every writer obligation must be reviewable by the same shared criterion, and every reviewer FAIL condition must map to the same shared criterion or an explicit phase gate such as criteria approval, accepted scope, or Goal Gate. Do not add hidden reviewer-only quality bars or writer-only obligations that the reviewer does not check.
+
+Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required Korean subfields, when a required subfield is empty or placeholder-only, when a Korean managed criteria draft uses English visible labels for criteria sections or fields, when writer and reviewer rules appear as divergent role-specific checklists instead of one shared quality standard, or when a perspective with no current source evidence fails to record a concrete `해당 없음 사유` or `미해결 질문` entry.
 
 If a perspective or domain candidate has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
 

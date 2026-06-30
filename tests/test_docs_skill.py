@@ -143,6 +143,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Use only an approved criteria document as required input", text)
         self.assertIn("Do not require a Codex Goal for bootstrap criteria draft creation or criteria-review subagents", text)
         self.assertIn("current request already accepted bootstrap scope", text)
+        self.assertIn("summarize the written criteria, provide the `project/atomization-criteria.md` path", text)
+        self.assertIn("ask the user to inspect it", text)
+        self.assertIn("proceed only after the user confirms the content has no issue or approves it", text)
+        self.assertIn("shared quality standard plus role mapping", text)
+        self.assertIn("not divergent role-specific checklists", text)
         self.assertIn("After criteria approval and accepted docs write scope", text)
         self.assertIn("create or reuse a Codex Goal before starting docs generation work", text)
 
@@ -228,8 +233,8 @@ class DocsSkillTests(unittest.TestCase):
             "후보/승인 도메인 맵",
             "Atom화 관점",
             "서비스 로직 커버리지 요구사항",
-            "작성 서브에이전트 지침",
-            "리뷰 서브에이전트 지침",
+            "작성/리뷰 공통 품질 기준",
+            "서브에이전트 역할 분담",
             "판정 라벨 사용 기준",
             "미해결 질문과 승인 차단 항목",
         ]:
@@ -277,7 +282,14 @@ class DocsSkillTests(unittest.TestCase):
             "`candidate`, `approved`, `rejected`, and `needs_confirmation`",
         ]:
             self.assertIn(domain_detail, text)
-        self.assertIn("writer subagent and review subagent checklists", text)
+        self.assertIn("one shared writer/reviewer quality standard", text)
+        self.assertIn("subagent role mapping", text)
+        self.assertIn("must not maintain separate writer-only and reviewer-only quality rules", text)
+        self.assertIn("single acceptance standard", text)
+        self.assertIn("Every writer obligation must be reviewable by the same shared criterion", text)
+        self.assertIn("every reviewer FAIL condition must map to the same shared criterion or an explicit phase gate", text)
+        self.assertIn("Do not add hidden reviewer-only quality bars or writer-only obligations", text)
+        self.assertIn("writer and reviewer rules appear as divergent role-specific checklists", text)
         self.assertIn("not fixed document types", text)
         self.assertIn("Do not accept a criteria document that only lists perspective names or domain names", text)
         self.assertNotIn("endpoint document", text)
@@ -488,12 +500,24 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Korean managed criteria docs use English visible labels for criteria sections or fields", text)
         self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
         self.assertIn("the domain map is missing, source-unsupported", text)
+        self.assertIn("writer and reviewer rules are written as divergent role-specific checklists", text)
+        self.assertIn("any reviewer FAIL condition lacks a matching shared criterion or explicit phase gate", text)
+        self.assertIn("any writer obligation is not reviewable by the same shared criterion", text)
         self.assertIn("unapproved destructive claims about legacy artifacts", text)
         self.assertIn("revise only `project/atomization-criteria.md`", text)
         self.assertIn("rerun the criteria-review subagent", text)
         self.assertIn("reports no blocking issues", text)
         self.assertIn("ready for user review and possible approval", text)
         self.assertIn("does not approve the criteria automatically", text)
+        self.assertIn("tell the user the criteria document path", text)
+        self.assertIn("summarize the actual written content", text)
+        self.assertIn("ask the user to inspect the file and approve it or request changes", text)
+        self.assertIn("docs root and scope, domain partitioning criteria, candidate or approved domain map", text)
+        self.assertIn("shared writer/reviewer quality criteria", text)
+        self.assertIn("Do not treat the summary as a substitute for the file", text)
+        self.assertIn("a concise Korean summary of what was written", text)
+        self.assertIn("Do not proceed to criteria approval state update, Codex Goal creation, service logic inventory", text)
+        self.assertIn("until the user confirms the criteria content has no issue or explicitly approves it", text)
         self.assertIn("draft review artifact", text)
         self.assertIn("must not be used as the required input for domain writer subagents", text)
         self.assertIn("candidate names as confirmed domain structure before criteria approval", text)
@@ -502,11 +526,15 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria document is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria document", text)
+        self.assertIn("maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers", text)
         self.assertIn("service logic inventory plus a judgment-labeled domain evidence packet", text)
         self.assertIn("judgment-labeled domain evidence packet", text)
         self.assertIn("stable AID assignments for each meaning line", text)
         self.assertIn("change-judgment-policy.md", text)
         self.assertIn("No Example Leakage rule", text)
+        self.assertIn("same approved criteria document, `작성/리뷰 공통 품질 기준`", text)
+        self.assertIn("must not invent hidden reviewer-only quality bars", text)
+        self.assertIn("fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied", text)
         self.assertIn("the domain map is missing or unsupported", text)
         self.assertIn("meaningful source behavior is missing from the inventory", text)
         self.assertIn("source identifiers appear without natural-language behavior", text)
@@ -528,7 +556,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("missing required behavior is confused with out-of-scope behavior", text)
         self.assertIn("candidate domains are treated as confirmed without approval", text)
         self.assertIn("independent review subagents", text)
-        self.assertIn("review subagent fails", text)
+        self.assertIn("It fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied", text)
         self.assertIn("rerun review", text)
 
     def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
