@@ -40,6 +40,8 @@ Keep fixed schema headings, frontmatter keys, controlled judgment labels, and so
 
 Writer and reviewer checklists for Korean docs must be written directly in Korean. A draft that reads like translated English, preserves English placeholder prose, or uses an English-first scaffold for Korean managed docs is not ready for user review.
 
+For Korean managed docs, criteria documents must also use Korean visible section headings and field labels. Do not use English visible labels such as `Purpose`, `Approval Status`, `Managed Docs Root And Scope`, `Atomization Perspectives`, `Atom candidate criteria`, `Source evidence only criteria`, or `Unresolved questions` unless the user explicitly asks for English. Preserve only fixed atom section headings, frontmatter keys, controlled judgment labels, AID tokens, and source identifiers.
+
 ## No Example Leakage
 
 Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria documents, atom drafts, `Gaps`, review findings, or change plans.

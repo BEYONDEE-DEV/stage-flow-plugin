@@ -27,7 +27,7 @@ If a domain candidate looks like a broad grouping instead of a durable ownership
 
 ## Atomization Criteria File-First Flow
 
-When atomization criteria are needed, do not keep `Atomization Perspectives Reviewed` only in chat or only in the change plan. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria.md` as the criteria proposal.
+When atomization criteria are needed, do not keep reviewed atomization perspectives only in chat or only in the change plan. For Korean managed docs, record this as `검토된 Atom화 관점`. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria.md` as the criteria proposal.
 
 If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms the managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria.md` as a draft criteria proposal in the same turn, then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS.
 
@@ -35,7 +35,7 @@ Before that first draft write, present a narrow change plan that names only the 
 
 The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
-After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should add or revise the domain partitioning criteria, candidate or approved domain map, and `Atomization Perspectives Reviewed` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective, record source evidence, proposed atom candidates, source-evidence-only treatment, not-applicable reasons, split/merge criteria, source evidence requirements, and unresolved questions in the criteria document.
+After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should add or revise `도메인 분할 기준`, `후보/승인 도메인 맵`, and `검토된 Atom화 관점` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective in Korean managed docs, record `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문` in the criteria document.
 
 Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate below. The user reviews, adds, removes, revises, and approves the criteria through the criteria document only after that gate passes. Until the criteria document is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria document from draft/pending state to approved state before starting domain atom work.
 
@@ -51,9 +51,10 @@ Use an independent criteria-review subagent to review only the criteria draft, s
 
 The criteria-review subagent must fail the draft when:
 
-- any `Atomization Perspectives` entry is missing one of the required subfields: `Atom candidate criteria`, `Source evidence only criteria`, `Not applicable reason`, `Split/merge criteria`, `Source evidence requirement`, or `Unresolved questions`
+- any `Atom화 관점` entry is missing one of the required Korean subfields: `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, or `미해결 질문`
 - a required perspective subfield is empty, placeholder-only, or a one-line summary that does not explain the criterion
-- source evidence is absent and the perspective does not record a concrete `Not applicable reason` or `Unresolved questions`
+- Korean managed criteria docs use English visible labels for criteria sections or fields, such as `Purpose`, `Approval Status`, `Atomization Perspectives`, `Atom candidate criteria`, `Source evidence only criteria`, or `Unresolved questions`
+- source evidence is absent and the perspective does not record a concrete `해당 없음 사유` or `미해결 질문`
 - the domain map is missing, source-unsupported, or treats candidate domains as approved before user approval
 - the draft makes unapproved destructive claims about legacy artifacts, including deleting `atomization-criteria-atom.md` without an accepted migration/delete action
 - reference example prose leaks into the criteria document without target-project user or source trace
@@ -121,7 +122,7 @@ For domain-level work, update the domain context atom when the domain goal, resp
 A change plan should group by domain and list:
 
 - the limited first write action for draft criteria creation or update at `project/atomization-criteria.md` when criteria are new or changed
-- `Atomization Perspectives Reviewed`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
+- `검토된 Atom화 관점`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
 - user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
 - source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation

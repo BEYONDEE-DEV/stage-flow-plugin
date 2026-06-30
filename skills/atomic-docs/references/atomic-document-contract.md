@@ -94,31 +94,33 @@ After the docs root is confirmed and the user accepts the limited draft write ac
 
 The criteria document is not an atom. It must not follow the `*-atom.md` path contract, the atomic graph contract, or the required atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`. Those required sections are for service-logic and context atom files only.
 
-A draft criteria document is a review artifact. It must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing until the user approves the criteria. In draft state, record `Approval Status: draft, pending user approval`. After the user approves the criteria, update it to `Approval Status: approved by user` and remove obsolete draft-only or pending-approval blockers.
+A draft criteria document is a review artifact. It must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing until the user approves the criteria. In Korean managed docs, record `승인 상태: 초안, 사용자 승인 대기` while it is draft. After the user approves the criteria, update it to `승인 상태: 사용자 승인 완료` and remove obsolete draft-only or pending-approval blockers.
 
 Record user-conversation criteria in the draft before code exploration if they affect atomization. Capture only criteria that came from the user, inspected source behavior, or approved workflow evidence; do not copy illustrative wording from skill references into the criteria document.
 
-The criteria document must include these sections:
+For Korean managed docs, the criteria document must use these visible section headings:
 
-- `Purpose`
-- `Approval Status`
-- `Managed Docs Root And Scope`
-- `Domain Partitioning Criteria`
-- `Candidate / Approved Domain Map`
-- `Atomization Perspectives`
-- `Service Logic Coverage Requirements`
-- `Writer Subagent Instructions`
-- `Reviewer Subagent Instructions`
-- `Judgment Policy Usage`
-- `Open Questions And Approval Blockers`
+- `목적`
+- `승인 상태`
+- `문서 루트와 작업 범위`
+- `도메인 분할 기준`
+- `후보/승인 도메인 맵`
+- `Atom화 관점`
+- `서비스 로직 커버리지 요구사항`
+- `작성 서브에이전트 지침`
+- `리뷰 서브에이전트 지침`
+- `판정 라벨 사용 기준`
+- `미해결 질문과 승인 차단 항목`
+
+Do not use English visible criteria headings such as `Purpose`, `Approval Status`, `Managed Docs Root And Scope`, `Domain Partitioning Criteria`, `Candidate / Approved Domain Map`, `Atomization Perspectives`, `Service Logic Coverage Requirements`, `Writer Subagent Instructions`, `Reviewer Subagent Instructions`, `Judgment Policy Usage`, or `Open Questions And Approval Blockers` in Korean managed docs.
 
 The criteria document records:
 
 - atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery
-- every entry under `Atomization Perspectives` with these exact subfields: `Atom candidate criteria`, `Source evidence only criteria`, `Not applicable reason`, `Split/merge criteria`, `Source evidence requirement`, and `Unresolved questions`
+- every entry under `Atom화 관점` with these exact visible subfields: `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문`
 - which perspectives create atom candidates, which are source evidence only, and which are not applicable for the current source shape
 - domain partitioning criteria for deciding first-level domain folders
-- a candidate or approved domain map that records each domain name, owned behavior, excluded behavior, adjacent domain boundary, why the atoms in that domain change together, source evidence, unresolved questions, and approval state
+- a candidate or approved domain map that records each domain name with Korean field labels for `승인 상태`, `소유 동작`, `제외 동작`, `인접 도메인 경계`, `함께 변경되는 이유`, `소스 근거`, and `미해결 질문`
 - split and merge criteria, including how to decide when behavior belongs in one atom versus multiple atoms
 - source evidence requirements for each atom candidate
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
@@ -126,9 +128,9 @@ The criteria document records:
 
 These perspectives are not fixed document types. Entry surfaces discovered in the target source may be evidence, but the criteria document must not force a separate atom merely because that surface exists.
 
-Domain approval states are limited to `candidate`, `approved`, `rejected`, and `needs_confirmation`. Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
+Domain approval state values are limited to `candidate`, `approved`, `rejected`, and `needs_confirmation`; keep these values unchanged, but use the Korean field label `승인 상태`. Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
 
-Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required subfields, when a required subfield is empty or placeholder-only, or when a perspective with no current source evidence fails to record a concrete `Not applicable reason` or `Unresolved questions` entry.
+Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required Korean subfields, when a required subfield is empty or placeholder-only, when a Korean managed criteria draft uses English visible labels for criteria sections or fields, or when a perspective with no current source evidence fails to record a concrete `해당 없음 사유` or `미해결 질문` entry.
 
 If a perspective or domain candidate has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
 

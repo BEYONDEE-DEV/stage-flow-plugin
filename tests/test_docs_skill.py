@@ -69,6 +69,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Korean-First Template Policy", text)
         self.assertIn("Korean-first writing templates", text)
         self.assertIn("Do not draft an English skeleton first and then translate it into Korean", text)
+        self.assertIn("criteria documents must also use Korean visible section headings and field labels", text)
+        self.assertIn("Do not use English visible labels such as `Purpose`, `Approval Status`", text)
+        self.assertIn("Preserve only fixed atom section headings, frontmatter keys, controlled judgment labels, AID tokens, and source identifiers", text)
         for korean_subheading in [
             "### 동작 흐름",
             "### 관찰된 판단 규칙",
@@ -210,27 +213,29 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Existing `<doc-root>/project/atomization-criteria-atom.md` files are legacy artifacts", text)
         self.assertIn("first atomic-docs write action", text)
         self.assertIn("draft criteria document is a review artifact", text)
-        self.assertIn("Approval Status: draft, pending user approval", text)
-        self.assertIn("Approval Status: approved by user", text)
+        self.assertIn("승인 상태: 초안, 사용자 승인 대기", text)
+        self.assertIn("승인 상태: 사용자 승인 완료", text)
         self.assertIn("must not be used as the required input for domain writer subagents", text)
         self.assertIn("Record user-conversation criteria in the draft before code exploration", text)
         self.assertIn("do not copy illustrative wording from skill references", text)
         self.assertIn("must not follow the `*-atom.md` path contract", text)
         self.assertIn("required atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`", text)
         for section in [
-            "Purpose",
-            "Approval Status",
-            "Managed Docs Root And Scope",
-            "Domain Partitioning Criteria",
-            "Candidate / Approved Domain Map",
-            "Atomization Perspectives",
-            "Service Logic Coverage Requirements",
-            "Writer Subagent Instructions",
-            "Reviewer Subagent Instructions",
-            "Judgment Policy Usage",
-            "Open Questions And Approval Blockers",
+            "목적",
+            "승인 상태",
+            "문서 루트와 작업 범위",
+            "도메인 분할 기준",
+            "후보/승인 도메인 맵",
+            "Atom화 관점",
+            "서비스 로직 커버리지 요구사항",
+            "작성 서브에이전트 지침",
+            "리뷰 서브에이전트 지침",
+            "판정 라벨 사용 기준",
+            "미해결 질문과 승인 차단 항목",
         ]:
             self.assertIn(section, text)
+        self.assertIn("Do not use English visible criteria headings", text)
+        self.assertIn("in Korean managed docs", text)
         for perspective in [
             "domain capability",
             "entry surface",
@@ -244,28 +249,31 @@ class DocsSkillTests(unittest.TestCase):
         ]:
             self.assertIn(perspective, text)
         for required_detail in [
-            "Atom candidate criteria",
-            "Source evidence only criteria",
-            "Not applicable reason",
-            "Split/merge criteria",
-            "Source evidence requirement",
-            "Unresolved questions",
+            "Atom 후보 기준",
+            "소스 근거로만 둘 기준",
+            "해당 없음 사유",
+            "분리/병합 기준",
+            "소스 근거 요구사항",
+            "미해결 질문",
         ]:
             self.assertIn(required_detail, text)
-        self.assertIn("every entry under `Atomization Perspectives` with these exact subfields", text)
+        self.assertIn("every entry under `Atom화 관점` with these exact visible subfields", text)
         self.assertIn("Do not accept one-line perspective summaries", text)
-        self.assertIn("missing one of the required subfields", text)
+        self.assertIn("missing one of the required Korean subfields", text)
         self.assertIn("empty or placeholder-only", text)
-        self.assertIn("concrete `Not applicable reason` or `Unresolved questions`", text)
+        self.assertIn("uses English visible labels for criteria sections or fields", text)
+        self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
         for domain_detail in [
             "domain partitioning criteria",
             "candidate or approved domain map",
             "domain name",
-            "owned behavior",
-            "excluded behavior",
-            "adjacent domain boundary",
-            "why the atoms in that domain change together",
-            "approval state",
+            "승인 상태",
+            "소유 동작",
+            "제외 동작",
+            "인접 도메인 경계",
+            "함께 변경되는 이유",
+            "소스 근거",
+            "미해결 질문",
             "`candidate`, `approved`, `rejected`, and `needs_confirmation`",
         ]:
             self.assertIn(domain_detail, text)
@@ -455,7 +463,7 @@ class DocsSkillTests(unittest.TestCase):
     def test_refresh_flow_creates_draft_criteria_before_subagents(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
         self.assertIn("Atomization Criteria File-First Flow", text)
-        self.assertIn("Atomization Perspectives Reviewed", text)
+        self.assertIn("검토된 Atom화 관점", text)
         self.assertIn("project/atomization-criteria.md", text)
         self.assertIn("legacy `<doc-root>/project/atomization-criteria-atom.md` exists", text)
         self.assertIn("first atomic-docs write action", text)
@@ -474,8 +482,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate", text)
         self.assertIn("Use an independent criteria-review subagent", text)
         self.assertIn("allowed before criteria approval and does not require a Codex Goal", text)
-        self.assertIn("any `Atomization Perspectives` entry is missing one of the required subfields", text)
+        self.assertIn("any `Atom화 관점` entry is missing one of the required Korean subfields", text)
+        self.assertIn("`Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, or `미해결 질문`", text)
         self.assertIn("empty, placeholder-only, or a one-line summary", text)
+        self.assertIn("Korean managed criteria docs use English visible labels for criteria sections or fields", text)
+        self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
         self.assertIn("the domain map is missing, source-unsupported", text)
         self.assertIn("unapproved destructive claims about legacy artifacts", text)
         self.assertIn("revise only `project/atomization-criteria.md`", text)
@@ -486,8 +497,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("draft review artifact", text)
         self.assertIn("must not be used as the required input for domain writer subagents", text)
         self.assertIn("candidate names as confirmed domain structure before criteria approval", text)
-        self.assertIn("domain partitioning criteria", text)
-        self.assertIn("candidate or approved domain map", text)
+        self.assertIn("도메인 분할 기준", text)
+        self.assertIn("후보/승인 도메인 맵", text)
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria document is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria document", text)
