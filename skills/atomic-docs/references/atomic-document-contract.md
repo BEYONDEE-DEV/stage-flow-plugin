@@ -10,6 +10,7 @@
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
+- [Atomic Docs Goal Boundary](#atomic-docs-goal-boundary)
 - [Required Atom Sections](#required-atom-sections)
 - [Judgment Evidence Policy](#judgment-evidence-policy)
 - [Forbidden Shapes](#forbidden-shapes)
@@ -170,6 +171,14 @@ For each meaningful service logic item, the docs must record:
 Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
 
 Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
+
+## Atomic Docs Goal Boundary
+
+The Codex Goal used after criteria approval is an execution scope for performing the accepted docs operation. It does not replace criteria approval, accepted docs write scope, atom content, judgment labels, source evidence, user review, or source-baseline metadata.
+
+Do not write Goal status or Goal completion as atom-level status, per-atom freshness, or judgment evidence. Code suitability judgments still come from approved criteria, generated atoms, source evidence, graph relationships, baseline metadata, and controlled judgment labels.
+
+If the Goal is incomplete, blocked, waiting for user input, or blocked by review FAIL, preserve that state in the operation summary or change plan rather than in atom judgment labels. Atom files should continue to describe intent, rules, current implementation, planned changes, and gaps.
 
 ## Required Atom Sections
 

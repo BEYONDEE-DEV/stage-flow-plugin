@@ -23,6 +23,9 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 - Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria atom as required input for domain writer and review subagents.
+- Do not require a Codex Goal for bootstrap criteria draft creation. After criteria approval, require a Codex `create_goal` call before starting docs generation work such as project/common/domain atom writing, service logic inventory, writer/reviewer subagents, graph edges, or source-baseline updates.
+- The Atomic Docs Goal must cover the approved criteria atom path, docs root, accepted docs write scope, natural-language service logic coverage, writer/reviewer cycle, and completion condition. If an active Goal already covers the same atomic-docs operation, continue inside that Goal; if Goal creation is unavailable or fails, stop before docs generation and report the blocker.
+- A Codex Goal does not replace criteria approval, accepted docs scope, judgment labels, source evidence, or user review. Complete the Goal only after the accepted docs operation is actually complete; do not complete it while work is incomplete, waiting for user input, or failing review.
 - Treat approved criteria as the rule for producing docs, not as the docs themselves. The generated docs set must contain the meaningful service logic in natural language before it can be used as a code suitability standard.
 - Document meaningful application, service, and domain logic in natural language, including conditions, branches, state transitions, validation, permissions, policy rules, persistence effects, external integrations, errors, and recovery behavior when they affect runtime or product/operations meaning.
 - Do not count endpoint lists, controller summaries, service class summaries, file names, method names, or source identifiers alone as coverage.
@@ -50,14 +53,15 @@ Before acting, read only the references needed for the requested operation:
 5. Put user conversation criteria, prohibitions, atomization concerns, and pending approval state into that criteria draft before relying on chat summaries.
 6. Inspect source state to enrich the criteria draft with evidence, not just the change plan.
 7. Use the criteria atom itself as the center of review, user revision, and approval. Do not start domain atom writing or domain subagent work until the criteria atom is approved.
-8. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
-9. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
-10. Build a service logic inventory before domain atom drafting when source behavior is being documented. Map each meaningful logic item to an owning atom or record a coverage gap.
-11. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
-12. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
-13. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-14. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-15. Write only the paths and actions accepted by the user for the current docs operation.
+8. After criteria approval and accepted docs write scope, create or reuse a Codex Goal before starting docs generation work; stop if Goal creation is unavailable or fails.
+9. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
+10. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
+11. Build a service logic inventory before domain atom drafting when source behavior is being documented. Map each meaningful logic item to an owning atom or record a coverage gap.
+12. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
+13. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
+14. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+15. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+16. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

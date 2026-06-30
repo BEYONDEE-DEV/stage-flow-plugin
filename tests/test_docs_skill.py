@@ -117,6 +117,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not start domain atom writing or domain subagent work until the criteria atom is approved", text)
         self.assertIn("Use only an approved criteria atom as required input", text)
         self.assertIn("current request already accepted bootstrap scope", text)
+        self.assertIn("After criteria approval and accepted docs write scope", text)
+        self.assertIn("create or reuse a Codex Goal before starting docs generation work", text)
 
     def test_atomic_document_contract_sections_and_boundaries(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -259,6 +261,15 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient", text)
         self.assertIn("service logic coverage gaps", text)
 
+    def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Atomic Docs Goal Boundary", text)
+        self.assertIn("execution scope for performing the accepted docs operation", text)
+        self.assertIn("does not replace criteria approval, accepted docs write scope", text)
+        self.assertIn("judgment labels, source evidence, user review, or source-baseline metadata", text)
+        self.assertIn("Do not write Goal status or Goal completion as atom-level status", text)
+        self.assertIn("Code suitability judgments still come from approved criteria, generated atoms, source evidence", text)
+
     def test_atomic_document_contract_rejects_evasive_split_or_identifier_only_coverage(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Do not leave an evasive split or coverage gap", text)
@@ -381,6 +392,33 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("independent review subagents", text)
         self.assertIn("review subagent fails", text)
         self.assertIn("rerun review", text)
+
+    def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Atomic Docs Goal Gate", text)
+        self.assertIn("Bootstrap criteria draft creation does not require a Codex Goal", text)
+        self.assertIn("After the criteria atom is approved and the user accepts a docs write scope, call Codex `create_goal`", text)
+        for blocked_work in [
+            "project, common, or domain atom writing",
+            "service logic inventory creation",
+            "writer or reviewer subagent execution",
+            "graph edge writing",
+            "source-baseline metadata updates",
+        ]:
+            self.assertIn(blocked_work, text)
+        for objective_part in [
+            "approved criteria atom path",
+            "docs root",
+            "accepted docs write scope",
+            "natural-language service logic coverage requirement",
+            "writer/reviewer cycle",
+            "completion condition",
+        ]:
+            self.assertIn(objective_part, text)
+        self.assertIn("If `create_goal` is unavailable or fails, do not start docs generation", text)
+        self.assertIn("Complete the Goal only after the accepted docs operation is actually complete", text)
+        self.assertIn("waiting for user input, blocked by review FAIL", text)
+        self.assertIn("Atomic Docs Goal Gate status", text)
 
     def test_refresh_flow_requires_service_logic_inventory_and_atom_mapping(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")

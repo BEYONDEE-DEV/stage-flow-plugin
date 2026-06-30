@@ -41,6 +41,18 @@ The user reviews, adds, removes, revises, and approves the criteria through the 
 
 Expected project domains found during exploration are candidates until the approved criteria and accepted change plan confirm them. Do not treat candidate names as confirmed domain structure before criteria approval.
 
+## Atomic Docs Goal Gate
+
+Bootstrap criteria draft creation does not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria-atom.md`, then must stop for criteria review.
+
+After the criteria atom is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project, common, or domain atom writing; service logic inventory creation; writer or reviewer subagent execution; graph edge writing; and source-baseline metadata updates.
+
+The Goal objective must name the approved criteria atom path, docs root, accepted docs write scope, natural-language service logic coverage requirement, writer/reviewer cycle, and completion condition for the accepted docs operation. If an active Codex Goal already covers the same atomic-docs operation, continue inside that Goal instead of creating a duplicate.
+
+If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project/common/domain atoms, service logic inventory, subagents, graph edges, and source-baseline metadata untouched.
+
+Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
+
 ## Service Logic Inventory
 
 When documenting source behavior, create a service logic inventory before drafting domain atoms. The inventory is behavior-oriented, not method-oriented: group source observations by meaningful runtime behavior rather than by endpoint, controller, service class, method, or file.
@@ -53,7 +65,7 @@ Domain atom drafting must use the service logic inventory as input. A domain ato
 
 ## Domain Subagent Workflow
 
-When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved. Each writer subagent must read the approved criteria atom and produce a service logic inventory plus a judgment-labeled domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria atom and produce a service logic inventory plus a judgment-labeled domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
 
 Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
 
@@ -64,16 +76,17 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 1. Read the configured docs root and source root.
 2. Read the docs-root source commit baseline metadata.
 3. If atomization criteria are needed and no approved criteria atom exists, create or update the draft criteria atom through the file-first flow before domain atom work.
-4. Inspect changed source behavior files since the stored source commit hash and map baseline diffs to affected atoms through source-to-atom discovery and graph traversal.
-5. Ignore tests, settings, schema, build, and auxiliary files by default unless the user requested auxiliary-file reflection.
-6. Inspect project, common, and relevant domain context atoms when they exist.
-7. Use source-to-atom seed discovery to find likely domain and atom candidates.
-8. Build a service logic inventory for meaningful changed or targeted source behavior.
-9. Expand affected scope through atomic graph traversal.
-10. Stop graph expansion when related atom files no longer create modification candidates.
-11. Present a domain-grouped change plan before writing domain atom docs.
-12. Write confirmed updates only after the change plan is accepted.
-13. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete.
+4. After criteria approval and accepted docs write scope, satisfy the Atomic Docs Goal Gate before docs generation work.
+5. Inspect changed source behavior files since the stored source commit hash and map baseline diffs to affected atoms through source-to-atom discovery and graph traversal.
+6. Ignore tests, settings, schema, build, and auxiliary files by default unless the user requested auxiliary-file reflection.
+7. Inspect project, common, and relevant domain context atoms when they exist.
+8. Use source-to-atom seed discovery to find likely domain and atom candidates.
+9. Build a service logic inventory for meaningful changed or targeted source behavior.
+10. Expand affected scope through atomic graph traversal.
+11. Stop graph expansion when related atom files no longer create modification candidates.
+12. Present a domain-grouped change plan before writing domain atom docs.
+13. Write confirmed updates only after the change plan is accepted.
+14. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete.
 
 ## Targeted Docs Operation
 
@@ -89,6 +102,7 @@ A change plan should group by domain and list:
 - `Atomization Perspectives Reviewed`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria atom is draft or approved
 - user-conversation criteria that must be recorded in the criteria atom before source-derived atom drafting
 - source exploration results that update the criteria atom instead of remaining only in the change plan
+- Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
 - source behavior files inspected
 - service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom, and coverage gaps
 - affected atom files
