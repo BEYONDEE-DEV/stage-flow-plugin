@@ -39,10 +39,13 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("endpoint lists, controller summaries, service class summaries", text)
         self.assertIn("not as the docs themselves or direct code suitability evidence", text)
         self.assertIn("domain partitioning criteria and a candidate or approved domain map", text)
-        self.assertIn("full discovery candidate map from the current accepted write scope", text)
+        self.assertIn("durable domain/category boundary map, behavior-level atom candidate map", text)
+        self.assertIn("Do not put leaf workflow or behavior candidates directly in the domain map", text)
+        self.assertIn("full discovery candidate map, and current accepted write scope", text)
         self.assertIn("Do not encode operation-local write scope in durable domain approval status", text)
         self.assertIn("Broad domains or broad category groupings are never valid", text)
         self.assertIn("stable frontmatter `atom_key`", text)
+        self.assertIn("summarize its contents for the user with domain/category boundaries and atom candidates as separate items", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -156,6 +159,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("not divergent role-specific checklists", text)
         self.assertIn("separate full discovery candidates from the current accepted write scope", text)
         self.assertIn("keep operation-local scope out of durable domain approval status", text)
+        self.assertIn("separate domain/category boundary decisions, behavior-level atom candidates", text)
+        self.assertIn("keep leaf workflow or behavior candidates out of the domain/category boundary map", text)
+        self.assertIn("remove cache paths, reset/delete notes, reviewer agent names", text)
         self.assertIn("reject broad domains or broad category groupings", text)
         self.assertIn("After criteria approval and accepted docs write scope", text)
         self.assertIn("create or reuse a Codex Goal before starting docs generation work", text)
@@ -246,6 +252,7 @@ class DocsSkillTests(unittest.TestCase):
             "문서 루트와 작업 범위",
             "도메인 분할 기준",
             "후보/승인 도메인 맵",
+            "Atom 후보 맵",
             "Atom화 관점",
             "서비스 로직 커버리지 요구사항",
             "작성/리뷰 공통 품질 기준",
@@ -286,6 +293,8 @@ class DocsSkillTests(unittest.TestCase):
         for domain_detail in [
             "domain partitioning criteria",
             "candidate or approved domain map",
+            "candidate or approved domain map that records only durable domain or category boundaries",
+            "not behavior-level atom candidates",
             "full discovery candidate map separated from the current accepted write scope",
             "operation-local current accepted write scope recorded separately from durable domain approval status",
             "domain name",
@@ -315,8 +324,24 @@ class DocsSkillTests(unittest.TestCase):
             "durable domain approval status is used to encode operation-local write scope",
         ]:
             self.assertIn(state_rule, text)
+        for atom_candidate_rule in [
+            "a separate `Atom 후보 맵` or `Atom 후보/분할 제안` area",
+            "behavior-level atom candidates",
+            "each atom candidate with `candidate atom_key`, tentative path or slug, owning domain/category path, source evidence, split/merge reason, and unresolved question",
+            "The `후보/승인 도메인 맵` must not contain leaf behavior entries",
+            "unless the entry is framed as a durable domain/category boundary",
+            "put the behavior under `Atom 후보 맵` or a concrete split proposal",
+        ]:
+            self.assertIn(atom_candidate_rule, text)
         self.assertIn("stable frontmatter `atom_key` values such as `project-goal`, `project-glossary`, `common-context`", text)
         self.assertIn("one shared writer/reviewer quality standard", text)
+        self.assertIn("atom candidate map use", text)
+        self.assertIn("frontmatter `atom_key`", text)
+        self.assertIn("AID assignment with `[AID:<atom_key>.<section-code>.<NNN>]`", text)
+        self.assertIn("graph `target_key`/`target_path` rules", text)
+        self.assertIn("shared atom identity rules", text)
+        self.assertIn("graph `target_key` as the target atom's `atom_key`", text)
+        self.assertIn("graph `target_path` as a mutable locator", text)
         self.assertIn("subagent role mapping", text)
         self.assertIn("must not maintain separate writer-only and reviewer-only quality rules", text)
         self.assertIn("single acceptance standard", text)
@@ -324,6 +349,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("every reviewer FAIL condition must map to the same shared criterion or an explicit phase gate", text)
         self.assertIn("Do not add hidden reviewer-only quality bars or writer-only obligations", text)
         self.assertIn("writer and reviewer rules appear as divergent role-specific checklists", text)
+        self.assertIn("full discovery candidates, approved domain/category boundaries, current accepted write scope, and behavior-level atom candidates are mixed together", text)
+        self.assertIn("leaf behavior candidate appears directly in the domain/category boundary map", text)
+        self.assertIn("shared quality criteria omit frontmatter `atom_key`, AID, graph `target_key`, or graph `target_path` rules", text)
+        self.assertIn("remove one-off operation logs such as plugin cache paths, reset/delete notes, reviewer agent names", text)
+        self.assertIn("transient \"currently none\" or `현재 없음` status notes", text)
         self.assertIn("not fixed document types", text)
         self.assertIn("Do not accept a criteria document that only lists perspective names or domain names", text)
         self.assertNotIn("endpoint document", text)
@@ -533,8 +563,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("record criteria already stated in the user conversation", text)
         self.assertIn("use code exploration to enrich the criteria document itself", text)
         self.assertIn("not just the change plan", text)
-        self.assertIn("full discovery candidate map separate from the current accepted write scope", text)
+        self.assertIn("durable domain/category boundaries, behavior-level atom candidates", text)
+        self.assertIn("full discovery candidate map, and the current accepted write scope separate", text)
         self.assertIn("current accepted write scope is operation-local", text)
+        self.assertIn("Leaf workflows, policies, states, or service behaviors belong in `Atom 후보 맵`", text)
         self.assertIn("Criteria Structure Review Gate", text)
         self.assertIn("Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate", text)
         self.assertIn("Use an independent criteria-review subagent", text)
@@ -545,18 +577,23 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Korean managed criteria docs use English visible labels for criteria sections or fields", text)
         self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
         self.assertIn("the domain map is missing, source-unsupported", text)
-        self.assertIn("full discovery candidates and current accepted write scope are mixed together", text)
+        self.assertIn("full discovery candidates, approved domain/category boundaries, current accepted write scope, and atom candidate map entries are mixed together", text)
         self.assertIn("durable domain approval status is used to encode operation-local write scope", text)
+        self.assertIn("leaf behavior, workflow, policy, state-transition, endpoint, or service-method candidates are listed directly in the domain/category boundary map", text)
         self.assertIn("a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`", text)
         self.assertIn("category or subdomain structure hides a broad domain", text)
         self.assertIn("domain-boundary evidence is only source identifiers", text)
         self.assertIn("observed behavior summary, excluded behavior, adjacent boundary", text)
+        self.assertIn("required atom identity rules: frontmatter `atom_key`, AID format `[AID:<atom_key>.<section-code>.<NNN>]`", text)
+        self.assertIn("graph `target_key` as the target atom's `atom_key`", text)
+        self.assertIn("graph `target_path` as a mutable locator", text)
         self.assertIn("criteria state semantics for `candidate`, `approved`, `rejected`, or `needs_confirmation`", text)
         self.assertIn("writer and reviewer rules are written as divergent role-specific checklists", text)
         self.assertIn("any reviewer FAIL condition lacks a matching shared criterion or explicit phase gate", text)
         self.assertIn("any writer obligation is not reviewable by the same shared criterion", text)
         self.assertIn("unapproved destructive claims about legacy artifacts", text)
-        self.assertIn("one-off draft operation logs such as cache paths, reset/delete notes", text)
+        self.assertIn("one-off draft operation logs such as cache paths, reset/delete notes, reviewer agent names", text)
+        self.assertIn("transient `현재 없음` status", text)
         self.assertIn("revise only `project/atomization-criteria.md`", text)
         self.assertIn("rerun the criteria-review subagent", text)
         self.assertIn("reports no blocking issues", text)
@@ -565,8 +602,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("tell the user the criteria document path", text)
         self.assertIn("summarize the actual written content", text)
         self.assertIn("ask the user to inspect the file and approve it or request changes", text)
-        self.assertIn("docs root and scope, domain partitioning criteria, candidate or approved domain map", text)
+        self.assertIn("docs root and scope, domain partitioning criteria, candidate or approved domain/category boundary map, atom candidate map", text)
         self.assertIn("shared writer/reviewer quality criteria", text)
+        self.assertIn("as separate items", text)
         self.assertIn("Do not treat the summary as a substitute for the file", text)
         self.assertIn("a concise Korean summary of what was written", text)
         self.assertIn("Do not proceed to criteria approval state update, Codex Goal creation, service logic inventory", text)
@@ -577,6 +615,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Broad discoveries are not candidates", text)
         self.assertIn("도메인 분할 기준", text)
         self.assertIn("후보/승인 도메인 맵", text)
+        self.assertIn("Atom 후보 맵", text)
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria document is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria document", text)
