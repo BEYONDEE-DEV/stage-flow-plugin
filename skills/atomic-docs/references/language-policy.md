@@ -22,6 +22,7 @@ Keep these values unchanged even when the surrounding prose is written in anothe
 - frontmatter keys such as `graph_edges`, `type`, `target_key`, `target_path`, and `reason`
 - config keys such as `docs_root`, `source_root`, and `baseline_metadata_path`
 - source-code identifiers, API names, file paths, enum values, commands, package names, and commit hashes
+- atom line ID tokens such as `[AID:paid-order-processing.impl.003]`
 - option labels, status/control values, or workflow terms required by a connected validator or Stageflow artifact
 - quoted user text when exact wording matters for intent preservation
 
@@ -50,6 +51,7 @@ Controlled judgment labels, fixed headings, schema keys, and source-code identif
 ## Mixed-Language Handling
 
 - Do not translate code identifiers or schema keys to make prose feel more natural.
+- Do not translate or localize AID tokens. Korean docs must preserve `[AID:...]` exactly.
 - If the existing docs submodule mixes languages, prefer the language used by the target domain or atomic document being edited.
 - If a document's language is ambiguous and the choice may affect user review, ask before writing confirmed docs.
 - AI-inferred `Intent` or `Rules` must still be marked as inferred in the selected docs language and connected to `Gaps` until confirmed.

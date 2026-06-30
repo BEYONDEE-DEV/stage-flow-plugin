@@ -11,6 +11,7 @@
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
 - [Atomic Docs Goal Boundary](#atomic-docs-goal-boundary)
+- [Atom Line ID Policy](#atom-line-id-policy)
 - [Required Atom Sections](#required-atom-sections)
 - [Judgment Evidence Policy](#judgment-evidence-policy)
 - [Forbidden Shapes](#forbidden-shapes)
@@ -210,6 +211,37 @@ The Codex Goal used after criteria approval is an execution scope for performing
 Do not write Goal status or Goal completion as atom-level status, per-atom freshness, or judgment evidence. Code suitability judgments still come from approved criteria, generated atoms, source evidence, graph relationships, baseline metadata, and controlled judgment labels.
 
 If the Goal is incomplete, blocked, waiting for user input, or blocked by review FAIL, preserve that state in the operation summary or change plan rather than in atom judgment labels. Atom files should continue to describe intent, rules, current implementation, planned changes, and gaps.
+
+## Atom Line ID Policy
+
+Every `*-atom.md` file must assign a stable unique ID to each judgment-relevant meaning line. A meaning line is a bullet, paragraph, table row, source evidence row, planned-change item, gap item, or reviewable behavior statement that can be referenced by a change plan, review finding, judgment label, or source evidence mapping.
+
+Use this format:
+
+```text
+[AID:<atom-target-key>.<section-code>.<NNN>]
+```
+
+For example:
+
+```text
+- [AID:paid-order-processing.impl.003] paid line마다 ticket group 하나를 만들고 저장한다.
+```
+
+Section codes are:
+
+- `intent` for `Intent`
+- `rules` for `Rules`
+- `impl` for `Current Implementation`
+- `plan` for `Planned Changes`
+- `gap` for `Gaps`
+- `source` for source evidence rows
+
+Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. AID values must be globally unique across the docs set, not just unique within one atom.
+
+Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. The criteria document at `project/atomization-criteria.md` is not an atom and is not required to use AID values.
+
+Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, or retained after an atom rename, keep its existing AID when the meaning is still traceable. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record the migration explicitly in the change plan and review findings.
 
 ## Required Atom Sections
 

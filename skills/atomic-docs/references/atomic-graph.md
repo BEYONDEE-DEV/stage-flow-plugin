@@ -17,6 +17,8 @@ Minimum edge fields:
 
 The `reason` is one human-readable sentence. Do not add relationship strength, priority, ranking score, source anchor, or numeric relevance fields.
 
+Graph frontmatter is structural metadata. Do not assign atom line IDs to `graph_edges`; AID values belong to judgment-relevant meaning lines in atom body content.
+
 ## Target Keys And Paths
 
 - `target_key` is derived from the atom file slug by removing the `-atom.md` suffix and must be globally unique across the docs set.

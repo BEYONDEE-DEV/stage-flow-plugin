@@ -56,11 +56,14 @@ class DocsSkillTests(unittest.TestCase):
             "graph_edges",
             "docs_root",
             "source-code identifiers",
+            "[AID:paid-order-processing.impl.003]",
             "option labels",
             "Stageflow artifact",
         ]:
             self.assertIn(fixed_term, text)
         self.assertIn("Do not translate code identifiers or schema keys", text)
+        self.assertIn("Do not translate or localize AID tokens", text)
+        self.assertIn("Korean docs must preserve `[AID:...]` exactly", text)
         self.assertIn("ask before writing confirmed docs", text)
         self.assertIn("leftover English filler text", text)
         self.assertIn("Korean-First Template Policy", text)
@@ -182,7 +185,7 @@ class DocsSkillTests(unittest.TestCase):
     def test_change_judgment_policy_evidence_and_planned_change_types(self) -> None:
         text = read(DOCS_REFS / "change-judgment-policy.md")
         for required in [
-            "atom, source evidence, judgment label, reason",
+            "atom, related AID values, source evidence, judgment label, reason",
             "confirmed `Intent`",
             "approved required `Planned Changes`",
             "non-goals",
@@ -288,6 +291,34 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not add top-level per-atom status fields", text)
         self.assertIn("lack of a `Gaps` item", text)
         self.assertIn("non-goals, excluded behavior, and adjacent-domain boundaries", text)
+
+    def test_atomic_document_contract_requires_atom_line_ids(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Atom Line ID Policy", text)
+        self.assertIn("Every `*-atom.md` file must assign a stable unique ID", text)
+        self.assertIn("judgment-relevant meaning line", text)
+        self.assertIn("[AID:<atom-target-key>.<section-code>.<NNN>]", text)
+        self.assertIn("[AID:paid-order-processing.impl.003]", text)
+        for section_code in ["`intent`", "`rules`", "`impl`", "`plan`", "`gap`", "`source`"]:
+            self.assertIn(section_code, text)
+        self.assertIn("`- [AID:...] 내용`", text)
+        self.assertIn("`[AID:...] 내용`", text)
+        self.assertIn("an `AID` column for tables", text)
+        self.assertIn("globally unique across the docs set", text)
+        for excluded in [
+            "frontmatter",
+            "`graph_edges`",
+            "blank lines",
+            "section headings",
+            "code fence markers",
+            "purely structural Markdown",
+        ]:
+            self.assertIn(excluded, text)
+        self.assertIn("criteria document at `project/atomization-criteria.md` is not an atom", text)
+        self.assertIn("keep its existing AID", text)
+        self.assertIn("Assign new AID values only to newly introduced meaning lines", text)
+        self.assertIn("Do not renumber existing AID values", text)
+        self.assertIn("record the migration explicitly", text)
 
     def test_atomic_document_contract_requires_service_logic_natural_language_coverage(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -462,6 +493,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Each writer subagent must read the approved criteria document", text)
         self.assertIn("service logic inventory plus a judgment-labeled domain evidence packet", text)
         self.assertIn("judgment-labeled domain evidence packet", text)
+        self.assertIn("stable AID assignments for each meaning line", text)
         self.assertIn("change-judgment-policy.md", text)
         self.assertIn("No Example Leakage rule", text)
         self.assertIn("the domain map is missing or unsupported", text)
@@ -474,6 +506,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("translated-English phrasing", text)
         self.assertIn("English placeholders", text)
         self.assertIn("method-call-sequence-only `Current Implementation`", text)
+        self.assertIn("any judgment-relevant meaning line is missing an AID", text)
+        self.assertIn("any AID is duplicated across the docs set", text)
+        self.assertIn("existing AID values are renumbered instead of preserved", text)
+        self.assertIn("judgment-bearing lines or source evidence lines have no AID", text)
+        self.assertIn("change plans or review findings omit related AID values", text)
         self.assertIn("cannot explain the implemented behavior from the docs alone", text)
         self.assertIn("cannot be used as code judgment criteria", text)
         self.assertIn("judgment labels are absent or unsupported", text)
@@ -530,6 +567,7 @@ class DocsSkillTests(unittest.TestCase):
             "error handling",
             "recovery behavior",
             "candidate owning atom",
+            "candidate or assigned AID",
         ]:
             self.assertIn(inventory_field, text)
         self.assertIn("Map every meaningful application, service, and domain logic item to an owning atom", text)
@@ -546,6 +584,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("matches_confirmed_intent", text)
         self.assertIn("unapproved_implemented_behavior", text)
         self.assertIn("out_of_scope_behavior", text)
+        self.assertIn("AID assignments for new or changed atom meaning lines", text)
+        self.assertIn("explicit AID migrations", text)
+        self.assertIn("related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings", text)
 
     def test_refresh_flow_rejects_generic_or_absence_based_judgment(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
@@ -564,6 +605,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("service logic is absent from natural-language docs", text)
         self.assertIn("do not classify it as matching", text)
         self.assertIn("Record a coverage gap or `confirmation_needed`", text)
+        self.assertIn("related AID values", text)
+        self.assertIn("specific AID lines", text)
+        self.assertIn("`matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior`", text)
+        self.assertIn("AID-backed natural-language service logic", text)
 
     def test_docs_skill_prevents_reference_example_leakage(self) -> None:
         combined = "\n".join(
@@ -608,6 +653,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("existing target `*-atom.md` file", text)
         self.assertIn("criteria document at `project/atomization-criteria.md` is not an atom file", text)
         self.assertIn("must not be used as a `graph_edges` source or target", text)
+        self.assertIn("Do not assign atom line IDs to `graph_edges`", text)
+        self.assertIn("AID values belong to judgment-relevant meaning lines", text)
         self.assertIn("Stop when no further modification candidates appear", text)
         self.assertIn("Do not create a root graph output by default", text)
         self.assertIn("not strength or priority fields", text)
