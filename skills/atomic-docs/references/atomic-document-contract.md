@@ -7,6 +7,7 @@
 - [Project And Domain Context Policy](#project-and-domain-context-policy)
 - [Atomization Criteria Document](#atomization-criteria-document)
 - [Domain Discovery Policy](#domain-discovery-policy)
+- [Hybrid Domain Naming Policy](#hybrid-domain-naming-policy)
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
@@ -124,6 +125,8 @@ The criteria document records:
 - every entry under `Atom화 관점` with these exact visible subfields: `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문`
 - which perspectives create atom candidates, which are source evidence only, and which are not applicable for the current source shape
 - domain partitioning criteria for deciding domain paths, category boundaries, and durable ownership boundaries
+- project-native feature/root language as the default starting point for domain candidates before any capability renaming or promotion
+- each domain or category candidate with `project-native name`, `source feature root`, `optional capability alias`, `promotion reason`, and `approval state`
 - a full discovery candidate map separated from the current accepted write scope, so discovered possibilities do not masquerade as accepted domain structure
 - operation-local current accepted write scope recorded separately from durable domain approval status, usually under `문서 루트와 작업 범위` or the current change plan
 - a candidate or approved domain map that records only durable domain or category boundaries, not behavior-level atom candidates, and records each domain name with Korean field labels for `승인 상태`, `소유 동작`, `제외 동작`, `인접 도메인 경계`, `함께 변경되는 이유`, `소스 근거`, `근거 성격`, and `미해결 질문`
@@ -152,7 +155,7 @@ The `후보/승인 도메인 맵` must not contain leaf behavior entries such as
 
 Broad domains and broad category groupings are unconditional criteria-review failures when marked `candidate`, `approved`, or `needs_confirmation`. Record a broad grouping only as `rejected` with the reason, or replace it with concrete split proposals based on observed capabilities, workflows, responsibilities, contracts, or policies.
 
-Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, category folder, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern.
+Do not approve a domain solely from a code folder name, endpoint, controller, service class, screen, lifecycle state, temporary task grouping, category folder, or generic catch-all rationale. A domain can be approved only when evidence shows a durable boundary such as product or business capability, user-visible workflow, operational responsibility, integration contract, or shared policy/platform concern. However, the codebase's own stable feature/root language is still the default naming input; do not replace it with a new abstract capability label unless the Hybrid Domain Naming Policy allows that promotion.
 
 Criteria source evidence does not need to describe every service logic branch at atom-level depth. However, source identifiers alone are not valid domain-boundary evidence. If a candidate has only source paths, endpoint names, class names, or method names without observed behavior summary and boundary rationale, criteria-review must fail it as identifier-only evidence.
 
@@ -188,6 +191,34 @@ Use this priority order:
 Do not confirm a domain solely from a code folder name.
 
 Category and subdomain folders are allowed only as organization inside an approved durable boundary. They must not hide a broad domain, generic bucket, lifecycle status group, or code-layer grouping. If a category label is broad, record it as `rejected` or split it into concrete durable boundary proposals before atom writing.
+
+## Hybrid Domain Naming Policy
+
+Use a hybrid domain naming model for criteria drafts and domain maps:
+
+1. Start with project-native feature/root language observed in source roots, existing docs, API surfaces, package roots, or user vocabulary.
+2. Keep those project-native names visible as the default domain/category candidates unless they are broad or unsupported.
+3. Promote a cross-feature capability/common boundary only when the criteria records explicit promotion evidence.
+
+The criteria document must distinguish:
+
+- `project-native name`: the name already used by the project or user
+- `source feature root`: the package/root/surface where the source-observed behavior appears
+- `optional capability alias`: a proposed business capability label, if any
+- `promotion reason`: why the alias should replace or sit above project-native feature language
+- `approval state`: `candidate`, `approved`, `rejected`, or `needs_confirmation`
+
+AI-renamed domain labels are not valid default domain names. If the source uses a feature root such as `auth`, `commerce`, `refund`, `resource`, `ticketgroup`, `web`, or `admin`, a criteria draft must not silently rename that root into a new abstract capability label such as `sales-fulfillment` unless one of these bases is recorded:
+
+- user approval or user vocabulary for the new capability label
+- existing docs-submodule terminology that already uses that capability label
+- durable ownership evidence showing the capability crosses multiple source feature roots
+
+Capability or common promotion requires at least one of these evidence types: cross-feature ownership, shared persistence or state, shared policy, or shared recovery question. Without that evidence, keep the project-native feature/root name and put the cross-feature idea in `optional capability alias` or `needs_confirmation`.
+
+Broad source feature roots such as an `admin` root are not automatically approved domains. Treat them as category/root surfaces or split proposals until the criteria records narrower durable boundaries. This preserves the broad-domain FAIL rule while avoiding arbitrary AI renaming.
+
+Atom candidates must point their owning domain/category path at an approved or candidate hybrid boundary. Do not point atom candidates at an AI-renamed label that lacks user/source trace or promotion evidence.
 
 ## Domain Boundary Quality Gate
 

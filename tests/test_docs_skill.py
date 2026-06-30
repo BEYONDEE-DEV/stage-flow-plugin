@@ -44,8 +44,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("full discovery candidate map, and current accepted write scope", text)
         self.assertIn("Do not encode operation-local write scope in durable domain approval status", text)
         self.assertIn("Broad domains or broad category groupings are never valid", text)
+        self.assertIn("Use hybrid domain naming", text)
+        self.assertIn("start from project-native feature/root language", text)
+        self.assertIn("AI-renamed abstract labels", text)
         self.assertIn("stable frontmatter `atom_key`", text)
-        self.assertIn("summarize its contents for the user with domain/category boundaries and atom candidates as separate items", text)
+        self.assertIn("summarize its contents for the user with project-native feature candidates, capability/common promotion proposals", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -160,6 +163,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("separate full discovery candidates from the current accepted write scope", text)
         self.assertIn("keep operation-local scope out of durable domain approval status", text)
         self.assertIn("separate domain/category boundary decisions, behavior-level atom candidates", text)
+        self.assertIn("separate project-native feature candidates, capability/common promotion proposals", text)
+        self.assertIn("prefer stable language that project maintainers already recognize", text)
         self.assertIn("keep leaf workflow or behavior candidates out of the domain/category boundary map", text)
         self.assertIn("remove cache paths, reset/delete notes, reviewer agent names", text)
         self.assertIn("reject broad domains or broad category groupings", text)
@@ -295,6 +300,7 @@ class DocsSkillTests(unittest.TestCase):
             "candidate or approved domain map",
             "candidate or approved domain map that records only durable domain or category boundaries",
             "not behavior-level atom candidates",
+            "project-native feature/root language as the default starting point",
             "full discovery candidate map separated from the current accepted write scope",
             "operation-local current accepted write scope recorded separately from durable domain approval status",
             "domain name",
@@ -309,6 +315,14 @@ class DocsSkillTests(unittest.TestCase):
             "`candidate`, `approved`, `rejected`, and `needs_confirmation`",
         ]:
             self.assertIn(domain_detail, text)
+        for hybrid_field in [
+            "`project-native name`",
+            "`source feature root`",
+            "`optional capability alias`",
+            "`promotion reason`",
+            "`approval state`",
+        ]:
+            self.assertIn(hybrid_field, text)
         for state_rule in [
             "`candidate` means a narrow durable boundary candidate",
             "`approved` means the user approved that durable boundary as part of the criteria's durable domain map",
@@ -487,6 +501,33 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("split proposal based on observed capabilities", text)
         self.assertNotIn("Do not use document state names such as", text)
 
+    def test_hybrid_domain_naming_policy_prefers_project_native_language(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Hybrid Domain Naming Policy", text)
+        self.assertIn("Use a hybrid domain naming model", text)
+        self.assertIn("Start with project-native feature/root language", text)
+        self.assertIn("project-native feature/root language as the default starting point", text)
+        for field in [
+            "`project-native name`",
+            "`source feature root`",
+            "`optional capability alias`",
+            "`promotion reason`",
+            "`approval state`",
+        ]:
+            self.assertIn(field, text)
+        self.assertIn("AI-renamed domain labels are not valid default domain names", text)
+        self.assertIn("must not silently rename that root into a new abstract capability label", text)
+        self.assertIn("user approval or user vocabulary", text)
+        self.assertIn("existing docs-submodule terminology", text)
+        self.assertIn("durable ownership evidence showing the capability crosses multiple source feature roots", text)
+        self.assertIn("cross-feature ownership, shared persistence or state, shared policy, or shared recovery question", text)
+        self.assertIn("Without that evidence, keep the project-native feature/root name", text)
+        self.assertIn("Broad source feature roots", text)
+        self.assertIn("category/root surfaces or split proposals", text)
+        self.assertIn("Atom candidates must point their owning domain/category path at an approved or candidate hybrid boundary", text)
+        self.assertIn("AI-renamed label that lacks user/source trace or promotion evidence", text)
+        self.assertIn("the codebase's own stable feature/root language is still the default naming input", text)
+
 
     def test_core_business_term_coverage_gate_prevents_parent_term_gaps(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -563,6 +604,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("record criteria already stated in the user conversation", text)
         self.assertIn("use code exploration to enrich the criteria document itself", text)
         self.assertIn("not just the change plan", text)
+        self.assertIn("first create a source feature inventory from project-native feature/root language", text)
+        self.assertIn("Use project-native feature/root names as the default domain candidate language", text)
+        self.assertIn("capability/common promotion proposals separately", text)
         self.assertIn("durable domain/category boundaries, behavior-level atom candidates", text)
         self.assertIn("full discovery candidate map, and the current accepted write scope separate", text)
         self.assertIn("current accepted write scope is operation-local", text)
@@ -576,11 +620,18 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("empty, placeholder-only, or a one-line summary", text)
         self.assertIn("Korean managed criteria docs use English visible labels for criteria sections or fields", text)
         self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
+        self.assertIn("the criteria draft lacks a source feature inventory before proposing domain names", text)
         self.assertIn("the domain map is missing, source-unsupported", text)
+        self.assertIn("AI-renamed domain label that replaces project-native feature/root language", text)
+        self.assertIn("without user approval, existing docs terminology, or durable promotion evidence", text)
+        self.assertIn("feature-root flow is renamed into an abstract capability label", text)
+        self.assertIn("`project-native name`, `source feature root`, `optional capability alias`, `promotion reason`, and `approval state`", text)
         self.assertIn("full discovery candidates, approved domain/category boundaries, current accepted write scope, and atom candidate map entries are mixed together", text)
         self.assertIn("durable domain approval status is used to encode operation-local write scope", text)
         self.assertIn("leaf behavior, workflow, policy, state-transition, endpoint, or service-method candidates are listed directly in the domain/category boundary map", text)
         self.assertIn("a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`", text)
+        self.assertIn("broad source feature root is marked as an approved domain instead of a category/root surface or split proposal", text)
+        self.assertIn("capability/common promotion lacks cross-feature ownership, shared persistence/state, shared policy, or shared recovery question evidence", text)
         self.assertIn("category or subdomain structure hides a broad domain", text)
         self.assertIn("domain-boundary evidence is only source identifiers", text)
         self.assertIn("observed behavior summary, excluded behavior, adjacent boundary", text)
@@ -602,7 +653,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("tell the user the criteria document path", text)
         self.assertIn("summarize the actual written content", text)
         self.assertIn("ask the user to inspect the file and approve it or request changes", text)
-        self.assertIn("docs root and scope, domain partitioning criteria, candidate or approved domain/category boundary map, atom candidate map", text)
+        self.assertIn("docs root and scope, domain partitioning criteria, project-native feature candidates, capability/common promotion proposals", text)
+        self.assertIn("candidate or approved domain/category boundary map, atom candidate map", text)
         self.assertIn("shared writer/reviewer quality criteria", text)
         self.assertIn("as separate items", text)
         self.assertIn("Do not treat the summary as a substitute for the file", text)
