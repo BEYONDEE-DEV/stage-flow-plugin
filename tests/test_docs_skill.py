@@ -49,6 +49,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("AI-renamed abstract labels", text)
         self.assertIn("stable frontmatter `atom_key`", text)
         self.assertIn("summarize its contents for the user with project-native feature candidates, capability/common promotion proposals", text)
+        self.assertIn("post-write consistency and source fact review", text)
+        self.assertIn("before reporting completion or presenting the docs as judgment-ready", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -459,6 +461,31 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("method-call sequence", text)
         self.assertIn("service logic coverage gaps", text)
 
+    def test_atomic_document_contract_requires_source_fact_fidelity(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Source Fact Fidelity Gate", text)
+        self.assertIn("actually reachable through the inspected entry path", text)
+        self.assertIn("Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply", text)
+        for source_detail in [
+            "endpoint or caller binding",
+            "validator activation",
+            "service guard",
+            "null handling",
+            "blank handling",
+            "optional dependency fallback",
+            "default value fallback",
+            "explicit exception branches",
+            "runtime exception possibility",
+            "transaction mode",
+            "persistence calls",
+        ]:
+            self.assertIn(source_detail, text)
+        self.assertIn("Do not rewrite an allowed fallback path as a guaranteed validation failure", text)
+        self.assertIn("do not describe a behavior as safe or recovered when the source can throw an unhandled runtime exception", text)
+        self.assertIn("a request field annotation is not enough to claim that the endpoint rejects the request", text)
+        self.assertIn("source evidence, confirmed or inferred basis, affected behavior, next action", text)
+        self.assertIn("related stable `atom_key` and AID values", text)
+
     def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Atomic Docs Goal Boundary", text)
@@ -765,6 +792,46 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Map every meaningful application, service, and domain logic item to an owning atom", text)
         self.assertIn("record a coverage gap with source evidence and `confirmation_needed`", text)
         self.assertIn("only lists source files, endpoints, controllers, service classes, or method names", text)
+
+    def test_refresh_flow_requires_post_write_consistency_and_source_fact_review(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Post-Write Consistency Review Gate", text)
+        self.assertIn("after atom files, service logic inventories, graph edges, or partial-scope docs are written", text)
+        self.assertIn("before reporting the docs operation as complete", text)
+        self.assertIn("Re-read the criteria document, accepted write scope, written atom files", text)
+        self.assertIn("approved criteria document still contains pending-approval blockers", text)
+        self.assertIn("stale next-step wording for work that has already happened", text)
+        self.assertIn("completed Goal/inventory/writer/reviewer work described as future work", text)
+        self.assertIn("Partial scope is allowed", text)
+        self.assertIn("current accepted write scope, not as durable domain approval status", text)
+        self.assertIn("accepted partial-scope review target", text)
+        self.assertIn("complete project-wide code judgment baseline", text)
+        self.assertIn("Source Fact Fidelity Gate", text)
+        self.assertIn("source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail", text)
+        self.assertIn("Do not update source-baseline metadata, complete the Codex Goal, or present the docs as judgment-ready", text)
+
+    def test_refresh_flow_reviewer_checks_source_fact_assertions_without_overfitting(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Do not re-list every source identifier as a substitute for checking facts", text)
+        for reviewed_assertion in [
+            "validation",
+            "refusal",
+            "defaulting",
+            "fallback",
+            "exception behavior",
+            "read-only behavior",
+            "storage effects",
+            "external effects",
+        ]:
+            self.assertIn(reviewed_assertion, text)
+        self.assertIn("source-vs-doc mismatches", text)
+        self.assertIn("confusing declarative annotations with actual controller or service guard behavior", text)
+        self.assertIn("omitting source-observed null or blank handling", text)
+        self.assertIn("omitting optional dependency fallback", text)
+        self.assertIn("omitting default value fallback", text)
+        self.assertIn("omitting runtime exception possibilities", text)
+        self.assertNotIn("eventProductOptionId", text)
+        self.assertNotIn("catalog-purchase-preview", text)
 
     def test_refresh_flow_requires_criteria_change_plan_entries(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")

@@ -11,6 +11,7 @@
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
+- [Source Fact Fidelity Gate](#source-fact-fidelity-gate)
 - [Atomic Docs Goal Boundary](#atomic-docs-goal-boundary)
 - [Atom Line ID Policy](#atom-line-id-policy)
 - [Required Atom Sections](#required-atom-sections)
@@ -278,6 +279,18 @@ For each meaningful service logic item, the docs must record:
 Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
 
 Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
+
+## Source Fact Fidelity Gate
+
+Atom `Rules`, `Current Implementation`, `Gaps`, evidence packets, and review findings must preserve the source-observed behavior actually reachable through the inspected entry path. Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply.
+
+When documenting validation, refusal, defaulting, fallback, exception, read-only, or storage-effect behavior, compare the relevant source branches instead of relying on one identifier. Inspect the endpoint or caller binding, validator activation, service guard, null handling, blank handling, optional dependency fallback, default value fallback, explicit exception branches, runtime exception possibility, transaction mode, and persistence calls when those details affect product, operation, or integration behavior.
+
+If source allows a null, blank, optional dependency, fallback value, or runtime path instead of refusing it, the docs must preserve that branch as observed behavior or record it as `confirmation_needed`. Do not rewrite an allowed fallback path as a guaranteed validation failure. Conversely, do not describe a behavior as safe or recovered when the source can throw an unhandled runtime exception.
+
+If an observed behavior depends on both declarative metadata and runtime wiring, describe both sides. For example, a request field annotation is not enough to claim that the endpoint rejects the request unless the controller or caller path actually activates validation. Use a generic coverage gap or `confirmation_needed` when the inspected source does not prove the stronger claim.
+
+Judgment-bearing `Gaps` and review findings are not sufficient when they only contain a label. Each such item must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key` and AID values when the affected atom lines are known.
 
 ## Atomic Docs Goal Boundary
 

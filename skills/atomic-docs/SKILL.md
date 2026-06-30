@@ -66,9 +66,10 @@ Before acting, read only the references needed for the requested operation:
 13. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
 14. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
 15. For new atom files, set frontmatter `atom_key` and use it for AID prefixes and graph `target_key` references; treat category/domain paths and file slugs as mutable locators.
-16. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-17. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-18. Write only the paths and actions accepted by the user for the current docs operation.
+16. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
+17. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+18. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+19. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 
