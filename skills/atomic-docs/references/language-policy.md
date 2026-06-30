@@ -31,6 +31,14 @@ Starter examples are scaffolding, not approved docs content. Replace generic Eng
 
 Reviewers should treat leftover English filler text as a blocking issue when the selected managed-docs or change-plan language is not English.
 
+## Korean-First Template Policy
+
+When the selected managed-docs language is Korean, use Korean-first writing templates, Korean subheadings, Korean checklist wording, and Korean review criteria for all prose scaffolding. Do not draft an English skeleton first and then translate it into Korean.
+
+Keep fixed schema headings, frontmatter keys, controlled judgment labels, and source identifiers unchanged, but write the structure under those headings in Korean. For example, keep `Current Implementation` as the atom section heading, then use Korean subheadings such as `### 동작 흐름`, `### 관찰된 판단 규칙`, `### 상태와 저장 효과`, `### 외부 연동과 이벤트`, `### 실패와 복구 동작`, and `### Source Evidence` when those subsections help explain the behavior.
+
+Writer and reviewer checklists for Korean docs must be written directly in Korean. A draft that reads like translated English, preserves English placeholder prose, or uses an English-first scaffold for Korean managed docs is not ready for user review.
+
 ## No Example Leakage
 
 Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria documents, atom drafts, `Gaps`, review findings, or change plans.

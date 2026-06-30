@@ -223,7 +223,20 @@ Each atom file must preserve these sections:
 
 `Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining. Include acceptance criteria when the behavior can be judged by observable source behavior.
 
-`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points, and expresses those facts as natural-language service logic. A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient. `Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, or `implemented_pending_confirmation`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries.
+`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points, and expresses those facts as natural-language service logic. A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient.
+
+For Korean managed docs, write the prose under `Current Implementation` with Korean-first structure when that structure helps the atom explain behavior. Recommended subheadings are:
+
+- `### 동작 흐름`
+- `### 관찰된 판단 규칙`
+- `### 상태와 저장 효과`
+- `### 외부 연동과 이벤트`
+- `### 실패와 복구 동작`
+- `### Source Evidence`
+
+Do not force every atom to include every subheading. Use only the applicable subsections, but make the implementation readable as behavior criteria: input conditions, branches or refusals, state changes, stored or external effects, and failure results. Do not write `Current Implementation` as a translated English skeleton or as a method-call sequence such as "class A calls method B and then saves C" unless the atom also states the service behavior, decision rule, state effect, and failure outcome that the call implements.
+
+`Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, or `implemented_pending_confirmation`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries.
 
 ## Judgment Evidence Policy
 

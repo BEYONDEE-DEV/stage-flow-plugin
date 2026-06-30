@@ -63,6 +63,20 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not translate code identifiers or schema keys", text)
         self.assertIn("ask before writing confirmed docs", text)
         self.assertIn("leftover English filler text", text)
+        self.assertIn("Korean-First Template Policy", text)
+        self.assertIn("Korean-first writing templates", text)
+        self.assertIn("Do not draft an English skeleton first and then translate it into Korean", text)
+        for korean_subheading in [
+            "### 동작 흐름",
+            "### 관찰된 판단 규칙",
+            "### 상태와 저장 효과",
+            "### 외부 연동과 이벤트",
+            "### 실패와 복구 동작",
+            "### Source Evidence",
+        ]:
+            self.assertIn(korean_subheading, text)
+        self.assertIn("translated English", text)
+        self.assertIn("English-first scaffold", text)
         self.assertIn("No Example Leakage", text)
         self.assertIn("Do not copy reference example wording", text)
         self.assertIn("Controlled judgment labels, fixed headings, schema keys", text)
@@ -298,6 +312,18 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("endpoint lists, controller lists, service class names, method names", text)
         self.assertIn("source evidence only until the atom explains in natural language", text)
         self.assertIn("A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient", text)
+        for korean_subheading in [
+            "### 동작 흐름",
+            "### 관찰된 판단 규칙",
+            "### 상태와 저장 효과",
+            "### 외부 연동과 이벤트",
+            "### 실패와 복구 동작",
+            "### Source Evidence",
+        ]:
+            self.assertIn(korean_subheading, text)
+        self.assertIn("input conditions, branches or refusals, state changes, stored or external effects, and failure results", text)
+        self.assertIn("translated English skeleton", text)
+        self.assertIn("method-call sequence", text)
         self.assertIn("service logic coverage gaps", text)
 
     def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
@@ -442,6 +468,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("meaningful source behavior is missing from the inventory", text)
         self.assertIn("source identifiers appear without natural-language behavior", text)
         self.assertIn("reference example prose appears without user/source trace", text)
+        self.assertIn("Korean-first templates", text)
+        self.assertIn("Do not produce an English skeleton and translate it afterward", text)
+        self.assertIn("Korean docs retain English template residue", text)
+        self.assertIn("translated-English phrasing", text)
+        self.assertIn("English placeholders", text)
+        self.assertIn("method-call-sequence-only `Current Implementation`", text)
+        self.assertIn("cannot explain the implemented behavior from the docs alone", text)
+        self.assertIn("cannot be used as code judgment criteria", text)
         self.assertIn("judgment labels are absent or unsupported", text)
         self.assertIn("missing required behavior is confused with out-of-scope behavior", text)
         self.assertIn("candidate domains are treated as confirmed without approval", text)
