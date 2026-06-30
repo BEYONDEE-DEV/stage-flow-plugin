@@ -18,17 +18,20 @@ Use this controlled vocabulary when classifying source behavior against atomic d
 - `confirmation_needed`: the evidence is inferred, ambiguous, stale, or lacks user/source approval needed for a stronger judgment
 - `docs_stale`: the docs baseline does not cover the source commit or source diff needed to make a current judgment
 
+Judgments may only use service logic that is written in the generated docs as natural-language behavior with source evidence. A source identifier, endpoint list, controller list, service class summary, method name, or missing `Gaps` item is not enough to prove that behavior matches the docs.
+
 ## Decision Order
 
 Apply the first matching judgment that is supported by evidence:
 
 1. If the docs baseline is older than the source behavior being judged and the diff has not been refreshed, use `docs_stale`.
-2. If the relevant `Intent`, `Rules`, requirement, boundary, or source mapping is inferred or ambiguous, use `confirmation_needed`.
-3. If behavior violates a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary, use `out_of_scope_behavior`.
-4. If behavior exists without confirmed user intent, approved plan, policy rule, or source boundary support, use `unapproved_implemented_behavior`.
-5. If confirmed required behavior is missing from `Current Implementation`, use `missing_required_behavior`.
-6. If observed implementation conflicts with confirmed `Intent`, `Rules`, acceptance criteria, or documented current behavior, use `bug_or_regression`.
-7. If source evidence shows the implementation satisfies the confirmed criteria and no unresolved higher-priority judgment applies, use `matches_confirmed_intent`.
+2. If the relevant service logic is absent from natural-language docs, use `confirmation_needed`.
+3. If the relevant `Intent`, `Rules`, requirement, boundary, or source mapping is inferred or ambiguous, use `confirmation_needed`.
+4. If behavior violates a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary, use `out_of_scope_behavior`.
+5. If behavior exists without confirmed user intent, approved plan, policy rule, or source boundary support, use `unapproved_implemented_behavior`.
+6. If confirmed required behavior is missing from `Current Implementation`, use `missing_required_behavior`.
+7. If observed implementation conflicts with confirmed `Intent`, `Rules`, acceptance criteria, or documented current behavior, use `bug_or_regression`.
+8. If source evidence shows the implementation satisfies the confirmed criteria and no unresolved higher-priority judgment applies, use `matches_confirmed_intent`.
 
 Do not classify behavior as required, out-of-scope, or matching from inferred `Intent` or inferred `Rules` alone. Use `confirmation_needed` until the user or an approved workflow confirms the requirement or boundary.
 
@@ -37,6 +40,8 @@ Do not classify behavior as required, out-of-scope, or matching from inferred `I
 Every judgment item must name the atom, source evidence, judgment label, reason, and the confirmed or inferred basis for the judgment. The basis may be confirmed `Intent`, confirmed `Rules`, approved required `Planned Changes`, non-goals, excluded behavior, adjacent-domain boundaries, source baseline metadata, or explicit user approval.
 
 `matches_confirmed_intent` is an explicit review judgment, not the absence of a `Gaps` item. Do not mark behavior as matching unless the review inspected relevant source evidence and confirmed no higher-priority label applies.
+
+When the source behavior is present in code but absent from natural-language docs, do not classify it as matching. Record a coverage gap or `confirmation_needed` unless an approved boundary makes it `out_of_scope_behavior`, an approved requirement makes it `missing_required_behavior`, or an approved baseline mismatch makes it `bug_or_regression`.
 
 `Planned Changes` must distinguish:
 

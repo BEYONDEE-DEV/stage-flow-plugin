@@ -5,7 +5,7 @@ description: "Use when the user says atomic-docs, atomic docs, atomic docs, the 
 
 # Atomic Docs
 
-Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve user intent, rules, current implementation facts, planned changes, and gaps so future AI/code review can distinguish intended behavior, bugs, missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, and uncertain inference.
+Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve service logic as natural-language source-of-truth docs: user intent, rules, current implementation facts, planned changes, and gaps must be detailed enough that future AI/code review can judge whether source code matches the approved docs baseline, is buggy, is missing required behavior, implements unapproved behavior, is out of scope, is stale, or still needs confirmation.
 
 ## Core Contract
 
@@ -22,6 +22,9 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 - Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria atom as required input for domain writer and review subagents.
+- Treat approved criteria as the rule for producing docs, not as the docs themselves. The generated docs set must contain the meaningful service logic in natural language before it can be used as a code suitability standard.
+- Document meaningful application, service, and domain logic in natural language, including conditions, branches, state transitions, validation, permissions, policy rules, persistence effects, external integrations, errors, and recovery behavior when they affect runtime or product/operations meaning.
+- Do not count endpoint lists, controller summaries, service class summaries, file names, method names, or source identifiers alone as coverage.
 - Use controlled judgment labels from `references/change-judgment-policy.md` for code review findings, `Gaps`, and change plan items. Do not infer healthy behavior from the absence of a gap.
 - During local plugin iteration, do not start atomic-docs work from a stale installed cache path. Reinstall the plugin with a fresh cachebuster and verify the installed cache includes `change-judgment-policy.md`, criteria file-first rules, and No Example Leakage rules.
 
@@ -48,10 +51,12 @@ Before acting, read only the references needed for the requested operation:
 7. Use the criteria atom itself as the center of review, user revision, and approval. Do not start domain atom writing or domain subagent work until the criteria atom is approved.
 8. Mark inferred `Intent` or `Rules` as inferred and connect uncertainty to `Gaps` until the user confirms it.
 9. Preserve `Current Implementation`, `Planned Changes`, and `Gaps` as separate knowledge categories.
-10. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
-11. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-12. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-13. Write only the paths and actions accepted by the user for the current docs operation.
+10. Build a service logic inventory before domain atom drafting when source behavior is being documented. Map each meaningful logic item to an owning atom or record a coverage gap.
+11. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
+12. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
+13. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+14. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+15. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

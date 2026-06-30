@@ -34,6 +34,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("controlled judgment labels", text)
         self.assertIn("stale installed cache path", text)
         self.assertIn("fresh cachebuster", text)
+        self.assertIn("service logic as natural-language source-of-truth docs", text)
+        self.assertIn("meaningful service logic in natural language", text)
+        self.assertIn("endpoint lists, controller summaries, service class summaries", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -227,6 +230,38 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("lack of a `Gaps` item", text)
         self.assertIn("non-goals, excluded behavior, and adjacent-domain boundaries", text)
 
+    def test_atomic_document_contract_requires_service_logic_natural_language_coverage(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Service Logic Natural-Language Coverage", text)
+        self.assertIn("natural-language service logic standard", text)
+        self.assertIn("meaningful application, service, and domain logic", text)
+        for required_behavior in [
+            "conditions",
+            "branches",
+            "state transitions",
+            "validation",
+            "permission checks",
+            "policy rules",
+            "transaction or idempotency behavior",
+            "persistence side effects",
+            "external calls",
+            "emitted events",
+            "error handling",
+            "recovery behavior",
+        ]:
+            self.assertIn(required_behavior, text)
+        self.assertIn("endpoint lists, controller lists, service class names, method names", text)
+        self.assertIn("source evidence only until the atom explains in natural language", text)
+        self.assertIn("A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient", text)
+        self.assertIn("service logic coverage gaps", text)
+
+    def test_atomic_document_contract_rejects_evasive_split_or_identifier_only_coverage(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Do not leave an evasive split or coverage gap", text)
+        self.assertIn("in place of documenting inspected service logic", text)
+        self.assertIn("proposed owners, unresolved question, and the behavior already observed", text)
+        self.assertIn("Do not use source identifiers without natural-language behavior as proof", text)
+
     def test_domain_boundary_policy_uses_general_quality_gate(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Domain Boundary Quality Gate", text)
@@ -301,6 +336,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Update the docs-root source commit baseline metadata only after confirmed docs writes", text)
         self.assertIn("core business terms that require glossary or domain atom coverage", text)
         self.assertIn("parent business terms missing or underdefined in the glossary", text)
+        self.assertIn("Build a service logic inventory", text)
+        self.assertIn("service logic inventory items", text)
         self.assertIn("accepted change plan defines the only paths and write actions", text)
         self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 
@@ -323,9 +360,12 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria atom is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria atom", text)
+        self.assertIn("service logic inventory plus a judgment-labeled domain evidence packet", text)
         self.assertIn("judgment-labeled domain evidence packet", text)
         self.assertIn("change-judgment-policy.md", text)
         self.assertIn("No Example Leakage rule", text)
+        self.assertIn("meaningful source behavior is missing from the inventory", text)
+        self.assertIn("source identifiers appear without natural-language behavior", text)
         self.assertIn("reference example prose appears without user/source trace", text)
         self.assertIn("judgment labels are absent or unsupported", text)
         self.assertIn("missing required behavior is confused with out-of-scope behavior", text)
@@ -333,6 +373,29 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("independent review subagents", text)
         self.assertIn("review subagent fails", text)
         self.assertIn("rerun review", text)
+
+    def test_refresh_flow_requires_service_logic_inventory_and_atom_mapping(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Service Logic Inventory", text)
+        self.assertIn("behavior-oriented, not method-oriented", text)
+        self.assertIn("meaningful runtime behavior rather than by endpoint, controller, service class, method, or file", text)
+        for inventory_field in [
+            "inspected source identifiers",
+            "natural-language behavior",
+            "conditions and branches",
+            "validation or permission checks",
+            "state transitions",
+            "persistence side effects",
+            "integration calls",
+            "emitted events",
+            "error handling",
+            "recovery behavior",
+            "candidate owning atom",
+        ]:
+            self.assertIn(inventory_field, text)
+        self.assertIn("Map every meaningful application, service, and domain logic item to an owning atom", text)
+        self.assertIn("record a coverage gap with source evidence and `confirmation_needed`", text)
+        self.assertIn("only lists source files, endpoints, controllers, service classes, or method names", text)
 
     def test_refresh_flow_requires_criteria_change_plan_entries(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
@@ -352,6 +415,16 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not write a generic gap", text)
         self.assertIn("missing required behavior, unapproved implementation, out-of-scope behavior, stale docs", text)
         self.assertIn("Do not classify behavior as healthy only because no related gap exists", text)
+        self.assertIn("Source behavior absent from the docs is not implicitly correct", text)
+        self.assertIn("coverage gap, `confirmation_needed`, or `docs_stale`", text)
+
+    def test_change_judgment_policy_requires_natural_language_docs_for_matching(self) -> None:
+        text = read(DOCS_REFS / "change-judgment-policy.md")
+        self.assertIn("natural-language behavior with source evidence", text)
+        self.assertIn("source identifier, endpoint list, controller list, service class summary, method name", text)
+        self.assertIn("service logic is absent from natural-language docs", text)
+        self.assertIn("do not classify it as matching", text)
+        self.assertIn("Record a coverage gap or `confirmation_needed`", text)
 
     def test_docs_skill_prevents_reference_example_leakage(self) -> None:
         combined = "\n".join(

@@ -9,6 +9,7 @@
 - [Domain Discovery Policy](#domain-discovery-policy)
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
+- [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
 - [Required Atom Sections](#required-atom-sections)
 - [Judgment Evidence Policy](#judgment-evidence-policy)
 - [Forbidden Shapes](#forbidden-shapes)
@@ -148,6 +149,28 @@ Each covered core business term should state:
 - related status, hold, deduction, threshold, display, or availability rules
 - aliases, related source identifiers, forbidden conflations, and uncertainty
 
+## Service Logic Natural-Language Coverage
+
+Atomic docs are a natural-language service logic standard, not a source index. Generated docs should let a reviewer understand the meaningful runtime behavior without rereading every source file first.
+
+Document all meaningful application, service, and domain logic that affects product behavior, operational behavior, or integration behavior. This includes conditions, branches, state transitions, validation, permission checks, policy rules, transaction or idempotency behavior, persistence side effects, external calls, emitted events, error handling, and recovery behavior.
+
+Do not treat endpoint lists, controller lists, service class names, method names, file paths, or terse class-role summaries as service logic coverage. These identifiers are source evidence only until the atom explains in natural language what the source behavior does, when it does it, what it refuses, what it stores or changes, what it calls, and what result or failure it produces.
+
+For each meaningful service logic item, the docs must record:
+
+- source identifiers that were inspected
+- owning atom or a coverage gap when ownership is unresolved
+- natural-language behavior description
+- input conditions, guards, branches, and failure conditions that affect the behavior
+- state, persistence, integration, emitted-event, or external side effects
+- confirmed or inferred basis for intent, rule, requirement, exclusion, or boundary
+- judgment readiness: whether the item can be judged from the docs or must remain `confirmation_needed` or a coverage gap
+
+Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
+
+Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
+
 ## Required Atom Sections
 
 Each atom file must preserve these sections:
@@ -160,7 +183,7 @@ Each atom file must preserve these sections:
 
 `Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining. Include acceptance criteria when the behavior can be judged by observable source behavior.
 
-`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points. `Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, or `implemented_pending_confirmation`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, rename/merge candidates, and confirmation-needed boundaries.
+`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points, and expresses those facts as natural-language service logic. A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient. `Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, or `implemented_pending_confirmation`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries.
 
 ## Judgment Evidence Policy
 
@@ -187,6 +210,8 @@ Project and domain context atoms must preserve non-goals, excluded behavior, and
 - Do not collapse `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps` into one undifferentiated narrative.
 - Do not present AI inference as confirmed user intent.
 - Do not use project-specific example domain names as skill-level rules.
+- Do not leave an evasive split or coverage gap in place of documenting inspected service logic. A note that logic should be split later is invalid unless it also records the concrete source evidence, proposed owners, unresolved question, and the behavior already observed.
+- Do not use source identifiers without natural-language behavior as proof that service logic is covered.
 
 ## Atomicity Policy
 
