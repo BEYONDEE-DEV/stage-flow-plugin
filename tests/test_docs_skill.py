@@ -32,6 +32,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Respect Stageflow gates", text)
         self.assertIn("language policy", text)
         self.assertIn("controlled judgment labels", text)
+        self.assertIn("stale installed cache path", text)
+        self.assertIn("fresh cachebuster", text)
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -56,6 +58,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not translate code identifiers or schema keys", text)
         self.assertIn("ask before writing confirmed docs", text)
         self.assertIn("leftover English filler text", text)
+        self.assertIn("No Example Leakage", text)
+        self.assertIn("Do not copy reference example wording", text)
+        self.assertIn("Controlled judgment labels, fixed headings, schema keys", text)
         self.assertIn("change plan and managed docs prose should use the user/artifact language", text)
 
 
@@ -142,6 +147,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("confirmed required behavior is missing", text)
         self.assertIn("conflicts with confirmed `Intent`, `Rules`, acceptance criteria", text)
         self.assertIn("inferred `Intent` or inferred `Rules` alone", text)
+        self.assertIn("Explanatory prose in this file is not reusable managed-docs content", text)
 
     def test_change_judgment_policy_evidence_and_planned_change_types(self) -> None:
         text = read(DOCS_REFS / "change-judgment-policy.md")
@@ -174,6 +180,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Criteria approval: approved by user", text)
         self.assertIn("must not be used as the required input for domain writer subagents", text)
         self.assertIn("Record user-conversation criteria in the draft before code exploration", text)
+        self.assertIn("do not copy illustrative wording from skill references", text)
         for section in ["Intent", "Rules", "Current Implementation", "Planned Changes", "Gaps"]:
             self.assertIn(section, text)
         for perspective in [
@@ -215,15 +222,7 @@ class DocsSkillTests(unittest.TestCase):
             "implemented_pending_confirmation",
         ]:
             self.assertIn(planned_type, text)
-        for label in [
-            "bug_or_regression",
-            "missing_required_behavior",
-            "unapproved_implemented_behavior",
-            "out_of_scope_behavior",
-            "confirmation_needed",
-            "docs_stale",
-        ]:
-            self.assertIn(label, text)
+        self.assertIn("one judgment label from `change-judgment-policy.md`", text)
         self.assertIn("Do not add top-level per-atom status fields", text)
         self.assertIn("lack of a `Gaps` item", text)
         self.assertIn("non-goals, excluded behavior, and adjacent-domain boundaries", text)
@@ -267,8 +266,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("source-repeated business nouns", text)
         self.assertIn("`project/project-glossary-atom.md`", text)
         self.assertIn("appropriate domain atom", text)
-        self.assertIn("derived concept such as `resource deduction`", text)
-        self.assertIn("parent business term such as `resource`", text)
+        self.assertIn("Do not document a derived concept while its parent business term is missing or underdefined", text)
         self.assertIn("Do not force admin, operator, or screen-centric language", text)
         self.assertIn("services, libraries, jobs, agents, or APIs", text)
         self.assertIn("caller, service, job, policy, or system flow", text)
@@ -300,6 +298,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("implemented-plan candidates", text)
         self.assertIn("rename/merge proposals", text)
         self.assertIn("source-baseline metadata updates and docs-root config writes", text)
+        self.assertIn("Update the docs-root source commit baseline metadata only after confirmed docs writes", text)
         self.assertIn("core business terms that require glossary or domain atom coverage", text)
         self.assertIn("parent business terms missing or underdefined in the glossary", text)
         self.assertIn("accepted change plan defines the only paths and write actions", text)
@@ -313,18 +312,24 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("first atomic-docs write action", text)
         self.assertIn("limited draft creation or update", text)
         self.assertIn("draft criteria write action", text)
+        self.assertIn("docs root config write when needed", text)
+        self.assertIn("must not also create project goal, project glossary, common context, common policy atoms, domain atoms", text)
         self.assertIn("record criteria already stated in the user conversation", text)
         self.assertIn("use code exploration to enrich the criteria atom itself", text)
         self.assertIn("not just the change plan", text)
         self.assertIn("draft review artifact", text)
         self.assertIn("must not be used as the required input for domain writer subagents", text)
+        self.assertIn("candidate names as confirmed domain structure before criteria approval", text)
         self.assertIn("Domain Subagent Workflow", text)
         self.assertIn("only after the criteria atom is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria atom", text)
         self.assertIn("judgment-labeled domain evidence packet", text)
         self.assertIn("change-judgment-policy.md", text)
+        self.assertIn("No Example Leakage rule", text)
+        self.assertIn("reference example prose appears without user/source trace", text)
         self.assertIn("judgment labels are absent or unsupported", text)
         self.assertIn("missing required behavior is confused with out-of-scope behavior", text)
+        self.assertIn("candidate domains are treated as confirmed without approval", text)
         self.assertIn("independent review subagents", text)
         self.assertIn("review subagent fails", text)
         self.assertIn("rerun review", text)
@@ -347,6 +352,21 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not write a generic gap", text)
         self.assertIn("missing required behavior, unapproved implementation, out-of-scope behavior, stale docs", text)
         self.assertIn("Do not classify behavior as healthy only because no related gap exists", text)
+
+    def test_docs_skill_prevents_reference_example_leakage(self) -> None:
+        combined = "\n".join(
+            read(path)
+            for path in [
+                DOCS_REFS / "atomic-document-contract.md",
+                DOCS_REFS / "refresh-flow.md",
+                DOCS_REFS / "change-judgment-policy.md",
+            ]
+        )
+        self.assertNotIn("endpoint-based document structure", combined)
+        self.assertNotIn("vague service state-transition split gaps", combined)
+        self.assertNotIn("resource deduction", combined)
+        self.assertNotIn("this service's detailed state transitions should be split into separate atoms", combined)
+        self.assertIn("Do not copy reference example wording", read(DOCS_REFS / "language-policy.md"))
 
     def test_atomicity_policy_rejects_vague_split_gap(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")

@@ -23,6 +23,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria atom as required input for domain writer and review subagents.
 - Use controlled judgment labels from `references/change-judgment-policy.md` for code review findings, `Gaps`, and change plan items. Do not infer healthy behavior from the absence of a gap.
+- During local plugin iteration, do not start atomic-docs work from a stale installed cache path. Reinstall the plugin with a fresh cachebuster and verify the installed cache includes `change-judgment-policy.md`, criteria file-first rules, and No Example Leakage rules.
 
 ## Required References
 
@@ -30,7 +31,7 @@ Before acting, read only the references needed for the requested operation:
 
 - `references/docs-root-and-config.md` for docs submodule discovery, confirmation, config, and recovery.
 - `references/atomic-document-contract.md` for domain folders, file-based `*-atom.md` atoms, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
-- `references/language-policy.md` for choosing the natural language used in docs content while preserving fixed schema headings and code identifiers.
+- `references/language-policy.md` for choosing the natural language used in docs content, preventing reference-example leakage into managed docs, and preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
 - `references/change-judgment-policy.md` for classifying source behavior as matching confirmed intent, bug/regression, missing required behavior, unapproved implementation, out-of-scope behavior, confirmation needed, or stale docs.
 - `references/atomic-graph.md` for `graph_edges`, target keys, traversal, edge validity, duplicate-key conflicts, and path-drift correction.

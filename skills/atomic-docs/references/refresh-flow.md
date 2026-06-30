@@ -29,17 +29,21 @@ If a domain candidate looks like a broad grouping instead of a durable ownership
 
 When atomization criteria are needed, do not keep `Atomization Perspectives Reviewed` only in chat or only in the change plan. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria-atom.md` as the criteria proposal.
 
-Before that first draft write, present a narrow change plan that names only the docs root, `project/atomization-criteria-atom.md`, and the draft criteria write action. The draft should first record criteria already stated in the user conversation, including prohibited atomization shortcuts, vague split concerns, required subagent writing/review steps, and pending user approval state.
+Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria-atom.md`, and the draft criteria write action. If `.stageflow/docs-submodule.json` is missing, the same first approved write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, or source baseline metadata.
+
+The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
 After the draft exists, use code exploration to enrich the criteria atom itself, not just the change plan. Source exploration should add or revise the `Atomization Perspectives Reviewed` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective, record source evidence, proposed atom candidates, source-evidence-only treatment, not-applicable reasons, split/merge criteria, source evidence requirements, and unresolved questions in the criteria atom.
 
 The user reviews, adds, removes, revises, and approves the criteria through the criteria atom. Until the criteria atom is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria atom from draft/pending state to approved state before starting domain atom work.
 
+Expected project domains found during exploration are candidates until the approved criteria and accepted change plan confirm them. Do not treat candidate names as confirmed domain structure before criteria approval.
+
 ## Domain Subagent Workflow
 
 When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved. Each writer subagent must read the approved criteria atom and produce a judgment-labeled domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
 
-Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom and `change-judgment-policy.md`. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, an atom is too broad, a split gap is vague, inferred intent/rules are unmarked, source evidence is missing, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, or atom draft as needed and rerun review.
+Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom, `change-judgment-policy.md`, and the No Example Leakage rule. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, an atom is too broad, a split gap is vague, inferred intent/rules are unmarked, source evidence is missing, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, or atom draft as needed and rerun review.
 
 ## Full Refresh
 
@@ -56,7 +60,7 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 9. Stop graph expansion when related atom files no longer create modification candidates.
 10. Present a domain-grouped change plan before writing domain atom docs.
 11. Write confirmed updates only after the change plan is accepted.
-12. Update the docs-root source commit baseline metadata after confirmed writes.
+12. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete.
 
 ## Targeted Docs Operation
 

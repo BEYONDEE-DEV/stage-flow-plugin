@@ -82,7 +82,7 @@ After the docs root is confirmed and the user accepts the limited draft write ac
 
 A draft criteria atom is a review artifact. It must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing until the user approves the criteria. In draft state, record `Criteria approval: draft, pending user approval` in `Current Implementation` or `Gaps`. After the user approves the criteria, update the atom to `Criteria approval: approved by user` and remove obsolete draft-only or pending-approval gaps.
 
-Record user-conversation criteria in the draft before code exploration if they affect atomization. Examples include prohibiting endpoint-based document structure, prohibiting vague service state-transition split gaps, requiring domain-by-domain writer and review subagents, and requiring source evidence for split proposals.
+Record user-conversation criteria in the draft before code exploration if they affect atomization. Capture only criteria that came from the user, inspected source behavior, or approved workflow evidence; do not copy illustrative wording from skill references into the criteria atom.
 
 The criteria atom records:
 
@@ -94,7 +94,7 @@ The criteria atom records:
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
 - writer subagent and review subagent checklists that future docs operations must read before drafting or reviewing atom files
 
-These perspectives are not fixed document types. For example, a route, controller, command, public library API, job trigger, or message handler may be entry surface evidence depending on the source project, but the criteria atom must not force a separate atom merely because that surface exists.
+These perspectives are not fixed document types. Entry surfaces discovered in the target source may be evidence, but the criteria atom must not force a separate atom merely because that surface exists.
 
 Do not accept a criteria atom that only lists perspective names. If a perspective has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
 
@@ -134,7 +134,7 @@ Do not confirm a first-level domain when its main rationale is a documentation s
 
 Before writing or refreshing atom files, identify source-repeated business nouns from type/interface names, collection keys, UI titles, API payloads, and existing domain atoms. Each core business term must be defined in `project/project-glossary-atom.md` or in an appropriate domain atom before derived behavior is treated as covered.
 
-Do not document a derived concept such as `resource deduction` while the parent business term such as `resource` / `제한자원` is missing or underdefined. If the parent meaning is uncertain, put the missing definition and evidence in the change plan or `Gaps` instead of writing confirmed intent.
+Do not document a derived concept while its parent business term is missing or underdefined. If the parent meaning is uncertain, put the missing definition and source evidence in the change plan or `Gaps` instead of writing confirmed intent.
 
 Do not force admin, operator, or screen-centric language when the source project is not an admin UI. For non-UI services, libraries, jobs, agents, or APIs, describe the relevant caller, service, job, policy, or system flow instead of inventing an operator workflow. When a UI or command entry point exists, include that entry point as source evidence.
 
@@ -170,10 +170,10 @@ Do not add top-level per-atom status fields for these judgments. Instead, attach
 
 Each judgment-bearing item must include:
 
-- one judgment label, such as `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `confirmation_needed`, or `docs_stale`
+- one judgment label from `change-judgment-policy.md`
 - source evidence for the observed behavior or missing behavior
-- confirmed or inferred basis, such as `Intent`, `Rules`, approved `Planned Changes`, non-goals, excluded behavior, adjacent-domain boundary, source baseline metadata, or user approval
-- next action, such as fix implementation, confirm intent, update docs, refresh docs, or move scope
+- confirmed or inferred basis from the relevant atom section, boundary, baseline metadata, or user approval
+- next action for resolving the finding
 
 `matches_confirmed_intent` is allowed only as an explicit review finding after the reviewer inspects source evidence and confirms that no higher-priority judgment label applies. Do not treat the lack of a `Gaps` item as proof that code matches confirmed intent.
 
@@ -192,4 +192,4 @@ Project and domain context atoms must preserve non-goals, excluded behavior, and
 
 An atom is too broad when it covers unrelated behaviors, policies, rules, states, planned changes, or gap boundaries. Split or propose a split before writing confirmed docs. If the split is ambiguous, keep candidates in the change plan or `Gaps` and ask the user.
 
-Do not write a vague split gap such as "this service's detailed state transitions should be split into separate atoms" without concrete evidence. A split proposal must name candidate atom slugs, owning domain, source files/classes/functions, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.
+Do not write a vague split gap that says more precision is needed without concrete evidence. A split proposal must name candidate atom slugs, owning domain, source files/classes/functions, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.

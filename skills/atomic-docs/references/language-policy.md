@@ -31,6 +31,14 @@ Starter examples are scaffolding, not approved docs content. Replace generic Eng
 
 Reviewers should treat leftover English filler text as a blocking issue when the selected managed-docs or change-plan language is not English.
 
+## No Example Leakage
+
+Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria atoms, atom drafts, `Gaps`, review findings, or change plans.
+
+When a docs item needs a concrete phrase, write it from the target project's user wording, source identifiers, inspected behavior, or approved workflow evidence. If that evidence is missing, record a confirmation-needed gap instead of borrowing wording from a skill reference.
+
+Controlled judgment labels, fixed headings, schema keys, and source-code identifiers may be reused exactly. Explanatory prose from references must be rewritten from target-project evidence.
+
 ## Mixed-Language Handling
 
 - Do not translate code identifiers or schema keys to make prose feel more natural.

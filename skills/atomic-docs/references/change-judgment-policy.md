@@ -4,6 +4,8 @@
 
 This reference defines how atomic docs support future code review judgments against the documented source baseline. It does not add top-level per-atom status fields. Record judgment labels on specific `Gaps`, change plan items, review findings, or evidence packet items.
 
+The labels in this file are reusable controlled vocabulary. Explanatory prose in this file is not reusable managed-docs content and must not be copied into criteria atoms, atom drafts, gaps, or review findings.
+
 ## Judgment Labels
 
 Use this controlled vocabulary when classifying source behavior against atomic docs:
@@ -48,9 +50,9 @@ Every judgment item must name the atom, source evidence, judgment label, reason,
 Use natural-language prose, but each judgment-bearing `Gaps` item or review finding must include:
 
 - one judgment label from this policy
-- source evidence such as files, classes, functions, payload fields, states, or graph-linked atoms
+- source evidence identifiers from the target project
 - the confirmed or inferred basis
 - the affected behavior
-- the next action, such as fix implementation, confirm intent, update docs, refresh stale docs, or move scope
+- the next action for resolving the finding
 
 Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior, and confirmation-needed uncertainty into a generic gap.

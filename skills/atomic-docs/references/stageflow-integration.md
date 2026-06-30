@@ -23,7 +23,7 @@ This reference defines how the `atomic-docs` skill behaves when invoked during S
 
 Use a Stageflow artifact as required behavior evidence only when it is an approved definition, approved implementation plan, approved policy/rule, or approved user decision that explicitly names the requirement, boundary, or affected docs path. Draft artifacts, workflow notes, review comments, pending plans, and unapproved implementation notes are not confirmed requirements.
 
-When an approved Stageflow plan is implemented, move the confirmed implemented behavior from `Planned Changes` to `Current Implementation` during the docs operation. Any remaining difference must be recorded with a judgment label from `change-judgment-policy.md`, such as `missing_required_behavior`, `bug_or_regression`, `unapproved_implemented_behavior`, or `confirmation_needed`.
+When an approved Stageflow plan is implemented, move the confirmed implemented behavior from `Planned Changes` to `Current Implementation` during the docs operation. Any remaining difference must be recorded with the applicable judgment label from `change-judgment-policy.md`.
 
 Do not promote a Stageflow implementation detail into confirmed `Intent` or `Rules` unless the approved Stageflow artifact or user decision states that the detail is required behavior.
 
