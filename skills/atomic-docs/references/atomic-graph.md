@@ -25,6 +25,7 @@ The `reason` is one human-readable sentence. Do not add relationship strength, p
 - `target_path` points to the existing target `*-atom.md` file relative to the docs root.
 - If `target_path` is stale but `target_key` resolves to an existing atom file, correct the path during refresh and show the path correction in the change plan.
 - Graph edges may only target existing atom files. Future, missing, rename, or merge candidates belong in a change plan or `Gaps` until the target file exists.
+- The criteria document at `project/atomization-criteria.md` is not an atom file and must not be used as a `graph_edges` source or target.
 
 ## Edge Types And Direction
 

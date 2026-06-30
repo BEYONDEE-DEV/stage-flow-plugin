@@ -27,29 +27,49 @@ If a domain candidate looks like a broad grouping instead of a durable ownership
 
 ## Atomization Criteria File-First Flow
 
-When atomization criteria are needed, do not keep `Atomization Perspectives Reviewed` only in chat or only in the change plan. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria-atom.md` as the criteria proposal.
+When atomization criteria are needed, do not keep `Atomization Perspectives Reviewed` only in chat or only in the change plan. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria.md` as the criteria proposal.
 
-If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms the managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria-atom.md` as a draft criteria proposal in the same turn, then stop for user review of the draft criteria.
+If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms the managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria.md` as a draft criteria proposal in the same turn, then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS.
 
-Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria-atom.md`, and the draft criteria write action unless the current request already accepted that bootstrap scope. If `.stageflow/docs-submodule.json` is missing, the same first approved or bootstrap-accepted write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, subagent work, or source baseline metadata.
+Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria.md`, and the draft criteria write action unless the current request already accepted that bootstrap scope. If `.stageflow/docs-submodule.json` is missing, the same first approved or bootstrap-accepted write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, domain writer/reviewer subagent work, service logic inventory, or source baseline metadata.
 
 The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
-After the draft exists, use code exploration to enrich the criteria atom itself, not just the change plan. Source exploration should add or revise the `Atomization Perspectives Reviewed` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective, record source evidence, proposed atom candidates, source-evidence-only treatment, not-applicable reasons, split/merge criteria, source evidence requirements, and unresolved questions in the criteria atom.
+After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should add or revise the domain partitioning criteria, candidate or approved domain map, and `Atomization Perspectives Reviewed` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. For each perspective, record source evidence, proposed atom candidates, source-evidence-only treatment, not-applicable reasons, split/merge criteria, source evidence requirements, and unresolved questions in the criteria document.
 
-The user reviews, adds, removes, revises, and approves the criteria through the criteria atom. Until the criteria atom is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria atom from draft/pending state to approved state before starting domain atom work.
+Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate below. The user reviews, adds, removes, revises, and approves the criteria through the criteria document only after that gate passes. Until the criteria document is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria document from draft/pending state to approved state before starting domain atom work.
 
 Expected project domains found during exploration are candidates until the approved criteria and accepted change plan confirm them. Do not treat candidate names as confirmed domain structure before criteria approval.
 
+If a legacy `<doc-root>/project/atomization-criteria-atom.md` exists, treat it as a migration/update candidate. Do not write new criteria to the legacy path unless the accepted change plan explicitly covers migration from that legacy artifact.
+
+## Criteria Structure Review Gate
+
+Run this gate after the criteria draft is created or enriched, and before asking the user for criteria approval.
+
+Use an independent criteria-review subagent to review only the criteria draft, source exploration evidence, and accepted draft scope. This review subagent is allowed before criteria approval and does not require a Codex Goal because it is part of criteria-draft quality control, not docs generation.
+
+The criteria-review subagent must fail the draft when:
+
+- any `Atomization Perspectives` entry is missing one of the required subfields: `Atom candidate criteria`, `Source evidence only criteria`, `Not applicable reason`, `Split/merge criteria`, `Source evidence requirement`, or `Unresolved questions`
+- a required perspective subfield is empty, placeholder-only, or a one-line summary that does not explain the criterion
+- source evidence is absent and the perspective does not record a concrete `Not applicable reason` or `Unresolved questions`
+- the domain map is missing, source-unsupported, or treats candidate domains as approved before user approval
+- the draft makes unapproved destructive claims about legacy artifacts, including deleting `atomization-criteria-atom.md` without an accepted migration/delete action
+- reference example prose leaks into the criteria document without target-project user or source trace
+- source-derived intent, rules, domain ownership, or boundaries are not marked as inferred or `needs_confirmation` while still unapproved
+
+If criteria-review fails, revise only `project/atomization-criteria.md` within the accepted criteria draft scope, then rerun the criteria-review subagent. Repeat this cycle until the criteria-review subagent reports no blocking issues. A PASS means the criteria draft is ready for user review and possible approval; it does not approve the criteria automatically.
+
 ## Atomic Docs Goal Gate
 
-Bootstrap criteria draft creation does not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria-atom.md`, then must stop for criteria review.
+Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria.md`, run criteria-review/revision cycles for that criteria draft, then stop for user review after criteria-review PASS.
 
-After the criteria atom is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project, common, or domain atom writing; service logic inventory creation; writer or reviewer subagent execution; graph edge writing; and source-baseline metadata updates.
+After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project, common, or domain atom writing; service logic inventory creation; domain writer or reviewer subagent execution; graph edge writing; and source-baseline metadata updates.
 
-The Goal objective must name the approved criteria atom path, docs root, accepted docs write scope, natural-language service logic coverage requirement, writer/reviewer cycle, and completion condition for the accepted docs operation. If an active Codex Goal already covers the same atomic-docs operation, continue inside that Goal instead of creating a duplicate.
+The Goal objective must name the approved criteria document path, docs root, accepted docs write scope, natural-language service logic coverage requirement, writer/reviewer cycle, and completion condition for the accepted docs operation. If an active Codex Goal already covers the same atomic-docs operation, continue inside that Goal instead of creating a duplicate.
 
-If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project/common/domain atoms, service logic inventory, subagents, graph edges, and source-baseline metadata untouched.
+If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project/common/domain atoms, service logic inventory, domain writer/reviewer subagents, graph edges, and source-baseline metadata untouched.
 
 Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
 
@@ -65,9 +85,9 @@ Domain atom drafting must use the service logic inventory as input. A domain ato
 
 ## Domain Subagent Workflow
 
-When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria atom is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria atom and produce a service logic inventory plus a judgment-labeled domain evidence packet with inspected source files, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce a service logic inventory plus a judgment-labeled domain evidence packet with inspected source files, domain-map coverage, perspectives reviewed, atom candidates, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates, split/merge proposals, and relevant labels from `change-judgment-policy.md`.
 
-Use independent review subagents to review writer packets or atom drafts against the same approved criteria atom, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria atom, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
+Use independent review subagents to review writer packets or atom drafts against the same approved criteria document, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent fails the packet or draft when required perspectives are missing without a not-applicable reason, the domain map is missing or unsupported, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
 
 ## Full Refresh
 
@@ -75,7 +95,7 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 
 1. Read the configured docs root and source root.
 2. Read the docs-root source commit baseline metadata.
-3. If atomization criteria are needed and no approved criteria atom exists, create or update the draft criteria atom through the file-first flow before domain atom work.
+3. If atomization criteria are needed and no approved criteria document exists, create or update the draft criteria document through the file-first flow before domain atom work.
 4. After criteria approval and accepted docs write scope, satisfy the Atomic Docs Goal Gate before docs generation work.
 5. Inspect changed source behavior files since the stored source commit hash and map baseline diffs to affected atoms through source-to-atom discovery and graph traversal.
 6. Ignore tests, settings, schema, build, and auxiliary files by default unless the user requested auxiliary-file reflection.
@@ -98,10 +118,10 @@ For domain-level work, update the domain context atom when the domain goal, resp
 
 A change plan should group by domain and list:
 
-- the limited first write action for draft criteria creation or update at `project/atomization-criteria-atom.md` when criteria are new or changed
-- `Atomization Perspectives Reviewed`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria atom is draft or approved
-- user-conversation criteria that must be recorded in the criteria atom before source-derived atom drafting
-- source exploration results that update the criteria atom instead of remaining only in the change plan
+- the limited first write action for draft criteria creation or update at `project/atomization-criteria.md` when criteria are new or changed
+- `Atomization Perspectives Reviewed`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
+- user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
+- source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
 - source behavior files inspected
 - service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom, and coverage gaps

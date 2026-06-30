@@ -4,7 +4,7 @@
 
 This reference defines how atomic docs support future code review judgments against the documented source baseline. It does not add top-level per-atom status fields. Record judgment labels on specific `Gaps`, change plan items, review findings, or evidence packet items.
 
-The labels in this file are reusable controlled vocabulary. Explanatory prose in this file is not reusable managed-docs content and must not be copied into criteria atoms, atom drafts, gaps, or review findings.
+The labels in this file are reusable controlled vocabulary. Explanatory prose in this file is not reusable managed-docs content and must not be copied into criteria documents, atom drafts, gaps, or review findings.
 
 ## Judgment Labels
 

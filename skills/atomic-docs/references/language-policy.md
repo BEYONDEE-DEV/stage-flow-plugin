@@ -33,7 +33,7 @@ Reviewers should treat leftover English filler text as a blocking issue when the
 
 ## No Example Leakage
 
-Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria atoms, atom drafts, `Gaps`, review findings, or change plans.
+Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria documents, atom drafts, `Gaps`, review findings, or change plans.
 
 When a docs item needs a concrete phrase, write it from the target project's user wording, source identifiers, inspected behavior, or approved workflow evidence. If that evidence is missing, record a confirmation-needed gap instead of borrowing wording from a skill reference.
 
