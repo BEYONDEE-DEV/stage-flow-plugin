@@ -88,11 +88,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("source repository root used for diffs", text)
         self.assertIn("Do not silently create a real submodule", text)
         self.assertIn("accepted the docs-root setup scope and config write", text)
+        self.assertIn("explicitly selects a managed docs root and asks to start, redo, or recreate atomic docs", text)
+        self.assertIn("paired draft criteria atom allowed by `refresh-flow.md`", text)
 
     def test_docs_skill_requires_write_approval_for_managed_state(self) -> None:
         text = read(DOCS_SKILL)
         self.assertIn("accepted the explicit docs operation scope and change plan", text)
         self.assertIn("limited draft write action", text)
+        self.assertIn("accepted bootstrap scope", text)
         self.assertIn("project/atomization-criteria-atom.md", text)
         for write_target in [
             "managed docs",
@@ -113,6 +116,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("criteria atom itself as the center of review, user revision, and approval", text)
         self.assertIn("Do not start domain atom writing or domain subagent work until the criteria atom is approved", text)
         self.assertIn("Use only an approved criteria atom as required input", text)
+        self.assertIn("current request already accepted bootstrap scope", text)
 
     def test_atomic_document_contract_sections_and_boundaries(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -350,7 +354,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("limited draft creation or update", text)
         self.assertIn("draft criteria write action", text)
         self.assertIn("docs root config write when needed", text)
+        self.assertIn("current user request explicitly asks to start, redo, regenerate, or recreate atomic docs", text)
+        self.assertIn("do not stop at an approval request", text)
+        self.assertIn("then stop for user review of the draft criteria", text)
         self.assertIn("must not also create project goal, project glossary, common context, common policy atoms, domain atoms", text)
+        self.assertIn("graph edges, subagent work, or source baseline metadata", text)
         self.assertIn("record criteria already stated in the user conversation", text)
         self.assertIn("use code exploration to enrich the criteria atom itself", text)
         self.assertIn("not just the change plan", text)

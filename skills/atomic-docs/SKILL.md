@@ -19,6 +19,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Treat source files as the default evidence for docs refresh, not Stageflow request artifacts.
 - Respect Stageflow gates when invoked during Stageflow-controlled work.
 - Do not write managed docs, atom files, graph corrections, source-baseline metadata, migrations, or `.stageflow/docs-submodule.json` until the user has accepted the explicit docs operation scope and change plan.
+- If the current user request explicitly asks to start, redo, or recreate atomic docs and confirms the managed docs root, treat that request as accepted bootstrap scope for only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria-atom.md`; write those bootstrap files in the same turn and then stop for criteria review.
 - Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
 - Make `project/atomization-criteria-atom.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. Use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria atom as required input for domain writer and review subagents.
@@ -44,8 +45,8 @@ Before acting, read only the references needed for the requested operation:
 
 1. Identify whether the user wants root setup, full refresh, targeted docs work, inspection, graph maintenance, or Stageflow-adjacent documentation.
 2. Read the relevant reference files before making changes.
-3. Confirm the docs-submodule root and inspect existing docs-submodule state.
-4. If atomization criteria are needed, make the first atomic-docs write action a limited draft creation or update of `project/atomization-criteria-atom.md`.
+3. Confirm the docs-submodule root and inspect existing docs-submodule state. Treat an explicit user-selected managed docs root in the current request as confirmed for the bootstrap scope.
+4. If atomization criteria are needed, make the first atomic-docs write action a limited draft creation or update of `project/atomization-criteria-atom.md`. When the current request already accepted bootstrap scope, create or update the config and criteria draft before stopping.
 5. Put user conversation criteria, prohibitions, atomization concerns, and pending approval state into that criteria draft before relying on chat summaries.
 6. Inspect source state to enrich the criteria draft with evidence, not just the change plan.
 7. Use the criteria atom itself as the center of review, user revision, and approval. Do not start domain atom writing or domain subagent work until the criteria atom is approved.

@@ -29,7 +29,9 @@ If a domain candidate looks like a broad grouping instead of a durable ownership
 
 When atomization criteria are needed, do not keep `Atomization Perspectives Reviewed` only in chat or only in the change plan. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria-atom.md` as the criteria proposal.
 
-Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria-atom.md`, and the draft criteria write action. If `.stageflow/docs-submodule.json` is missing, the same first approved write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, or source baseline metadata.
+If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms the managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria-atom.md` as a draft criteria proposal in the same turn, then stop for user review of the draft criteria.
+
+Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria-atom.md`, and the draft criteria write action unless the current request already accepted that bootstrap scope. If `.stageflow/docs-submodule.json` is missing, the same first approved or bootstrap-accepted write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, subagent work, or source baseline metadata.
 
 The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
