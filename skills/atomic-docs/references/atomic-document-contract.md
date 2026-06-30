@@ -6,6 +6,7 @@
 - [Path Contract](#path-contract)
 - [Project And Domain Context Policy](#project-and-domain-context-policy)
 - [Atomization Criteria Document](#atomization-criteria-document)
+- [Source Convention Document](#source-convention-document)
 - [Domain Discovery Policy](#domain-discovery-policy)
 - [Hybrid Domain Naming Policy](#hybrid-domain-naming-policy)
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
@@ -39,7 +40,7 @@ Every atom uses this exact organization:
 - `atom_key` is the stable atom identity. It must be globally unique across the docs set, lower-kebab-case, and unchanged by category moves, domain-path moves, file-slug changes, or file renames.
 - Existing atoms without `atom_key` use slug-derived identity only as a legacy fallback for discovery. Treat them as explicit `atom_key` migration candidates in refresh or change plans before relying on them for new graph/AID work.
 - Do not create new `<file-slug>/atomic.md` folder-shaped atoms. If an existing docs set uses that older shape, propose a migration before changing paths.
-- The atomization criteria document is not an atom and is exempt from this path contract.
+- The atomization criteria document and source convention document are not atoms and are exempt from this path contract.
 
 ## Project And Domain Context Policy
 
@@ -65,6 +66,16 @@ Default project-level criteria document:
 - `atomization-criteria.md` records draft or approved criteria used to decide domain boundaries, split/merge atom files, draft docs, review docs, and apply judgment policy.
 - This criteria document is not a service-logic atom, not a graph target, and not direct code suitability evidence. Code suitability judgments come from generated natural-language service logic atoms, source evidence, graph relationships, baseline metadata, and judgment labels.
 - Existing `<doc-root>/project/atomization-criteria-atom.md` files are legacy artifacts. Treat them as migration/update candidates; do not use that path as the default for new criteria work.
+
+Default project-level source convention document:
+
+```text
+<doc-root>/project/source-convention.md
+```
+
+- `source-convention.md` records source interpretation conventions needed for writing and reviewing docs, such as project-specific source structure, validation or wiring conventions, behavior-impact boundaries, and formatter/linter/static-check evidence.
+- This source convention document is not a service-logic atom, not a graph target, not direct code suitability evidence, and not a substitute for source-observed behavior in the relevant service logic atoms.
+- Use it to keep code convention and source structure notes out of service logic atoms, especially when the convention is non-runtime formatting, naming, package placement, layer placement, import ordering, or similar code style.
 
 Default shared-domain atom:
 
@@ -177,6 +188,44 @@ Criteria-review must also fail when full discovery candidates, approved domain/c
 Before a criteria document is marked approved, remove one-off operation logs such as plugin cache paths, reset/delete notes, reviewer agent names, and transient "currently none" or `현재 없음` status notes unless they are active approval blockers. Approved criteria should contain durable criteria, approved or unresolved boundary information, and active blockers, not the draft execution diary.
 
 If a perspective or domain candidate has no current source evidence, mark it not applicable with a reason or keep the missing evidence as an unresolved question.
+
+## Source Convention Document
+
+The default source convention document path is:
+
+```text
+<doc-root>/project/source-convention.md
+```
+
+Create or update this document only when the user asks for a source convention format, or when a docs operation repeatedly needs project-specific source interpretation conventions that would otherwise leak into service logic atoms. This document is a non-atom document like the criteria document. It must not follow the `*-atom.md` path contract, required atom sections, atomic graph contract, frontmatter `atom_key`, or AID policy.
+
+For Korean managed docs, the source convention document must use these visible section headings:
+
+- `목적`
+- `승인 상태`
+- `적용 범위`
+- `소스 구조 관례`
+- `동작 영향 관례`
+- `비동작 코드 스타일`
+- `Formatter / Linter / Static Check 근거`
+- `서비스 로직 Atom과의 경계`
+- `리뷰 기준`
+- `미해결 질문`
+
+The source convention document is not a general style guide for its own sake. It records only conventions that help docs writers and reviewers interpret source behavior consistently:
+
+- source structure conventions, such as package roots, layer placement, module ownership, generated-source boundaries, or wiring locations used as source navigation evidence
+- runtime-impacting conventions, such as transaction activation, validation activation, authorization wiring, error response mapping, lock ordering, persistence ordering, event publication, or framework wiring that changes behavior
+- non-runtime code style, such as formatting, naming, package placement, layer placement, import ordering, comments, or file organization when it does not change product, operation, or integration behavior
+- formatter, linter, or static-check evidence that proves whether a convention is enforced by tooling or is only inferred from source shape
+
+Keep source convention and service logic judgment separate:
+
+- Non-runtime code style belongs only in `project/source-convention.md`; do not put it in service logic atom `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, or `Gaps` unless the user explicitly asks for a style atom outside normal service-logic docs.
+- Runtime-impacting conventions may be summarized in `project/source-convention.md`, but the actual code judgment basis must also appear as natural-language behavior in the relevant service logic atom with source evidence.
+- The source convention document alone cannot support `bug_or_regression`, `missing_required_behavior`, `matches_confirmed_intent`, `unapproved_implemented_behavior`, or `out_of_scope_behavior` for service logic. Use it as interpretation context, then connect the judgment to service logic atoms, source evidence, baseline metadata, and judgment labels.
+- If a service logic atom contains simple code convention, source folder taxonomy, import order, formatting, naming, or layer-placement notes as if they were runtime behavior, reviewer must fail or request moving that material to `project/source-convention.md`.
+- If a source convention has runtime impact but no related service logic atom records the behavior, leave a coverage gap or `confirmation_needed` item instead of treating the source convention as sufficient code judgment evidence.
 
 ## Domain Discovery Policy
 

@@ -49,6 +49,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("AI-renamed abstract labels", text)
         self.assertIn("stable frontmatter `atom_key`", text)
         self.assertIn("summarize its contents for the user with project-native feature candidates, capability/common promotion proposals", text)
+        self.assertIn("Keep source conventions separate from service logic atoms", text)
+        self.assertIn("project/source-convention.md", text)
+        self.assertIn("do not mix non-runtime conventions into service logic atoms", text)
         self.assertIn("post-write consistency and source fact review", text)
         self.assertIn("before reporting completion or presenting the docs as judgment-ready", text)
 
@@ -373,6 +376,48 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("not fixed document types", text)
         self.assertIn("Do not accept a criteria document that only lists perspective names or domain names", text)
         self.assertNotIn("endpoint document", text)
+
+    def test_atomic_document_contract_defines_source_convention_document_format(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Source Convention Document", text)
+        self.assertIn("<doc-root>/project/source-convention.md", text)
+        self.assertIn("source convention document is not a service-logic atom", text)
+        self.assertIn("not direct code suitability evidence", text)
+        self.assertIn("must not follow the `*-atom.md` path contract", text)
+        self.assertIn("frontmatter `atom_key`, or AID policy", text)
+        self.assertIn("not a graph target", text)
+        for section in [
+            "목적",
+            "승인 상태",
+            "적용 범위",
+            "소스 구조 관례",
+            "동작 영향 관례",
+            "비동작 코드 스타일",
+            "Formatter / Linter / Static Check 근거",
+            "서비스 로직 Atom과의 경계",
+            "리뷰 기준",
+            "미해결 질문",
+        ]:
+            self.assertIn(section, text)
+        self.assertIn("not a general style guide for its own sake", text)
+        self.assertIn("source interpretation conventions", text)
+        self.assertIn("runtime-impacting conventions", text)
+        self.assertIn("non-runtime code style", text)
+        self.assertIn("formatter, linter, or static-check evidence", text)
+        self.assertIn("Non-runtime code style belongs only in `project/source-convention.md`", text)
+        self.assertIn("Runtime-impacting conventions may be summarized", text)
+        self.assertIn("actual code judgment basis must also appear as natural-language behavior", text)
+        for judgment_label in [
+            "bug_or_regression",
+            "missing_required_behavior",
+            "matches_confirmed_intent",
+            "unapproved_implemented_behavior",
+            "out_of_scope_behavior",
+        ]:
+            self.assertIn(judgment_label, text)
+        self.assertIn("source convention document alone cannot support", text)
+        self.assertIn("request moving that material to `project/source-convention.md`", text)
+        self.assertIn("coverage gap or `confirmation_needed`", text)
 
     def test_atomic_document_contract_supports_code_judgment_evidence(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -768,6 +813,23 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Complete the Goal only after the accepted docs operation is actually complete", text)
         self.assertIn("waiting for user input, blocked by review FAIL", text)
         self.assertIn("Atomic Docs Goal Gate status", text)
+
+    def test_refresh_flow_uses_source_convention_document_as_separate_scope(self) -> None:
+        text = read(DOCS_REFS / "refresh-flow.md")
+        self.assertIn("Source Convention Document Flow", text)
+        self.assertIn("separate write scope for `<doc-root>/project/source-convention.md`", text)
+        self.assertIn("not part of the pre-approval criteria bootstrap scope", text)
+        self.assertIn("Do not create `project/source-convention.md` during criteria bootstrap", text)
+        self.assertIn("only after the criteria document is approved", text)
+        self.assertIn("accepted docs write scope includes the source convention document", text)
+        self.assertIn("Atomic Docs Goal Gate is satisfied", text)
+        self.assertIn("Use it as source interpretation context, not as service behavior evidence", text)
+        self.assertIn("separate non-runtime code style from runtime-impacting conventions", text)
+        self.assertIn("relevant service logic atom must still record the natural-language behavior and source evidence", text)
+        self.assertIn("fail or request correction when a service logic atom mixes in simple code convention", text)
+        self.assertIn("move it to `project/source-convention.md`", text)
+        self.assertIn("missing from the relevant service logic atom", text)
+        self.assertIn("source convention document creation or update at `project/source-convention.md`", text)
 
     def test_refresh_flow_requires_service_logic_inventory_and_atom_mapping(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")

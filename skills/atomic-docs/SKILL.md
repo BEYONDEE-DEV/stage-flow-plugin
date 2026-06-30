@@ -32,6 +32,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - Use hybrid domain naming: start from project-native feature/root language, and promote only explicitly evidenced cross-feature capability/common boundaries. Do not replace project-native names with AI-renamed abstract labels unless the criteria records user approval, existing docs terminology, or durable promotion evidence.
 - Treat atom identity as stable frontmatter `atom_key`, not the folder path, category path, or file slug. New atoms must use globally unique lower-kebab-case `atom_key` values that do not change when category folders, domain paths, file slugs, or filenames move.
 - After `project/atomization-criteria.md` passes criteria-review, summarize its contents for the user with project-native feature candidates, capability/common promotion proposals, domain/category boundaries, and atom candidates as separate items, provide the file path, and ask the user to inspect the file and approve or request changes. Do not proceed to docs generation, Goal creation, inventory, or domain subagents until the user confirms the criteria content has no issue.
+- Keep source conventions separate from service logic atoms. When code convention or source structure rules are needed, use the non-atom source convention document at `project/source-convention.md`; do not mix non-runtime conventions into service logic atoms.
 - Document meaningful application, service, and domain logic in natural language, including conditions, branches, state transitions, validation, permissions, policy rules, persistence effects, external integrations, errors, and recovery behavior when they affect runtime or product/operations meaning.
 - Do not count endpoint lists, controller summaries, service class summaries, file names, method names, or source identifiers alone as coverage.
 - Use controlled judgment labels from `references/change-judgment-policy.md` for code review findings, `Gaps`, and change plan items. Do not infer healthy behavior from the absence of a gap.
@@ -66,10 +67,11 @@ Before acting, read only the references needed for the requested operation:
 13. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
 14. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
 15. For new atom files, set frontmatter `atom_key` and use it for AID prefixes and graph `target_key` references; treat category/domain paths and file slugs as mutable locators.
-16. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
-17. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-18. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-19. Write only the paths and actions accepted by the user for the current docs operation.
+16. Put code convention and source structure interpretation rules in `project/source-convention.md` when needed, and keep non-runtime convention notes out of service logic atoms.
+17. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
+18. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+19. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+20. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 
