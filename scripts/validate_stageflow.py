@@ -161,6 +161,8 @@ STAGES: tuple[Stage, ...] = (
             "Implementation Architecture",
             "Change Areas",
             "Cause Or Design Notes",
+            "Implementation Flow Model",
+            "Flow Completeness Matrix",
             "Work Items",
             "Coverage Matrix",
             "Definition Fidelity Matrix",
@@ -173,6 +175,28 @@ STAGES: tuple[Stage, ...] = (
         "implementation-plan-writing-and-review-rules.md",
         "Implementation Plan Writing And Review Rules",
         (
+            TableRequirement(
+                "Implementation Flow Model",
+                (
+                    "Flow ID",
+                    "Definition Source",
+                    "Trigger Or Entry",
+                    "Target Outcome",
+                    "Primary Work Items",
+                    "Flow Status",
+                ),
+            ),
+            TableRequirement(
+                "Flow Completeness Matrix",
+                (
+                    "Flow ID",
+                    "Ordered Implementation Path",
+                    "State/Data Transitions",
+                    "Failure Or Empty States",
+                    "Observable Completion",
+                    "Validation Evidence",
+                ),
+            ),
             TableRequirement("Work Items", ("ID", "Implementation Unit", "Technical Design", "Completion Evidence")),
             TableRequirement(
                 "Coverage Matrix",
@@ -306,6 +330,34 @@ AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
 AWAITING_USER_GOAL_REASON = "awaiting user clarification"
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
+FLOW_STATUSES = {"complete", "return-to-definition", "out-of-scope-by-definition"}
+PLACEHOLDER_CELL_VALUES = {
+    "",
+    "n/a",
+    "na",
+    "none",
+    "no",
+    "tbd",
+    "todo",
+    "unknown",
+    "미정",
+    "없음",
+    "해당 없음",
+    "-",
+}
+FLOW_GENERIC_RE = re.compile(
+    r"^(?:"
+    r"implement(?:\s+(?:service|ui|code|logic|behavior))*|"
+    r"implement\s+service\s+and\s+ui|"
+    r"add(?:\s+(?:service|ui|code|logic|behavior))*|"
+    r"run\s+tests?|"
+    r"write\s+tests?|"
+    r"handle\s+errors?|"
+    r"as\s+needed|"
+    r"구현|구현한다|테스트\s*실행|오류\s*처리|필요시\s*처리"
+    r")\.?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -523,6 +575,29 @@ def validate_stage_rule_document(stage: Stage, errors: list[str]) -> list[str]:
     duplicates = sorted({rule_id for rule_id in rule_ids if rule_ids.count(rule_id) > 1})
     for rule_id in duplicates:
         errors.append(f"`{display_path(path)}` has duplicate Rule ID `{rule_id}`")
+    if stage.phase == "implementation-plan":
+        flow_contract = parse_required_table(
+            path,
+            section_text(text, "## Flow Completeness Contract"),
+            ("Rule ID", "Flow Rule", "Plan Must Record", "Reviewer Must Confirm", "Blocking Condition"),
+            "## Flow Completeness Contract",
+            errors,
+        )
+        flow_rule_ids = [
+            row.get("Rule ID", "").strip()
+            for row in flow_contract.rows
+            if row.get("Rule ID", "").strip()
+        ]
+        if not flow_rule_ids:
+            errors.append(f"`{display_path(path)}` Flow Completeness Contract must include at least one Rule ID")
+        missing_flow_prefix = [rule_id for rule_id in flow_rule_ids if not rule_id.startswith("IP-FLOW-")]
+        for rule_id in missing_flow_prefix:
+            errors.append(f"`{display_path(path)}` Flow Completeness Contract Rule ID `{rule_id}` must start with `IP-FLOW-`")
+        all_rule_ids = rule_ids + flow_rule_ids
+        duplicates = sorted({rule_id for rule_id in all_rule_ids if all_rule_ids.count(rule_id) > 1})
+        for rule_id in duplicates:
+            errors.append(f"`{display_path(path)}` has duplicate Rule ID `{rule_id}`")
+        return all_rule_ids
     return rule_ids
 
 
@@ -586,6 +661,7 @@ def validate_artifact(stage: Stage, text: str, path: Path, errors: list[str], ha
         validate_definition_scope_narrowing_evidence(path, text, errors, has_pending_clarifications)
     if stage.phase == "implementation-plan":
         validate_implementation_plan_depth(path, text, errors)
+        validate_implementation_plan_flow_completeness(path, text, errors)
 
 
 
@@ -898,6 +974,88 @@ def validate_implementation_plan_depth(path: Path, text: str, errors: list[str])
         ).lower()
         if any(phrase in combined for phrase in shallow_phrases):
             errors.append(f"`{display_path(path)}` Work Items row `{work_id}` is too generic for execution")
+
+
+def normalized_cell(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip()).strip()
+
+
+def is_placeholder_cell(value: str) -> bool:
+    return normalized_cell(value).lower() in PLACEHOLDER_CELL_VALUES
+
+
+def is_generic_flow_cell(value: str) -> bool:
+    normalized = normalized_cell(value)
+    if not normalized:
+        return True
+    return bool(FLOW_GENERIC_RE.fullmatch(normalized))
+
+
+def validate_implementation_plan_flow_completeness(path: Path, text: str, errors: list[str]) -> None:
+    flow_model = parse_first_markdown_table(section_text(text, "## Implementation Flow Model"))
+    flow_matrix = parse_first_markdown_table(section_text(text, "## Flow Completeness Matrix"))
+    flow_ids: set[str] = set()
+    complete_flow_ids: set[str] = set()
+
+    for row in flow_model.rows:
+        flow_id = row.get("Flow ID", "").strip() or "<unknown>"
+        if flow_id == "<unknown>":
+            errors.append(f"`{display_path(path)}` Implementation Flow Model row must include `Flow ID`")
+            continue
+        if flow_id in flow_ids:
+            errors.append(f"`{display_path(path)}` Implementation Flow Model repeats Flow ID `{flow_id}`")
+        flow_ids.add(flow_id)
+        for column in ("Definition Source", "Trigger Or Entry", "Target Outcome", "Primary Work Items"):
+            if is_placeholder_cell(row.get(column, "")):
+                errors.append(f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` must include substantive `{column}`")
+        status = row.get("Flow Status", "").strip()
+        if status not in FLOW_STATUSES:
+            errors.append(
+                f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` Flow Status must be one of {', '.join(sorted(FLOW_STATUSES))}"
+            )
+        if status == "complete":
+            complete_flow_ids.add(flow_id)
+
+    matrix_rows_by_id: dict[str, dict[str, str]] = {}
+    for row in flow_matrix.rows:
+        flow_id = row.get("Flow ID", "").strip() or "<unknown>"
+        if flow_id == "<unknown>":
+            errors.append(f"`{display_path(path)}` Flow Completeness Matrix row must include `Flow ID`")
+            continue
+        if flow_id in matrix_rows_by_id:
+            errors.append(f"`{display_path(path)}` Flow Completeness Matrix repeats Flow ID `{flow_id}`")
+        matrix_rows_by_id[flow_id] = row
+        if flow_ids and flow_id not in flow_ids:
+            errors.append(f"`{display_path(path)}` Flow Completeness Matrix row `{flow_id}` is not listed in Implementation Flow Model")
+
+    for flow_id in sorted(complete_flow_ids):
+        row = matrix_rows_by_id.get(flow_id)
+        if row is None:
+            errors.append(f"`{display_path(path)}` complete flow `{flow_id}` must have a Flow Completeness Matrix row")
+            continue
+        for column in (
+            "Ordered Implementation Path",
+            "State/Data Transitions",
+            "Failure Or Empty States",
+            "Observable Completion",
+            "Validation Evidence",
+        ):
+            if is_placeholder_cell(row.get(column, "")):
+                errors.append(f"`{display_path(path)}` Flow Completeness Matrix row `{flow_id}` must include substantive `{column}`")
+        if is_generic_flow_cell(row.get("Ordered Implementation Path", "")):
+            errors.append(f"`{display_path(path)}` Flow Completeness Matrix row `{flow_id}` Ordered Implementation Path is too generic for flow execution")
+        if is_generic_flow_cell(row.get("Validation Evidence", "")):
+            errors.append(f"`{display_path(path)}` Flow Completeness Matrix row `{flow_id}` Validation Evidence is too generic for flow completion")
+
+    work_items = parse_first_markdown_table(section_text(text, "## Work Items"))
+    for row in work_items.rows:
+        work_id = row.get("ID", "").strip() or "<unknown>"
+        combined = " ".join(
+            row.get(column, "")
+            for column in ("Technical Design", "Completion Evidence")
+        )
+        if flow_ids and not any(flow_id in combined for flow_id in flow_ids):
+            errors.append(f"`{display_path(path)}` Work Items row `{work_id}` must reference a Flow ID in Technical Design or Completion Evidence")
 
 
 def traceable_scope_source_ids(text: str, *, narrowing_only: bool = False) -> set[str]:
@@ -1220,8 +1378,12 @@ def validate_subagent_review_shards(
         errors,
     )
     stage_dir = final_path.parent.parent
+    has_flow_completeness_shard = False
     for row in table.rows:
         shard_file = row.get("Shard File", "").strip().strip("`")
+        scope = row.get("Scope", "").strip().lower()
+        if stage.phase == "implementation-plan" and scope == "flow-completeness":
+            has_flow_completeness_shard = True
         if not shard_file:
             errors.append(f"`{display_path(final_path)}` Subagent Review Shards row must include `Shard File`")
             continue
@@ -1233,7 +1395,9 @@ def validate_subagent_review_shards(
         if not NO_BLOCKING_RE.search(row.get("Blocking Issue", "")):
             errors.append(f"`{display_path(final_path)}` shard `{shard_file}` must record no blocking issue")
         shard_path = stage_dir / shard_file
-        validate_subagent_review_shard(stage, shard_path, artifact_fingerprint, errors)
+        validate_subagent_review_shard(stage, shard_path, artifact_fingerprint, errors, scope)
+    if stage.phase == "implementation-plan" and not has_flow_completeness_shard:
+        errors.append(f"`{display_path(final_path)}` implementation-plan review must include a `flow-completeness` subagent shard")
 
 
 def validate_subagent_review_shard(
@@ -1241,6 +1405,7 @@ def validate_subagent_review_shard(
     path: Path,
     artifact_fingerprint: str | None,
     errors: list[str],
+    expected_scope: str = "",
 ) -> None:
     text = read_required_text(path, errors)
     if text is None:
@@ -1249,8 +1414,11 @@ def validate_subagent_review_shard(
         errors.append(f"`{display_path(path)}` must include `# Subagent Review Shard`")
     if label_value(text, "Stage") != stage.phase:
         errors.append(f"`{display_path(path)}` must record `Stage: {stage.phase}`")
-    if not label_value(text, "Shard Scope"):
+    shard_scope = label_value(text, "Shard Scope")
+    if not shard_scope:
         errors.append(f"`{display_path(path)}` must record `Shard Scope`")
+    elif expected_scope and shard_scope.strip().lower() != expected_scope:
+        errors.append(f"`{display_path(path)}` Shard Scope must match final review scope `{expected_scope}`")
     if not section_text(text, "## Inputs Read").strip():
         errors.append(f"`{display_path(path)}` must include non-empty `## Inputs Read`")
     if not PASS_RE.search(section_text(text, "## Verdict")):
@@ -1621,11 +1789,23 @@ bugfix 또는 mixed 요청에서 회귀하면 안 되는 동작을 설명한다.
 
 implementation plan은 implementation approval 전에 architecture, flow, edge-case, validation evidence를 요구해 파일 목록만 있는 plan을 막아야 한다.
 
+## Implementation Flow Model
+
+| Flow ID | Definition Source | Trigger Or Entry | Target Outcome | Primary Work Items | Flow Status |
+| --- | --- | --- | --- | --- | --- |
+| FLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow implementation-plan artifact가 validation된다. | 얕은 implementation-plan artifact가 approval 전에 실패한다. | WORK-001 | complete |
+
+## Flow Completeness Matrix
+
+| Flow ID | Ordered Implementation Path | State/Data Transitions | Failure Or Empty States | Observable Completion | Validation Evidence |
+| --- | --- | --- | --- | --- | --- |
+| FLOW-001 | validator가 artifact section과 table을 읽음 -> implementation-plan flow table을 검증함 -> review checklist와 flow shard를 확인함 -> validation result를 출력함. | Stageflow request artifact 자체는 변경하지 않고 validation errors 또는 PASS 결과만 반환한다. | flow table 누락, complete flow matrix 누락, placeholder-only cell, flow shard 누락은 validation failure로 노출된다. | 사용자는 validator 출력에서 approval 전 차단 사유 또는 PASS를 확인한다. | FLOW-001은 targeted negative tests와 `python -m unittest discover -s tests`로 검증한다. |
+
 ## Work Items
 
 | ID | Implementation Unit | Technical Design | Completion Evidence |
 | --- | --- | --- | --- |
-| WORK-001 | Stage validator contract 정리. | implementation-plan stage metadata에 필요한 technical section과 table column을 추가한다. | validator는 technical section이 없거나 legacy work-item column을 쓰는 artifact를 거부한다. |
+| WORK-001 | Stage validator contract 정리. | FLOW-001을 위해 implementation-plan stage metadata에 필요한 technical section과 table column을 추가한다. | validator는 FLOW-001의 technical section이 없거나 legacy work-item column을 쓰는 artifact를 거부한다. |
 
 ## Coverage Matrix
 

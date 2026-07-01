@@ -32,7 +32,7 @@ def temp_project():
 
 STAGE_RULE_IDS = {
     "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 18)],
-    "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)],
+    "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)] + [f"IP-FLOW-{index:03d}" for index in range(1, 8)],
     "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
 }
 
@@ -172,11 +172,23 @@ Validator metadata, stage rule markdown, review prompts, and test fixtures.
 
 Root cause and design notes are grounded in SP-001. The technical contract must reject shallow implementation plans before approval.
 
+## Implementation Flow Model
+
+| Flow ID | Definition Source | Trigger Or Entry | Target Outcome | Primary Work Items | Flow Status |
+| --- | --- | --- | --- | --- | --- |
+| FLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete |
+
+## Flow Completeness Matrix
+
+| Flow ID | Ordered Implementation Path | State/Data Transitions | Failure Or Empty States | Observable Completion | Validation Evidence |
+| --- | --- | --- | --- | --- | --- |
+| FLOW-001 | Validator loads stage metadata -> validates implementation-plan sections and flow tables -> checks review checklist and flow shard -> returns PASS or detailed failure output. | Request artifacts are not mutated; validator returns PASS for valid artifacts or validation errors for invalid artifacts. | Missing flow sections, missing complete-flow matrix rows, placeholder-only cells, and missing flow-completeness shard produce validation failures. | Users can observe validator PASS or a specific blocking error before implementation approval. | FLOW-001 is covered by subprocess validator tests and full unittest discovery. |
+
 ## Work Items
 
 | ID | Implementation Unit | Technical Design | Completion Evidence |
 | --- | --- | --- | --- |
-| WORK-001 | Implementation-plan validator contract. | Add required technical sections and work-item columns to the stage metadata, then reject generic implementation text. | Validator failure tests and full unittest output. |
+| WORK-001 | Implementation-plan validator contract. | FLOW-001 adds required technical sections and work-item columns to the stage metadata, then rejects generic implementation text. | FLOW-001 validator failure tests and full unittest output. |
 
 ## Coverage Matrix
 
@@ -469,20 +481,27 @@ Goal status: active
             self.review_shard_text(phase, fingerprint),
             encoding="utf-8",
         )
+        shard_rows = ["| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |"]
+        if phase == "implementation-plan":
+            (subagent_dir / "001-flow-completeness-review.md").write_text(
+                self.review_shard_text(phase, fingerprint, scope="flow-completeness"),
+                encoding="utf-8",
+            )
+            shard_rows.append("| review/subagents/001-flow-completeness-review.md | flow-completeness | PASS | None |")
         (review_dir / "final.md").write_text(
-            self.review_text(phase, fingerprint, rule_ids),
+            self.review_text(phase, fingerprint, rule_ids, "\n".join(shard_rows)),
             encoding="utf-8",
         )
 
     @staticmethod
-    def review_shard_text(phase: str, fingerprint: str) -> str:
+    def review_shard_text(phase: str, fingerprint: str, scope: str = "full bounded review for a small stage") -> str:
         return f"""# Subagent Review Shard
 
 Stage: {phase}
 
 Reviewed Artifact Fingerprint: sha256:{fingerprint}
 
-Shard Scope: full bounded review for a small stage
+Shard Scope: {scope}
 
 ## Inputs Read
 
@@ -499,8 +518,9 @@ No blocking issues.
 """
 
     @staticmethod
-    def review_text(phase: str, fingerprint: str, rule_ids: list[str]) -> str:
+    def review_text(phase: str, fingerprint: str, rule_ids: list[str], shard_rows: str | None = None) -> str:
         checklist_rows = "\n".join(f"| {rule_id} | Evidence for {rule_id}. | PASS | None |" for rule_id in rule_ids)
+        shard_rows = shard_rows or "| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |"
         return f"""# Review
 
 Stage: {phase}
@@ -525,7 +545,7 @@ main agent synthesis
 
 | Shard File | Scope | Verdict | Blocking Issue |
 | --- | --- | --- | --- |
-| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |
+{shard_rows}
 
 ## Writing And Review Rule Checklist
 
