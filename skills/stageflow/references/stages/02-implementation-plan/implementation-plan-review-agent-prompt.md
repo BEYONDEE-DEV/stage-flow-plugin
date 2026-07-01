@@ -32,10 +32,11 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Mark `FAIL` when non-fixed prose, questions, option descriptions, recommendation reasons, review evidence, or completion summaries are written in the wrong language for the artifact. Fixed headings, table columns, schema keys, code identifiers, paths, commands, `PASS`/`FAIL`, and validator-required status/control values may remain unchanged.
 - Mark `FAIL` when starter-template filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete...`, or `Record...` remains as artifact prose instead of request-specific prose in the selected language.
 - Check that every approved service policy rule is mapped through `## Coverage Matrix` to a work item, change area, validation evidence, and risk or constraint.
-- For a `flow-completeness` shard, extract the approved user/system/policy/integration flows from the definition's `## User Flow`, `## Policy Rules`, `## Integration Flow And Data Responsibilities`, and `## Boundaries`, then compare them with `## Implementation Flow Model`.
+- For a `flow-completeness` shard, use the definition's `## Approved Flow Inventory` as the primary approved-flow source. Compare every `DFLOW-*` row with `## Implementation Flow Model`, and use `## User Flow`, `## Policy Rules`, `## Integration Flow And Data Responsibilities`, and `## Boundaries` only to confirm whether the inventory omitted a major flow.
 - For every `complete` flow, check `## Flow Completeness Matrix` using the Flow Completeness Contract: trigger or entry, ordered implementation path, state/data transitions, failure or empty states, observable completion, and validation evidence must form one unbroken flow.
 - Mark `FAIL` when a work item is detailed but the related approved flow has a missing handoff, missing state/data transition, hidden failure behavior, missing observable completion, or generic validation evidence.
-- Mark `FAIL` when a non-complete flow is marked `return-to-definition` or `out-of-scope-by-definition` without definition-source support, or when an unresolved decision is hidden as a complete flow.
+- Mark `FAIL` when any `return-to-definition` flow appears in an approval-ready plan, when a non-complete flow is marked `out-of-scope-by-definition` without definition-source support, or when an unresolved decision is hidden as a complete flow.
+- For the `flow-completeness` shard, produce both `## Flow Rule Checklist` and `## Flow Coverage Audit`; a simple PASS statement without `IP-FLOW-001` through `IP-FLOW-007` evidence is not a valid shard.
 - Read `references/intent-fidelity.md` when the plan interprets UX, route, screen, state, data, API, or persistence behavior.
 - Check `## Definition Fidelity Matrix` for every work item. Confirm it names the definition source, approved meaning, technical interpretation, disallowed interpretations, and return-to-definition behavior for ambiguity.
 - Check whether the plan narrows the approved definition to a smaller API/UI/data surface, read-only behavior, assignment-only behavior, manual operation, future work, or an out-of-scope exclusion. If it does, confirm the `Definition Fidelity Matrix` cites the definition source that approved the narrowing. Missing source evidence means the plan created a new service decision and must return to definition.
@@ -72,6 +73,24 @@ Shard Scope: flow-completeness
 ## Findings
 
 - Evidence-backed finding for this bounded shard.
+
+## Flow Rule Checklist
+
+| Rule ID | Evidence | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| IP-FLOW-001 | `DFLOW-*` rows are mapped to `FLOW-*` rows. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-002 | Complete flows have ordered paths. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-003 | State/data transitions are inside each complete flow. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-004 | Failure and empty states are flow-specific. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-005 | Observable completion is reviewable. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-006 | Validation evidence proves flow outcomes. | PASS or FAIL | None or blocking issue. |
+| IP-FLOW-007 | Non-complete gaps are returned to definition or source-supported. | PASS or FAIL | None or blocking issue. |
+
+## Flow Coverage Audit
+
+| Flow ID | Definition Sources Checked | IP-FLOW-001..007 Verdict | Gap | Decision |
+| --- | --- | --- | --- | --- |
+| DFLOW-001 -> FLOW-001 | REQ-001, SP-001 | PASS | No gap. | PASS |
 
 ## Verdict
 

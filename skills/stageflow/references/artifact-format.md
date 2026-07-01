@@ -78,6 +78,7 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
       final.md
       subagents/
         001-full-bounded-review.md
+        002-flow-completeness-review.md
     approval.md
   03-implementation/
     goal.md
@@ -209,6 +210,8 @@ Required structure:
 
 Use more shard files when review work can be split by rule cluster, domain/behavior area, changed area, or implementation work item. Use one bounded shard only for small/simple stages where parallelism would add no coverage.
 
+`02-implementation-plan` must always include an additional `flow-completeness` shard, commonly `review/subagents/002-flow-completeness-review.md`, before approval. That shard must evaluate `IP-FLOW-001` through `IP-FLOW-007` and include `## Flow Rule Checklist` plus `## Flow Coverage Audit`.
+
 A subagent shard file uses this shape:
 
 ```md
@@ -289,6 +292,7 @@ A passing review requires:
 - A reviewed artifact fingerprint matching the current stage artifact in `review/final.md` and every listed shard file.
 - `## Subagent Review Shards` in `review/final.md`, with each listed shard file under `review/subagents/` and each shard verdict `PASS`.
 - Each listed shard file exists, records `Stage`, `Reviewed Artifact Fingerprint`, `Shard Scope`, non-empty `## Inputs Read`, `PASS` verdict, and no blocking issues.
+- For implementation-plan review, `## Subagent Review Shards` includes a `Scope` of `flow-completeness`; that shard records `## Flow Rule Checklist` with every `IP-FLOW-*` rule and `## Flow Coverage Audit`.
 - `## Writing And Review Rule Checklist` in `review/final.md` containing every Rule ID from the matching stage rule file.
 - `PASS` for each required Rule ID in the checklist.
 - No blocking issue for each required Rule ID in the checklist.

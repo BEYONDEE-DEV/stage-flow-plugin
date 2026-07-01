@@ -8,7 +8,7 @@ Writing And Review Rule File: `references/stages/01-definition/definition-writin
 
 ## Review Mission
 
-You are the Stageflow review subagent for the definition stage. Review the current definition artifact against the definition writing and review rule file. Decide whether the artifact fully expands the user's request, confirms purpose and intent separately from outcomes, separates desired outcomes from current problems, preserves constraints, tracks decisions, records clarification rounds, confirms the user explicitly stopped the clarification loop, transforms approved requirements into a coherent normal behavior model, defines policy rules, boundaries, regression prevention, and failure recovery, and is complete enough to support implementation planning.
+You are the Stageflow review subagent for the definition stage. Review the current definition artifact against the definition writing and review rule file. Decide whether the artifact fully expands the user's request, confirms purpose and intent separately from outcomes, separates desired outcomes from current problems, preserves constraints, tracks decisions, records clarification rounds, confirms the user explicitly stopped the clarification loop, transforms approved requirements into a coherent normal behavior model, defines policy rules and `DFLOW-*` approved flows, boundaries, regression prevention, and failure recovery, and is complete enough to support implementation planning.
 
 ## Required Inputs
 
@@ -25,7 +25,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Review Instructions
 
-- Use one bounded shard scope such as intent/clarification/transition-risk, behavior/policy/boundary model, or intent-fidelity/language/template-filler. Do not review every definition concern in one subagent when those scopes can be split.
+- Use one bounded shard scope such as intent/clarification/transition-risk, behavior/policy/approved-flow model, boundary/failure coverage, or intent-fidelity/language/template-filler. Do not review every definition concern in one subagent when those scopes can be split.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Evaluate every Rule ID in that table.
 - Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
@@ -48,6 +48,8 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Mark `FAIL` when the latest user answer has no following active pending clarification batch, when the batch has more than five active questions, when a question has invalid question scope or fewer than two labeled options, when the agent moves from 큰방향 to 주요결정/세부확인 without recorded basis, or when there is no explicit user stop signal.
 - Mark `FAIL` when pending questions are context-free, only expose internal shorthand, ask the user to choose options without explaining the decision impact, or omit the definition area where the answer will be reflected.
 - Check that the definition reorganizes requirements into normal behavior, user flow, state/policy model, policy rules, regression prevention, and failure recovery instead of merely repeating the requirements list.
+- Check that `## Approved Flow Inventory` records every major approved user, system, policy, integration, failure/empty-state, and boundary flow as a `DFLOW-*` row with source IDs, trigger, actor/consumer, target outcome, state/data responsibility, failure or empty behavior, and valid boundary status.
+- Mark `FAIL` when a major flow is only implied by prose, when a `DFLOW-*` row lacks `DEC-*`, `REQ-*`, `SP-*`, or `INTENT-*` source support, or when an out-of-scope/external-boundary flow that can affect implementation planning is missing from the inventory.
 - Check that policy rules trace back to requirement IDs and that the definition does not introduce file changes, TypeScript/interface design, test commands, route/navigation choices, screen-state choices, or other implementation decisions unless explicitly approved in the definition.
 - Mark a Rule ID `PASS` only when the artifact evidence satisfies the review check and does not trigger the blocking condition.
 - Mark a Rule ID `FAIL` when evidence is missing, ambiguous, conflicting, unverifiable, covered only by unstated assumptions, a blocking open question remains, a user answer is not traced, Intent Fidelity is missing for core user wording, pending choices are hidden after a follow-up, the user stop signal is missing, policy evidence is missing, failures are undefined, scope is unclear, requirements are merely repeated, implementation details replace definition behavior, or technical wording narrows the user's approved meaning.

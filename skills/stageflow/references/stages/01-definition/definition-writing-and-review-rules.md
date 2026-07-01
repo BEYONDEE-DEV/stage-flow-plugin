@@ -8,6 +8,7 @@
 - [Clarification Loop](#clarification-loop)
 - [User-Facing Question Presentation](#user-facing-question-presentation)
 - [Scope Narrowing Evidence](#scope-narrowing-evidence)
+- [Approved Flow Inventory](#approved-flow-inventory)
 - [Stage Artifact Format](#stage-artifact-format)
 - [Optional Question Backlog](#optional-question-backlog)
 - [Definition Transition Risk Gate](#definition-transition-risk-gate)
@@ -22,6 +23,8 @@ Target: `01-definition/definition.md`
 ## Stage Responsibility
 
 The definition stage combines requirements and service behavior into one approved artifact. It captures the user's goal, purpose and intent, current problems, outcomes, constraints, decisions, requirements, acceptance criteria, normal behavior model, policy rules, boundaries, regression prevention, and failure recovery before implementation planning begins.
+
+The definition also owns the approved flow inventory. It must turn the user's development intent into `DFLOW-*` rows so implementation planning does not have to rediscover or guess major user, system, policy, integration, empty-state, failure, and boundary flows from prose.
 
 The definition may include technical constraints when supplied by the user or discovered through project inspection, but it must not assign code edits, TypeScript interfaces, file changes, or implementation work.
 
@@ -102,6 +105,12 @@ Scope narrowing is any definition move that takes a broader user goal or service
 When definition narrows scope, `## Boundaries` must cite an ID-bearing source from `## Requirements`, `## Policy Rules`, `## Resolved Decisions`, or `## Intent Fidelity`, or the narrowing must be recorded directly in one of those source tables. Acceptable evidence includes a user answer, a discovered system constraint reflected through a definition source, an approved requirement, or an approved policy rule. If the source is not settled, keep an active `## Pending Clarifications` row or generate a transition-risk case before approval.
 
 Do not use a broad technical or operational assumption as the only reason to exclude behavior. For example, a statement that initial data is manually registered does not by itself prove that all future lifecycle management is out of scope; the definition must show whether that exclusion was user-approved, constrained by the current system, or still pending.
+
+## Approved Flow Inventory
+
+Record each major approved flow once as `DFLOW-*`. A flow candidate exists when a distinct trigger or entry has its own actor/consumer, target outcome, state/data responsibility, failure/empty behavior, integration responsibility, or boundary status. Include out-of-scope and external-boundary flows when they are important enough that implementation planning might otherwise accidentally implement, ignore, or reinterpret them.
+
+Use `Boundary Status` values exactly: `in-scope`, `out-of-scope-by-definition`, or `external-boundary-by-definition`. Do not use implementation-plan terms such as files, modules, work items, commands, or architecture in this table.
 
 ## Language Policy
 
@@ -209,6 +218,12 @@ Secondary: none
 
 상태, 전이, 권한, 검증 규칙, 제품 정책을 설명한다.
 
+## Approved Flow Inventory
+
+| Definition Flow ID | Source IDs | Trigger Or Entry | Actor Or Consumer | Target Outcome | State/Data Responsibility | Failure Or Empty Behavior | Boundary Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DFLOW-001 | REQ-001, SP-001, INTENT-001 | 승인된 flow를 시작하는 사용자 또는 시스템 진입점. | 사용자, 관리자, 시스템 consumer 중 해당 주체. | 사용자가 보거나 시스템 consumer가 확인하는 완료 결과. | 생성, 수정, 조회, 캐시 갱신, no-op, 외부 책임 등 service-level 책임. | 검증 실패, 빈 상태, 권한 실패, 외부 consumer 책임 등 flow별 실패/빈 상태. | in-scope |
+
 ## Policy Rules
 
 | Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
@@ -270,6 +285,7 @@ When a material risk case is presented to the user, write it in the same user-an
 - `## Normal Behavior Model`
 - `## User Flow`
 - `## State And Policy Model`
+- `## Approved Flow Inventory`
 - `## Policy Rules`
 - `## Integration Flow And Data Responsibilities`
 - `## Boundaries`
@@ -292,6 +308,7 @@ When a material risk case is presented to the user, write it in the same user-an
 | DEF-RULE-009 | Trace resolved user answers into definition content and preserve intent fidelity. | `## Resolved Decisions` records answered question or clarification IDs, answer source, decision, and reflected artifact area; `## Intent Fidelity` records core user wording, normalized requirement meaning, allowed interpretations, disallowed interpretations, and linked requirement/policy IDs. | Confirm user answers are not lost, can be traced to requirements, policies, constraints, boundaries, or acceptance criteria, and are not narrowed into unapproved UX or technical interpretations. | A user answer exists but is not represented in decision history or a relevant updated row source, or core user wording is missing from Intent Fidelity. |
 | DEF-RULE-010 | Keep acceptance criteria traceable to requirement IDs. | `## Acceptance Criteria` references requirement IDs and linked outcomes or problems. | Confirm acceptance criteria cover the requirement rows. | Acceptance criteria are generic or disconnected from requirement IDs. |
 | DEF-RULE-011 | Transform requirements into a normal behavior model instead of repeating the requirements list. | `## Normal Behavior Model`, `## User Flow`, and `## State And Policy Model` explain corrected or desired behavior in service terms. | Confirm the artifact has a coherent model that a service/product reviewer can understand. | Behavior sections mostly repeat requirements rows without a normal behavior model. |
+| DEF-RULE-018 | Record approved flows before implementation planning. | `## Approved Flow Inventory` records `DFLOW-*`, source IDs, trigger or entry, actor or consumer, target outcome, state/data responsibility, failure or empty behavior, and boundary status for every major approved user, system, policy, integration, and boundary flow. | Confirm implementation planning can map `DFLOW-*` rows directly instead of inferring flows from scattered prose, and that every row cites `DEC-*`, `REQ-*`, `SP-*`, or `INTENT-*` sources. | A major approved flow is missing, a flow lacks source support, a boundary/failure/empty-state flow is hidden in prose only, or boundary status is not one of `in-scope`, `out-of-scope-by-definition`, or `external-boundary-by-definition`. |
 | DEF-RULE-012 | Convert meaningful behavior into explicit policy rules. | `## Policy Rules` table has `Rule ID`, `Trigger Or Condition`, `Policy`, `User/System Response`, `State/Data Responsibility`, `Failure/Recovery Behavior`, and `Source Requirement IDs` columns. | Confirm every material behavior has a policy, response, state/data responsibility, recovery behavior, and requirement trace. | A behavior is described without a concrete policy rule. |
 | DEF-RULE-013 | Define integration responsibilities, boundaries, regression prevention, and failure recovery at service level. | `## Integration Flow And Data Responsibilities`, `## Boundaries`, `## Regression Prevention`, and `## Failure And Recovery Behavior` describe service-level behavior without code edit instructions. | Confirm the definition prevents scope expansion and covers non-happy-path behavior. | Boundaries, regression prevention, or failure recovery are missing for material behavior, or implementation details replace service behavior. |
 | DEF-RULE-016 | Run and confirm transition risk before definition approval after a user stop signal. | `01-definition/transition-risk-goal.md` records the transition-risk goal receipt and `01-definition/transition-risk.md` records generated risk cases, definition coverage, user confirmations, dispositions, and reflected definition updates or exclusions. | Confirm every risk case is a real goal-achievement decision readiness issue with `Definition Coverage` of uncovered, conflicting, or ambiguous, not an already-decided checkpoint; confirm every material case explains the risk and has at least two labeled resolution options in `Suggested Handling`; confirm every case is user-confirmed, dispositions are allowed, `accepted-risk` has explicit residual-risk acceptance, `ask-follow-up` reopens pending clarification, and `apply-to-definition` evidence appears in the relevant definition sections before approval. | A stop signal goes directly to review/approval, transition-risk files are missing or stale, a risk case restates already-decided or already answered/reflected definition content, lacks a valid `Prior Answer Check`, a material risk lacks two labeled resolution options, a risk case lacks user confirmation or disposition, `accepted-risk` is used for already-confirmed content, a follow-up risk has no active pending clarification, or an applied risk is not reflected in the definition. |
@@ -300,4 +317,4 @@ When a material risk case is presented to the user, write it in the same user-an
 
 ## Verification Meaning
 
-A definition is ready for implementation planning only when the reviewer can identify what the user wants, why the request matters, what user/product value it serves, what problem it resolves when applicable, where each requirement came from, what behavior and policies are approved, what is out of scope, whether any narrowing or exclusion has traceable source evidence, whether user answers were carried forward, whether core user wording is preserved in `## Intent Fidelity`, whether the user explicitly gave a stop signal such as `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`, and whether transition-risk cases were generated, user-confirmed, and either reflected or explicitly disposed before approval. Without that user stop signal, the artifact must keep an active pending clarification batch with 1-5 questions, valid question scope, and at least two labeled options per question.
+A definition is ready for implementation planning only when the reviewer can identify what the user wants, why the request matters, what user/product value it serves, what problem it resolves when applicable, where each requirement came from, what behavior and policies are approved, which `DFLOW-*` rows represent the approved flows, what is out of scope, whether any narrowing or exclusion has traceable source evidence, whether user answers were carried forward, whether core user wording is preserved in `## Intent Fidelity`, whether the user explicitly gave a stop signal such as `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `진행`, `승인`, `proceed`, or `go ahead`, and whether transition-risk cases were generated, user-confirmed, and either reflected or explicitly disposed before approval. Without that user stop signal, the artifact must keep an active pending clarification batch with 1-5 questions, valid question scope, and at least two labeled options per question.

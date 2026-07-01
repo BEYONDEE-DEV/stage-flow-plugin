@@ -6,7 +6,7 @@ Target: `03-implementation/implementation.md`
 
 ## Stage Responsibility
 
-The implementation stage records what actually changed, how it was validated, and how the result compares with the approved implementation plan, including its `Definition Fidelity Matrix`. It is evidence, not another planning stage. Before final user approval, the implementation review subagent must audit every approved implementation-plan work item for completion and keep the implementation stage in a fix/review cycle until the latest review verdict is PASS.
+The implementation stage records what actually changed, how it was validated, and how the result compares with the approved implementation plan, including its `Definition Fidelity Matrix` and complete implementation flows. It is evidence, not another planning stage. Before final user approval, the implementation review subagent must audit every approved implementation-plan work item and every approved complete `FLOW-*` for completion, then keep the implementation stage in a fix/review cycle until the latest review verdict is PASS.
 
 ## Selective Rework After Feedback
 
@@ -42,6 +42,12 @@ For a Korean workflow, new implementation prose should default to Korean. Englis
 
 구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업, work item별 완료 증거를 포함해 기록한다.
 
+## Flow Completion Evidence
+
+| Flow ID | Definition Flow ID | Planned Outcome | Actual Result | Validation Evidence | Observable Completion | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| FLOW-001 | DFLOW-001 | 승인된 implementation-plan의 target outcome. | 실제 구현 결과와 변경 증거. | 실행한 테스트, 명령, 수동 확인 또는 리뷰 증거. | 사용자, 관리자, consumer, 테스트가 확인한 완료 결과. | completed |
+
 ## Validation
 
 명령, 확인 항목, 결과를 기록한다.
@@ -59,6 +65,7 @@ implementation review 결과를 기록한다.
 
 - `## Work Completed`
 - `## Plan Compliance And Deviations`
+- `## Flow Completion Evidence`
 - `## Validation`
 - `## Review Result`
 - `## Completion Summary`
@@ -74,3 +81,4 @@ implementation review 결과를 기록한다.
 | IMPL-RULE-005 | Record the subagent implementation review result. | `## Review Result` states review outcome and blocking issue status. | Confirm review result matches the stage review gate. | Review result is missing or contradicts `review/final.md`. |
 | IMPL-RULE-006 | Summarize final outcome for user approval. | `## Completion Summary` explains the completed outcome and residual risk. | Confirm the user can approve or reject completion from the summary. | Completion summary is missing or too vague for final approval. |
 | IMPL-RULE-007 | Audit completion of every approved implementation-plan work item before user approval. | `## Work Completed`, `## Plan Compliance And Deviations`, `## Validation`, and `## Completion Summary` map each approved `Work Item ID` from `02-implementation-plan/implementation-plan.md` to actual changes, validation evidence, and final outcome. `## Review Result` records that the implementation review subagent checked the work-item completion audit and found no blocking issues. | Confirm the review subagent compared the approved implementation plan, implementation artifact, changed-file or diff evidence, and test output; classify every approved work item as completed before final user approval. | Any approved work item is missing from implementation evidence, partially completed, unverifiable, out of scope, insufficiently validated, hidden as a deviation, or not re-reviewed after a fix. |
+| IMPL-RULE-008 | Audit completion of every approved complete implementation flow before user approval. | `## Flow Completion Evidence` maps each approved complete `FLOW-*` and its `DFLOW-*` source to planned outcome, actual result, validation evidence, observable completion, and status `completed`. | Confirm every complete flow from `02-implementation-plan/implementation-plan.md` is actually completed and observable, not merely implied by completed work items. | A complete flow is missing, unverifiable, lacks validation evidence, lacks observable completion, has the wrong `DFLOW-*`, or is not marked `completed`. |

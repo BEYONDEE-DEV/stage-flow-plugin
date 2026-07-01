@@ -32,9 +32,9 @@ def temp_project():
 
 
 STAGE_RULE_IDS = {
-    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 18)],
+    "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 19)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)] + [f"IP-FLOW-{index:03d}" for index in range(1, 8)],
-    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 8)],
+    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 9)],
 }
 
 DEFINITION_TEXT = """# Definition
@@ -132,6 +132,12 @@ Users see the changed behavior in the approved flow.
 
 State changes follow the approved policy.
 
+## Approved Flow Inventory
+
+| Definition Flow ID | Source IDs | Trigger Or Entry | Actor Or Consumer | Target Outcome | State/Data Responsibility | Failure Or Empty Behavior | Boundary Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |
+
 ## Policy Rules
 
 | Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
@@ -175,9 +181,9 @@ Root cause and design notes are grounded in SP-001. The technical contract must 
 
 ## Implementation Flow Model
 
-| Flow ID | Definition Source | Trigger Or Entry | Target Outcome | Primary Work Items | Flow Status |
-| --- | --- | --- | --- | --- | --- |
-| FLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete |
+| Flow ID | Definition Flow ID | Definition Source | Trigger Or Entry | Target Outcome | Primary Work Items | Flow Status | Status Rationale |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete | DFLOW-001 is in scope and has no unresolved definition gap. |
 
 ## Flow Completeness Matrix
 
@@ -229,6 +235,12 @@ Completed WORK-001 with actual validator, rule, prompt, and fixture changes.
 ## Plan Compliance And Deviations
 
 WORK-001 followed the approved Definition Fidelity Matrix with no deviations, skipped work, or incomplete work.
+
+## Flow Completion Evidence
+
+| Flow ID | Definition Flow ID | Planned Outcome | Actual Result | Validation Evidence | Observable Completion | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| FLOW-001 | DFLOW-001 | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | Validator, rule, prompt, and fixture changes enforce the approved flow. | `python -m unittest discover -s tests` passed and validates FLOW-001. | Users can observe validator PASS or specific blocking errors. | completed |
 
 ## Validation
 
@@ -438,11 +450,11 @@ Goal status: active
         )
         shard_rows = ["| review/subagents/001-full-bounded-review.md | full bounded review for a small stage | PASS | None |"]
         if phase == "implementation-plan":
-            (subagent_dir / "001-flow-completeness-review.md").write_text(
+            (subagent_dir / "002-flow-completeness-review.md").write_text(
                 self.review_shard_text(phase, fingerprint, scope="flow-completeness"),
                 encoding="utf-8",
             )
-            shard_rows.append("| review/subagents/001-flow-completeness-review.md | flow-completeness | PASS | None |")
+            shard_rows.append("| review/subagents/002-flow-completeness-review.md | flow-completeness | PASS | None |")
         (review_dir / "final.md").write_text(
             self.review_text(phase, fingerprint, rule_ids, "\n".join(shard_rows)),
             encoding="utf-8",
@@ -450,6 +462,27 @@ Goal status: active
 
     @staticmethod
     def review_shard_text(phase: str, fingerprint: str, scope: str = "full bounded review for a small stage") -> str:
+        flow_sections = ""
+        if phase == "implementation-plan" and scope == "flow-completeness":
+            flow_sections = """
+## Flow Rule Checklist
+
+| Rule ID | Evidence | Verdict | Blocking Issue |
+| --- | --- | --- | --- |
+| IP-FLOW-001 | DFLOW-001 maps to FLOW-001. | PASS | None |
+| IP-FLOW-002 | FLOW-001 has an ordered path. | PASS | None |
+| IP-FLOW-003 | FLOW-001 records validator result transition. | PASS | None |
+| IP-FLOW-004 | FLOW-001 records validation failure states. | PASS | None |
+| IP-FLOW-005 | FLOW-001 completion is observable in validator output. | PASS | None |
+| IP-FLOW-006 | FLOW-001 validation evidence is tied to tests. | PASS | None |
+| IP-FLOW-007 | FLOW-001 has no unresolved gap. | PASS | None |
+
+## Flow Coverage Audit
+
+| Flow ID | Definition Sources Checked | IP-FLOW-001..007 Verdict | Gap | Decision |
+| --- | --- | --- | --- | --- |
+| DFLOW-001 -> FLOW-001 | REQ-001, SP-001, INTENT-001 | PASS | No flow gap. | PASS |
+"""
         return f"""# Subagent Review Shard
 
 Stage: {phase}
@@ -466,6 +499,7 @@ Shard Scope: {scope}
 ## Verdict
 
 PASS
+{flow_sections}
 
 ## Blocking Issues
 
@@ -823,11 +857,29 @@ Approved.
     def test_implementation_plan_review_fails_when_flow_shard_fails(self) -> None:
         with temp_project() as root:
             self.create_project(root)
-            shard = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "review" / "subagents" / "001-flow-completeness-review.md"
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "review" / "subagents" / "002-flow-completeness-review.md"
             shard.write_text(shard.read_text(encoding="utf-8").replace("## Verdict\n\nPASS", "## Verdict\n\nFAIL"), encoding="utf-8")
             result = self.run_validator(root, "implementation-plan")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Verdict must be PASS", result.stdout)
+
+    def test_implementation_plan_flow_shard_requires_flow_rule_checklist(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "review" / "subagents" / "002-flow-completeness-review.md"
+            shard.write_text(shard.read_text(encoding="utf-8").replace("## Flow Rule Checklist", "## Removed Flow Rule Checklist"), encoding="utf-8")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Flow Rule Checklist", result.stdout)
+
+    def test_implementation_plan_flow_shard_requires_each_flow_rule_id(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "review" / "subagents" / "002-flow-completeness-review.md"
+            shard.write_text("\n".join(line for line in shard.read_text(encoding="utf-8").splitlines() if "IP-FLOW-004" not in line), encoding="utf-8")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("IP-FLOW-004", result.stdout)
 
     def test_implementation_review_requires_completion_audit_rule(self) -> None:
         with temp_project() as root:
@@ -837,6 +889,41 @@ Approved.
             result = self.run_validator(root, "implementation")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("IMPL-RULE-007", result.stdout)
+
+    def test_implementation_review_requires_flow_completion_rule(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "review" / "final.md"
+            review.write_text("\n".join(line for line in review.read_text(encoding="utf-8").splitlines() if "IMPL-RULE-008" not in line), encoding="utf-8")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("IMPL-RULE-008", result.stdout)
+
+    def test_implementation_requires_flow_completion_evidence(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "implementation.md"
+            artifact.write_text(IMPLEMENTATION_TEXT.replace("## Flow Completion Evidence", "## Removed Flow Completion Evidence"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Flow Completion Evidence", result.stdout)
+
+    def test_implementation_complete_flow_requires_evidence_row(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "implementation.md"
+            artifact.write_text(
+                IMPLEMENTATION_TEXT.replace(
+                    "| FLOW-001 | DFLOW-001 | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | Validator, rule, prompt, and fixture changes enforce the approved flow. | `python -m unittest discover -s tests` passed and validates FLOW-001. | Users can observe validator PASS or specific blocking errors. | completed |\n",
+                    "",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("complete flow `FLOW-001` must have Flow Completion Evidence", result.stdout)
 
     def test_review_final_file_is_required(self) -> None:
         with temp_project() as root:
@@ -1659,6 +1746,26 @@ Already-decided content was incorrectly listed as risk.
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
 
+    def test_definition_requires_approved_flow_inventory(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("## Approved Flow Inventory", "## Removed Approved Flow Inventory"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Approved Flow Inventory", result.stdout)
+
+    def test_definition_approved_flow_inventory_rejects_unknown_source(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("DFLOW-001 | REQ-001, SP-001, INTENT-001", "DFLOW-001 | REQ-999"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cites unknown Source ID `REQ-999`", result.stdout)
+
     def test_implementation_plan_requires_definition_fidelity_matrix(self) -> None:
         with temp_project() as root:
             self.create_project(root)
@@ -1721,8 +1828,8 @@ Already-decided content was incorrectly listed as risk.
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
             artifact.write_text(
                 IMPLEMENTATION_PLAN_TEXT.replace(
-                    "| FLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete |",
-                    "| FLOW-001 | REQ-001, SP-001, INTENT-001 |  |  | WORK-001 | complete |",
+                    "| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete | DFLOW-001 is in scope and has no unresolved definition gap. |",
+                    "| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 |  |  | WORK-001 | complete | DFLOW-001 is in scope and has no unresolved definition gap. |",
                 ),
                 encoding="utf-8",
             )
@@ -1731,6 +1838,63 @@ Already-decided content was incorrectly listed as risk.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must include substantive `Trigger Or Entry`", result.stdout)
             self.assertIn("must include substantive `Target Outcome`", result.stdout)
+
+    def test_implementation_plan_rejects_unknown_definition_flow(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(IMPLEMENTATION_PLAN_TEXT.replace("| FLOW-001 | DFLOW-001 |", "| FLOW-001 | DFLOW-999 |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown Definition Flow ID `DFLOW-999`", result.stdout)
+
+    def test_implementation_plan_requires_all_definition_flows(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            definition = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            definition.write_text(
+                DEFINITION_TEXT.replace(
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |",
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |\n| DFLOW-002 | REQ-001, SP-001 | System reports an empty state. | System consumer | Empty state response is observable. | No state change: empty-state response only. | Empty state is returned without failure. | in-scope |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must include approved Definition Flow `DFLOW-002`", result.stdout)
+
+    def test_implementation_plan_rejects_unknown_primary_work_item(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(IMPLEMENTATION_PLAN_TEXT.replace("| WORK-001 | complete |", "| WORK-999 | complete |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown Primary Work Item `WORK-999`", result.stdout)
+
+    def test_implementation_plan_rejects_unknown_coverage_work_item(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(IMPLEMENTATION_PLAN_TEXT.replace("| SP-001 | WORK-001 |", "| SP-001 | WORK-999 |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown Work Item ID `WORK-999`", result.stdout)
+
+    def test_implementation_plan_return_to_definition_blocks_approval(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            artifact.write_text(IMPLEMENTATION_PLAN_TEXT.replace("| WORK-001 | complete |", "| WORK-001 | return-to-definition |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("resolve the definition gap before approval", result.stdout)
 
     def test_implementation_plan_complete_flow_rejects_placeholder_matrix_cell(self) -> None:
         with temp_project() as root:

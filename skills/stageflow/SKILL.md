@@ -27,7 +27,7 @@ Definition contains these required files, plus a conditional transition-risk pai
   approval.md
 ```
 
-Implementation-plan and implementation contain exactly these required files:
+Implementation-plan and implementation contain these required files:
 
 ```text
 .stageflow/requests/<request-id>/<stage-folder>/
@@ -36,6 +36,12 @@ Implementation-plan and implementation contain exactly these required files:
   review/final.md
   review/subagents/001-full-bounded-review.md
   approval.md
+```
+
+For `02-implementation-plan`, a separate `flow-completeness` subagent shard is also required before approval:
+
+```text
+.stageflow/requests/<request-id>/02-implementation-plan/review/subagents/002-flow-completeness-review.md
 ```
 
 Stage artifact names are:
@@ -155,6 +161,7 @@ For every stage:
 
 1. Compute the SHA-256 fingerprint of the current stage artifact.
 2. Split non-trivial review work into bounded shard scopes. Prefer parallel subagents when there are independent rule clusters, domains, changed areas, or implementation work items. A small/simple stage may use one `review/subagents/001-full-bounded-review.md` shard.
+   - `02-implementation-plan` is the exception: it must always include a separate `flow-completeness` shard that evaluates every `IP-FLOW-*` rule.
 3. Run subagent reviews using the matching stage review agent prompt. Each subagent writes only its assigned shard under `review/subagents/<cycle>-<slice>.md`, with explicit inputs, shard scope, verdict, and blocking issues.
 4. The main agent writes `review/final.md`. It must list every shard in `## Subagent Review Shards`, resolve shard conflicts or missing coverage, record `Subagent review.`, the exact `Reviewed Artifact Fingerprint: sha256:<hex>`, and a complete `## Writing And Review Rule Checklist` using every Rule ID from the matching stage rule file.
 5. If any shard or final synthesis finds blocking issues, revise the stage artifact and repeat the shard review cycle. During `implementation`, blocking issues include any approved implementation-plan work item that is incomplete, unverifiable, out of scope, insufficiently validated, or not mapped to implementation evidence.
