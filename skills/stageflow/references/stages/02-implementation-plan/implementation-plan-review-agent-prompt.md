@@ -24,7 +24,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 ## Review Instructions
 
-- Use one bounded shard scope such as `flow-completeness`, definition-fidelity coverage, technical executability/work-item specificity, or validation/risk/failure-mode coverage. Do not review every planning concern in one subagent when those scopes can be split. Non-trivial implementation plans must include a separate `flow-completeness` shard before user approval.
+- Use one bounded shard scope such as `flow-completeness`, definition-fidelity coverage, technical executability/work-item specificity, or validation/risk/failure-mode coverage. Do not review every planning concern in one subagent when those scopes can be split. Every implementation plan must include a separate `flow-completeness` shard before user approval.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
 - Read `## Flow Completeness Contract` from the writing and review rule file.
 - Evaluate every Rule ID in the writing/review rule table and every `IP-FLOW-*` Rule ID in the Flow Completeness Contract when assigned the matching shard. Do not create a separate review standard for flow completeness.
@@ -33,9 +33,10 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 - Mark `FAIL` when starter-template filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete...`, or `Record...` remains as artifact prose instead of request-specific prose in the selected language.
 - Check that every approved service policy rule is mapped through `## Coverage Matrix` to a work item, change area, validation evidence, and risk or constraint.
 - For a `flow-completeness` shard, use the definition's `## Approved Flow Inventory` as the primary approved-flow source. Compare every `DFLOW-*` row with `## Implementation Flow Model`, and use `## User Flow`, `## Policy Rules`, `## Integration Flow And Data Responsibilities`, and `## Boundaries` only to confirm whether the inventory omitted a major flow.
+- In `## Flow Coverage Audit`, include every approved `DFLOW-*` and every plan `FLOW-*` in an explicit `DFLOW-* -> FLOW-*` mapping. Do not include unknown flow IDs.
 - For every `complete` flow, check `## Flow Completeness Matrix` using the Flow Completeness Contract: trigger or entry, ordered implementation path, state/data transitions, failure or empty states, observable completion, and validation evidence must form one unbroken flow.
 - Mark `FAIL` when a work item is detailed but the related approved flow has a missing handoff, missing state/data transition, hidden failure behavior, missing observable completion, or generic validation evidence.
-- Mark `FAIL` when any `return-to-definition` flow appears in an approval-ready plan, when a non-complete flow is marked `out-of-scope-by-definition` without definition-source support, or when an unresolved decision is hidden as a complete flow.
+- Mark `FAIL` when any `return-to-definition` flow appears in an approval-ready plan, when a non-complete flow is marked `out-of-scope-by-definition` without definition-source support, when a definition `external-boundary-by-definition` flow is marked `complete`, when external-boundary rationale lacks the observable repo boundary and consumer responsibility, or when an unresolved decision is hidden as a complete flow.
 - For the `flow-completeness` shard, produce both `## Flow Rule Checklist` and `## Flow Coverage Audit`; a simple PASS statement without `IP-FLOW-001` through `IP-FLOW-007` evidence is not a valid shard.
 - Read `references/intent-fidelity.md` when the plan interprets UX, route, screen, state, data, API, or persistence behavior.
 - Check `## Definition Fidelity Matrix` for every work item. Confirm it names the definition source, approved meaning, technical interpretation, disallowed interpretations, and return-to-definition behavior for ambiguity.

@@ -239,6 +239,7 @@ STAGES: tuple[Stage, ...] = (
         (
             "Work Completed",
             "Plan Compliance And Deviations",
+            "Work Item Completion Evidence",
             "Flow Completion Evidence",
             "Validation",
             "Review Result",
@@ -248,6 +249,17 @@ STAGES: tuple[Stage, ...] = (
         "implementation-writing-and-review-rules.md",
         "Implementation Writing And Review Rules",
         (
+            TableRequirement(
+                "Work Item Completion Evidence",
+                (
+                    "Work Item ID",
+                    "Planned Unit",
+                    "Actual Change",
+                    "Validation Evidence",
+                    "Linked Flow IDs",
+                    "Status",
+                ),
+            ),
             TableRequirement(
                 "Flow Completion Evidence",
                 (
@@ -367,16 +379,27 @@ AWAITING_USER_GOAL_STATUSES = {"complete", "completed"}
 AWAITING_USER_GOAL_REASON = "awaiting user clarification"
 FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
 REFERENCE_ROOT_ENV = "STAGEFLOW_REFERENCE_ROOT"
-FLOW_STATUSES = {"complete", "return-to-definition", "out-of-scope-by-definition"}
+FLOW_STATUSES = {
+    "complete",
+    "return-to-definition",
+    "out-of-scope-by-definition",
+    "external-boundary-by-definition",
+}
 DEFINITION_FLOW_BOUNDARY_STATUSES = {
     "in-scope",
     "out-of-scope-by-definition",
     "external-boundary-by-definition",
 }
 FLOW_COMPLETION_STATUSES = {"completed", "complete"}
+WORK_COMPLETION_STATUSES = {"completed"}
 WORK_ID_RE = re.compile(r"\bWORK-\d+\b", re.IGNORECASE)
 FLOW_ID_RE = re.compile(r"\bFLOW-\d+\b", re.IGNORECASE)
 DFLOW_ID_RE = re.compile(r"\bDFLOW-\d+\b", re.IGNORECASE)
+EXTERNAL_BOUNDARY_RATIONALE_RE = re.compile(
+    r"\b(consumer|external|boundary|repo|repository|interface|contract|responsibility)\b|"
+    r"외부|consumer|컨슈머|소비자|경계|repo|repository|저장소|책임|계약",
+    re.IGNORECASE,
+)
 PLACEHOLDER_CELL_VALUES = {
     "",
     "n/a",
@@ -564,7 +587,7 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     if pending_messages:
         awaiting.extend(pending_messages)
         return
-    validate_review(stage, review_path, artifact_fingerprint, rule_ids, errors)
+    validate_review(context, stage, review_path, artifact_fingerprint, rule_ids, errors)
     validate_approval(stage, approval_path, errors)
 
 
@@ -795,6 +818,15 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
         if any(is_stop_signal_option_item(option) for option in split_option_items(options)):
             errors.append(
                 f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal as a question option"
+            )
+        if USER_STOP_SIGNAL_RE.search(transition):
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` must not include the user stop signal in `Transition Option`; "
+                "record stop signals only in Clarification History.User Transition Signal"
+            )
+        if transition.strip().lower() != "n/a":
+            errors.append(
+                f"`{display_path(path)}` Pending Clarifications row `{pending_id}` Transition Option must be `N/A` while the question is pending"
             )
         validate_definition_question_stage_boundary(
             path,
@@ -1048,6 +1080,7 @@ def validate_definition_approved_flow_inventory(path: Path, text: str, errors: l
     if not table.rows:
         errors.append(f"`{display_path(path)}` Approved Flow Inventory must include at least one `DFLOW-*` row")
     valid_source_ids = traceable_scope_source_ids(text)
+    covered_source_ids: set[str] = set()
     seen: set[str] = set()
     for row in table.rows:
         definition_flow_id = row.get("Definition Flow ID", "").strip().upper()
@@ -1071,6 +1104,7 @@ def validate_definition_approved_flow_inventory(path: Path, text: str, errors: l
             if is_placeholder_cell(row.get(column, "")):
                 errors.append(f"`{display_path(path)}` Approved Flow Inventory row `{display_id}` must include substantive `{column}`")
         source_ids = referenced_scope_source_ids(row.get("Source IDs", ""))
+        covered_source_ids.update(source_ids)
         if not source_ids:
             errors.append(f"`{display_path(path)}` Approved Flow Inventory row `{display_id}` must cite traceable Source IDs")
         unknown_source_ids = sorted(source_ids - valid_source_ids)
@@ -1082,6 +1116,12 @@ def validate_definition_approved_flow_inventory(path: Path, text: str, errors: l
                 f"`{display_path(path)}` Approved Flow Inventory row `{display_id}` Boundary Status must be one of "
                 f"{', '.join(sorted(DEFINITION_FLOW_BOUNDARY_STATUSES))}"
             )
+
+    for required_source_id in sorted(required_flow_source_ids(text) - covered_source_ids):
+        errors.append(
+            f"`{display_path(path)}` Approved Flow Inventory must include Source ID `{required_source_id}` "
+            "in at least one `DFLOW-*` row"
+        )
 
 
 def normalized_cell(value: str) -> str:
@@ -1244,6 +1284,26 @@ def traceable_scope_source_ids(text: str, *, narrowing_only: bool = False) -> se
     return ids
 
 
+def source_ids_from_table(text: str, section: str, column: str, prefix: str) -> set[str]:
+    ids: set[str] = set()
+    pattern = re.compile(rf"{re.escape(prefix)}-\d+", re.IGNORECASE)
+    table = parse_first_markdown_table(section_text(text, section))
+    for row in table.rows:
+        value = row.get(column, "").strip()
+        if pattern.fullmatch(value):
+            ids.add(value.upper())
+    return ids
+
+
+def required_flow_source_ids(text: str) -> set[str]:
+    return source_ids_from_table(text, "## Requirements", "ID", "REQ") | source_ids_from_table(
+        text,
+        "## Policy Rules",
+        "Rule ID",
+        "SP",
+    )
+
+
 def referenced_scope_source_ids(text: str) -> set[str]:
     return {match.group(0).upper() for match in TRACEABLE_SCOPE_SOURCE_RE.finditer(text)}
 
@@ -1374,18 +1434,28 @@ def validate_implementation_plan_definition_flow_mapping(
                 f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` must use `out-of-scope-by-definition` "
                 f"because `{definition_flow_id}` is out of scope by definition"
             )
-        if boundary_status == "in-scope" and flow_status == "out-of-scope-by-definition":
+        if boundary_status == "external-boundary-by-definition" and flow_status != "external-boundary-by-definition":
+            errors.append(
+                f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` must use `external-boundary-by-definition` "
+                f"because `{definition_flow_id}` is an external boundary by definition"
+            )
+        if boundary_status == "in-scope" and flow_status in {"out-of-scope-by-definition", "external-boundary-by-definition"}:
             errors.append(
                 f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` cannot mark in-scope Definition Flow "
-                f"`{definition_flow_id}` as out of scope"
+                f"`{definition_flow_id}` as `{flow_status}`"
             )
-        if flow_status == "out-of-scope-by-definition":
+        if flow_status in {"out-of-scope-by-definition", "external-boundary-by-definition"}:
             rationale_ids = referenced_scope_source_ids(" ".join((row.get("Definition Source", ""), row.get("Status Rationale", ""))))
             if definition_source_ids and not rationale_ids.intersection(definition_source_ids):
                 errors.append(
-                    f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` out-of-scope rationale must cite "
+                    f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` non-complete rationale must cite "
                     f"Definition Flow `{definition_flow_id}` source support"
                 )
+        if flow_status == "external-boundary-by-definition" and not EXTERNAL_BOUNDARY_RATIONALE_RE.search(row.get("Status Rationale", "")):
+            errors.append(
+                f"`{display_path(path)}` Implementation Flow Model row `{flow_id}` external-boundary rationale must record "
+                "the observable repo boundary and consumer responsibility"
+            )
 
     for definition_flow_id in sorted(set(approved_flows) - referenced_definition_flow_ids):
         errors.append(f"`{display_path(path)}` Implementation Flow Model must include approved Definition Flow `{definition_flow_id}`")
@@ -1401,12 +1471,53 @@ def validate_implementation_against_plan(
     plan_text = read_required_text(plan_path, errors)
     if plan_text is None:
         return
+    plan_work_items = parse_first_markdown_table(section_text(plan_text, "## Work Items"))
+    approved_work_items: dict[str, dict[str, str]] = {}
+    for row in plan_work_items.rows:
+        work_id = row.get("ID", "").strip().upper()
+        if work_id:
+            approved_work_items[work_id] = row
+
     complete_flows: dict[str, dict[str, str]] = {}
+    plan_flow_ids: set[str] = set()
     plan_flow_model = parse_first_markdown_table(section_text(plan_text, "## Implementation Flow Model"))
     for row in plan_flow_model.rows:
         flow_id = row.get("Flow ID", "").strip().upper()
+        if flow_id:
+            plan_flow_ids.add(flow_id)
         if flow_id and row.get("Flow Status", "").strip() == "complete":
             complete_flows[flow_id] = row
+
+    work_evidence_table = parse_first_markdown_table(section_text(artifact_text, "## Work Item Completion Evidence"))
+    work_evidence_by_id: dict[str, dict[str, str]] = {}
+    for row in work_evidence_table.rows:
+        work_id = row.get("Work Item ID", "").strip().upper()
+        if not work_id:
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row must include `Work Item ID`")
+            continue
+        if not fullmatch_id(WORK_ID_RE, work_id):
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` must use a `WORK-*` Work Item ID")
+        if work_id in work_evidence_by_id:
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence repeats Work Item ID `{work_id}`")
+        work_evidence_by_id[work_id] = row
+        if approved_work_items and work_id not in approved_work_items:
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` is not in the approved implementation plan")
+        for column in ("Planned Unit", "Actual Change", "Validation Evidence", "Linked Flow IDs"):
+            if is_placeholder_cell(row.get(column, "")):
+                errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` must include substantive `{column}`")
+        linked_flow_ids = uppercase_ids(FLOW_ID_RE, row.get("Linked Flow IDs", ""))
+        if not linked_flow_ids:
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` must link at least one `FLOW-*`")
+        for flow_id in sorted(linked_flow_ids - plan_flow_ids):
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` references unknown Flow ID `{flow_id}`")
+        status = row.get("Status", "").strip().lower()
+        if status not in WORK_COMPLETION_STATUSES:
+            errors.append(f"`{display_path(artifact_path)}` Work Item Completion Evidence row `{work_id}` Status must be completed")
+
+    for work_id in sorted(approved_work_items):
+        if work_id not in work_evidence_by_id:
+            errors.append(f"`{display_path(artifact_path)}` approved work item `{work_id}` must have Work Item Completion Evidence with Status `completed`")
+
     evidence_table = parse_first_markdown_table(section_text(artifact_text, "## Flow Completion Evidence"))
     evidence_by_flow: dict[str, dict[str, str]] = {}
     for row in evidence_table.rows:
@@ -1614,6 +1725,7 @@ def validate_goal(
 
 
 def validate_review(
+    context: ValidationContext,
     stage: Stage,
     path: Path,
     artifact_fingerprint: str | None,
@@ -1640,12 +1752,13 @@ def validate_review(
         errors.append(f"`{display_path(path)}` Final Verdict must confirm no blocking issues")
     if not section_text(text, "## Review Cycle").strip():
         errors.append(f"`{display_path(path)}` must include `## Review Cycle` history")
-    validate_subagent_review_shards(stage, path, text, artifact_fingerprint, errors)
+    validate_subagent_review_shards(context, stage, path, text, artifact_fingerprint, errors)
     validate_rule_checklist(path, text, rule_ids, errors)
     validate_fingerprint(path, text, "Reviewed Artifact Fingerprint", artifact_fingerprint, errors)
 
 
 def validate_subagent_review_shards(
+    context: ValidationContext,
     stage: Stage,
     final_path: Path,
     final_text: str,
@@ -1677,12 +1790,13 @@ def validate_subagent_review_shards(
         if not NO_BLOCKING_RE.search(row.get("Blocking Issue", "")):
             errors.append(f"`{display_path(final_path)}` shard `{shard_file}` must record no blocking issue")
         shard_path = stage_dir / shard_file
-        validate_subagent_review_shard(stage, shard_path, artifact_fingerprint, errors, scope)
+        validate_subagent_review_shard(context, stage, shard_path, artifact_fingerprint, errors, scope)
     if stage.phase == "implementation-plan" and not has_flow_completeness_shard:
         errors.append(f"`{display_path(final_path)}` implementation-plan review must include a `flow-completeness` subagent shard")
 
 
 def validate_subagent_review_shard(
+    context: ValidationContext,
     stage: Stage,
     path: Path,
     artifact_fingerprint: str | None,
@@ -1708,11 +1822,16 @@ def validate_subagent_review_shard(
     if not NO_BLOCKING_RE.search(section_text(text, "## Blocking Issues")):
         errors.append(f"`{display_path(path)}` Blocking Issues must record no blocking issues")
     if stage.phase == "implementation-plan" and expected_scope == "flow-completeness":
-        validate_flow_completeness_shard(path, text, errors)
+        validate_flow_completeness_shard(context, path, text, errors)
     validate_fingerprint(path, text, "Reviewed Artifact Fingerprint", artifact_fingerprint, errors)
 
 
-def validate_flow_completeness_shard(path: Path, text: str, errors: list[str]) -> None:
+def validate_flow_completeness_shard(
+    context: ValidationContext,
+    path: Path,
+    text: str,
+    errors: list[str],
+) -> None:
     checklist = parse_required_table(
         path,
         section_text(text, "## Flow Rule Checklist"),
@@ -1743,11 +1862,41 @@ def validate_flow_completeness_shard(path: Path, text: str, errors: list[str]) -
     )
     if not audit.rows:
         errors.append(f"`{display_path(path)}` Flow Coverage Audit must include at least one row")
+
+    definition_text = read_required_text(context.request_dir / "01-definition" / "definition.md", errors)
+    plan_text = read_required_text(context.request_dir / "02-implementation-plan" / "implementation-plan.md", errors)
+    approved_definition_flows = approved_definition_flow_rows(definition_text) if definition_text is not None else {}
+    plan_flow_model = parse_first_markdown_table(section_text(plan_text or "", "## Implementation Flow Model"))
+    plan_flow_ids = {
+        row.get("Flow ID", "").strip().upper()
+        for row in plan_flow_model.rows
+        if row.get("Flow ID", "").strip()
+    }
+    audited_definition_flow_ids: set[str] = set()
+    audited_plan_flow_ids: set[str] = set()
+
     for row in audit.rows:
         flow_id = row.get("Flow ID", "").strip() or "<unknown>"
         for column in ("Flow ID", "Definition Sources Checked", "IP-FLOW-001..007 Verdict", "Gap", "Decision"):
             if is_placeholder_cell(row.get(column, "")):
                 errors.append(f"`{display_path(path)}` Flow Coverage Audit row `{flow_id}` must include substantive `{column}`")
+        row_definition_flow_ids = uppercase_ids(DFLOW_ID_RE, flow_id)
+        row_plan_flow_ids = uppercase_ids(FLOW_ID_RE, flow_id)
+        if not row_definition_flow_ids or not row_plan_flow_ids:
+            errors.append(f"`{display_path(path)}` Flow Coverage Audit row `{flow_id}` must include a `DFLOW-* -> FLOW-*` mapping")
+        for definition_flow_id in sorted(row_definition_flow_ids):
+            if approved_definition_flows and definition_flow_id not in approved_definition_flows:
+                errors.append(f"`{display_path(path)}` Flow Coverage Audit row `{flow_id}` references unknown Definition Flow ID `{definition_flow_id}`")
+            audited_definition_flow_ids.add(definition_flow_id)
+        for plan_flow_id in sorted(row_plan_flow_ids):
+            if plan_flow_ids and plan_flow_id not in plan_flow_ids:
+                errors.append(f"`{display_path(path)}` Flow Coverage Audit row `{flow_id}` references unknown Flow ID `{plan_flow_id}`")
+            audited_plan_flow_ids.add(plan_flow_id)
+
+    for definition_flow_id in sorted(set(approved_definition_flows) - audited_definition_flow_ids):
+        errors.append(f"`{display_path(path)}` Flow Coverage Audit must include approved Definition Flow `{definition_flow_id}`")
+    for plan_flow_id in sorted(plan_flow_ids - audited_plan_flow_ids):
+        errors.append(f"`{display_path(path)}` Flow Coverage Audit must include plan Flow `{plan_flow_id}`")
 
 
 def validate_rule_checklist(path: Path, text: str, rule_ids: list[str], errors: list[str]) -> None:
@@ -2103,69 +2252,69 @@ bugfix 또는 mixed 요청에서 회귀하면 안 되는 동작을 설명한다.
 
 ## Technical Approach
 
-기존 validator-driven Stageflow 구조를 사용한다. 별도 parser 경로를 추가하기보다 stage metadata와 markdown validator를 확장해 같은 gate가 artifact 형식, review checklist, approval 동작을 검증하게 한다.
+승인된 definition의 `DFLOW-001`을 구현 가능한 기술 흐름으로 옮긴다. 기존 프로젝트 구조 안에서 필요한 변경 지점을 정하고, 새 서비스 의미를 만들지 않고 승인된 요구사항과 정책만 구현한다.
 
 ## Implementation Architecture
 
-`scripts/validate_stageflow.py`는 required section과 table validation을 담당한다. Stage rule markdown은 authoring/review contract를 담당한다. 테스트는 subprocess로 validator를 실행하는 fixture request를 만들기 때문에 fixture는 새 artifact contract를 따라야 한다.
+진입점, 처리 책임, 저장 또는 조회 책임, 결과 노출 책임을 구분한다. 각 책임은 `WORK-001`의 변경 단위와 연결하고, flow 완료 증거가 검증 전략에서 확인되도록 설계한다.
 
 ## Change Areas
 
-- `scripts/validate_stageflow.py`의 stage metadata와 validation helper.
-- `skills/stageflow/references/stages/` 아래 stage writing/review rule.
-- `tests/` 아래 fixture artifact와 regression test.
+- 승인된 동작을 처리하는 코드 또는 문서 영역.
+- flow 결과를 노출하거나 소비하는 경계.
+- 회귀를 막거나 완료를 증명하는 테스트와 확인 절차.
 
 ## Cause Or Design Notes
 
-implementation plan은 implementation approval 전에 architecture, flow, edge-case, validation evidence를 요구해 파일 목록만 있는 plan을 막아야 한다.
+설계는 `REQ-001`, `SP-001`, `INTENT-001`의 승인된 의미를 보존한다. 구현 중 새 제품 정책이나 사용자-visible 의미가 필요해지면 이 plan에서 결정하지 않고 definition으로 돌아간다.
 
 ## Implementation Flow Model
 
 | Flow ID | Definition Flow ID | Definition Source | Trigger Or Entry | Target Outcome | Primary Work Items | Flow Status | Status Rationale |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow implementation-plan artifact가 validation된다. | 얕은 implementation-plan artifact가 approval 전에 실패한다. | WORK-001 | complete | DFLOW-001은 in-scope이고 definition gap이 없다. |
+| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | 승인된 사용자 또는 시스템 진입점에서 flow가 시작된다. | 사용자, 관리자, consumer, 테스트가 승인된 완료 결과를 확인한다. | WORK-001 | complete | `DFLOW-001`은 in-scope이고 구현 단계에서 새 definition 결정이 필요하지 않다. |
 
 ## Flow Completeness Matrix
 
 | Flow ID | Ordered Implementation Path | State/Data Transitions | Failure Or Empty States | Observable Completion | Validation Evidence |
 | --- | --- | --- | --- | --- | --- |
-| FLOW-001 | validator가 artifact section과 table을 읽음 -> implementation-plan flow table을 검증함 -> review checklist와 flow shard를 확인함 -> validation result를 출력함. | Stageflow request artifact 자체는 변경하지 않고 validation errors 또는 PASS 결과만 반환한다. | flow table 누락, complete flow matrix 누락, placeholder-only cell, flow shard 누락은 validation failure로 노출된다. | 사용자는 validator 출력에서 approval 전 차단 사유 또는 PASS를 확인한다. | FLOW-001은 targeted negative tests와 `python -m unittest discover -s tests`로 검증한다. |
+| FLOW-001 | 진입점 수신 -> 승인된 정책 적용 -> 필요한 상태/데이터 처리 -> 완료 결과 노출. | 승인된 flow에 필요한 생성, 수정, 조회, 저장, 캐시 갱신, no-op 중 실제 전이를 기록한다. | 검증 실패, 빈 상태, 권한 실패, 외부 consumer 책임 등 이 flow의 실패/빈 상태를 기록한다. | 사용자, 관리자, consumer, 테스트 중 누가 어떤 결과를 보고 완료를 판단하는지 기록한다. | `FLOW-001` 완료를 증명하는 자동 테스트, 수동 확인, 리뷰 증거, 명령을 기록한다. |
 
 ## Work Items
 
 | ID | Implementation Unit | Technical Design | Completion Evidence |
 | --- | --- | --- | --- |
-| WORK-001 | Stage validator contract 정리. | FLOW-001을 위해 implementation-plan stage metadata에 필요한 technical section과 table column을 추가한다. | validator는 FLOW-001의 technical section이 없거나 legacy work-item column을 쓰는 artifact를 거부한다. |
+| WORK-001 | 승인된 flow를 구현하는 구체적인 작업 단위. | `FLOW-001`을 위해 변경할 책임, 데이터 흐름, 실패 처리, 호환성 경계를 기술한다. | 실제 변경 결과와 `FLOW-001` 완료를 증명하는 검증 증거를 남긴다. |
 
 ## Coverage Matrix
 
 | Service Rule ID | Work Item ID | Change Area | Validation Evidence | Risk/Constraint |
 | --- | --- | --- | --- | --- |
-| SP-001 | WORK-001 | validator, rule, test. | `python -m unittest discover -s tests`가 통과하고, targeted negative test가 얕은 plan을 실패시킨다. | 동작 범위를 implementation-plan artifact 품질로 제한한다. |
+| SP-001 | WORK-001 | 승인된 정책이 적용되는 변경 영역. | `SP-001`과 `FLOW-001` 결과를 입증하는 구체적인 확인. | 승인된 definition 밖의 의미 확장을 하지 않는다. |
 
 ## Definition Fidelity Matrix
 
 | Work Item ID | Definition Source | Approved Meaning | Technical Interpretation | Must Not Interpret As | If Ambiguous |
 | --- | --- | --- | --- | --- | --- |
-| WORK-001 | REQ-001, SP-001, INTENT-001 | 승인된 artifact-quality gate 동작을 보존한다. | 같은 승인 동작을 위한 구조 validation과 review guidance를 추가한다. | 새 workflow stage, 새 approval semantics, product behavior 변경. | 새 의미를 계획하기 전에 definition으로 돌아간다. |
+| WORK-001 | REQ-001, SP-001, INTENT-001 | definition에서 승인된 요구사항과 정책 의미. | 승인된 의미를 보존하는 구현 책임과 경계. | 승인되지 않은 더 좁은 UX, route, screen, state, data, API 해석. | return-to-definition |
 
 ## Edge Cases And Failure Modes
 
-기존 implementation-plan artifact가 `Change Areas`, `Work Items`, `Validation`만 있으면 validation에 실패한다. technical section이 없으면 approval 전에 실패한다. `Code and tests`나 `Implement behavior` 같은 generic row는 너무 얕은 계획으로 거부된다.
+검증 실패, 빈 상태, 권한 실패, 외부 consumer 책임, no-op, 하위 호환성, rollback 또는 recovery가 필요한 상황을 flow별로 기록한다.
 
 ## Validation Strategy
 
-- `python -m unittest discover -s tests`를 실행해 모든 Stageflow gate를 검증한다.
-- technical section 누락과 얕은 work item text에 대한 negative test를 포함한다.
-- 출력 template이 새 technical section을 포함하는지 확인한다.
+- `FLOW-001`의 observable completion을 증명하는 자동 또는 수동 확인을 실행한다.
+- `WORK-001`의 실제 변경과 승인된 `SP-001` 정책 보존을 확인한다.
+- 실패/빈 상태가 계획한 결과로 노출되는지 확인한다.
 
 ## Risks
 
-더 엄격한 validation 때문에 진행 중인 Stageflow request의 implementation-plan artifact 업데이트가 필요할 수 있다.
+승인된 definition이 다루지 않은 의미가 구현 중 드러나면 plan에서 임의 결정하지 않고 definition으로 돌아가야 한다.
 
 ## Constraints
 
-approval, fingerprint, review, stage-order gate를 약화하지 않는다.
+승인된 definition, flow status, definition fidelity 범위를 벗어난 변경은 포함하지 않는다.
 """,
     "implementation": """# Implementation
 
@@ -2176,6 +2325,12 @@ approval, fingerprint, review, stage-order gate를 약화하지 않는다.
 ## Plan Compliance And Deviations
 
 구현이 승인된 plan과 일치했는지, deviation, 생략된 작업, 미완료 작업, work item별 완료 증거를 포함해 기록한다.
+
+## Work Item Completion Evidence
+
+| Work Item ID | Planned Unit | Actual Change | Validation Evidence | Linked Flow IDs | Status |
+| --- | --- | --- | --- | --- | --- |
+| WORK-001 | 승인된 implementation-plan의 작업 단위. | 실제 변경 내용과 영향 범위. | 실행한 테스트, 명령, 수동 확인 또는 리뷰 증거. | FLOW-001 | completed |
 
 ## Flow Completion Evidence
 

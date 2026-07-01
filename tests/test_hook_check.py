@@ -33,7 +33,7 @@ def temp_project():
 STAGE_RULE_IDS = {
     "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 19)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)] + [f"IP-FLOW-{index:03d}" for index in range(1, 8)],
-    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 9)],
+    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 10)],
 }
 
 DEFINITION_TEXT = """# Definition
@@ -234,6 +234,12 @@ Completed WORK-001 with actual validator, rule, prompt, and fixture changes.
 ## Plan Compliance And Deviations
 
 WORK-001 followed the approved Definition Fidelity Matrix with no deviations, skipped work, or incomplete work.
+
+## Work Item Completion Evidence
+
+| Work Item ID | Planned Unit | Actual Change | Validation Evidence | Linked Flow IDs | Status |
+| --- | --- | --- | --- | --- | --- |
+| WORK-001 | Implementation-plan validator contract. | Validator, rule, prompt, and fixture changes enforce the approved work item. | `python -m unittest discover -s tests` passed and validates WORK-001. | FLOW-001 | completed |
 
 ## Flow Completion Evidence
 

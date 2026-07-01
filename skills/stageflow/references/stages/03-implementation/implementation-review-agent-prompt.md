@@ -35,7 +35,9 @@ Do not review unrelated files unless the implementation evidence explicitly incl
 - Extract every approved complete `FLOW-*` and its `DFLOW-*` source from the implementation plan's `## Implementation Flow Model` and `## Flow Completeness Matrix`.
 - Compare each approved work item against `03-implementation/implementation.md`, changed-file or diff evidence, and command/test output.
 - Classify every approved work item as `completed`, `incomplete`, `unverifiable`, or `out-of-scope`. Use `completed` only when the implementation evidence shows actual work, validation evidence, and final outcome coverage for that work item.
+- Confirm `## Work Item Completion Evidence` contains every approved `WORK-*`, the planned unit, actual change, validation evidence, linked `FLOW-*`, and status `completed`.
 - Confirm `## Flow Completion Evidence` contains every approved complete `FLOW-*`, the matching `DFLOW-*`, actual result, validation evidence, observable completion, and status `completed`.
+- Keep the two evidence levels distinct: work item evidence proves planned implementation units were completed, while flow evidence proves observable flow completion.
 - Check that completed work stays within the approved implementation plan, including its `Definition Fidelity Matrix`.
 - Check that validation evidence is specific, relevant, and tied to completed work and to each approved work item.
 - Check that deviations, skipped work, incomplete work, residual risk, and any implementation-plan or definition-fidelity mismatch are explicit in `## Plan Compliance And Deviations`.

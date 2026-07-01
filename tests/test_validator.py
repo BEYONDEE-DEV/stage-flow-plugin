@@ -34,7 +34,7 @@ def temp_project():
 STAGE_RULE_IDS = {
     "definition": [f"DEF-RULE-{index:03d}" for index in range(1, 19)],
     "implementation-plan": [f"IP-RULE-{index:03d}" for index in range(1, 9)] + [f"IP-FLOW-{index:03d}" for index in range(1, 8)],
-    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 9)],
+    "implementation": [f"IMPL-RULE-{index:03d}" for index in range(1, 10)],
 }
 
 DEFINITION_TEXT = """# Definition
@@ -235,6 +235,12 @@ Completed WORK-001 with actual validator, rule, prompt, and fixture changes.
 ## Plan Compliance And Deviations
 
 WORK-001 followed the approved Definition Fidelity Matrix with no deviations, skipped work, or incomplete work.
+
+## Work Item Completion Evidence
+
+| Work Item ID | Planned Unit | Actual Change | Validation Evidence | Linked Flow IDs | Status |
+| --- | --- | --- | --- | --- | --- |
+| WORK-001 | Implementation-plan validator contract. | Validator, rule, prompt, and fixture changes enforce the approved work item. | `python -m unittest discover -s tests` passed and validates WORK-001. | FLOW-001 | completed |
 
 ## Flow Completion Evidence
 
@@ -610,10 +616,15 @@ Approved.
                     self.assertNotIn("User selected `구현 계획으로 넘어가기`", result.stdout)
                 if template == "implementation-plan":
                     self.assertIn("Definition Fidelity Matrix", result.stdout)
-                    self.assertIn("기존 validator-driven Stageflow 구조", result.stdout)
+                    self.assertIn("승인된 definition의 `DFLOW-001`", result.stdout)
+                    self.assertIn("external-boundary-by-definition", (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-writing-and-review-rules.md").read_text(encoding="utf-8-sig"))
+                    self.assertNotIn("validator-driven", result.stdout)
+                    self.assertNotIn("scripts/validate_stageflow.py", result.stdout)
+                    self.assertNotIn("Stageflow implementation-plan artifact", result.stdout)
                     self.assertNotIn("Use the existing validator-driven", result.stdout)
                 if template == "implementation":
                     self.assertIn("work item별로 실제로 완료한 작업", result.stdout)
+                    self.assertIn("Work Item Completion Evidence", result.stdout)
                     self.assertNotIn("Record the actual work completed", result.stdout)
 
     def test_old_stage_templates_are_removed(self) -> None:
@@ -675,6 +686,9 @@ Approved.
             "already answered/reflected user answers must move to implementation-plan coverage or constraints instead",
             "Intent Fidelity",
             "Scope Narrowing Evidence",
+            "Flow Extraction Checklist",
+            "every `REQ-*` and `SP-*`",
+            "artifact repair",
             "DEF-RULE-017",
             "not a literal keyword rule",
             "references/intent-fidelity.md",
@@ -745,6 +759,9 @@ Approved.
             (implementation_rules, "which completed work remains valid"),
             (skill_text, "completion audit subagent review"),
             (implementation_rules, "IMPL-RULE-007"),
+            (implementation_rules, "IMPL-RULE-009"),
+            (implementation_rules, "Work Item Completion Evidence"),
+            (implementation_rules, "Keep work-item completion and flow completion evidence separate"),
             (implementation_rules, "fix/review cycle until the latest review verdict is PASS"),
         ):
             self.assertIn(phrase, text)
@@ -881,6 +898,48 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("IP-FLOW-004", result.stdout)
 
+    def test_implementation_plan_flow_shard_audit_must_cover_all_definition_and_plan_flows(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            definition = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            definition.write_text(
+                DEFINITION_TEXT.replace(
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |",
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |\n| DFLOW-002 | REQ-001, SP-001 | External consumer receives the boundary response. | External consumer | Consumer observes the repo boundary response. | Current repo exposes the boundary; external consumer owns downstream state. | External consumer handles downstream failure. | external-boundary-by-definition |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            plan = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "implementation-plan.md"
+            plan.write_text(
+                IMPLEMENTATION_PLAN_TEXT.replace(
+                    "| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete | DFLOW-001 is in scope and has no unresolved definition gap. |",
+                    "| FLOW-001 | DFLOW-001 | REQ-001, SP-001, INTENT-001 | Stageflow validates an implementation-plan artifact before approval. | Shallow implementation-plan artifacts fail before approval while detailed artifacts pass. | WORK-001 | complete | DFLOW-001 is in scope and has no unresolved definition gap. |\n| FLOW-002 | DFLOW-002 | REQ-001, SP-001 | External consumer receives the repo boundary response. | The repo boundary response is observable; downstream completion is consumer-owned. | Current repo boundary only; no WORK item. | external-boundary-by-definition | Current repo exposes an observable boundary and the external consumer owns downstream responsibility per REQ-001. |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Flow Coverage Audit must include approved Definition Flow `DFLOW-002`", result.stdout)
+            self.assertIn("Flow Coverage Audit must include plan Flow `FLOW-002`", result.stdout)
+
+    def test_implementation_plan_flow_shard_audit_rejects_unknown_flow_ids(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            shard = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "review" / "subagents" / "002-flow-completeness-review.md"
+            shard.write_text(
+                shard.read_text(encoding="utf-8").replace(
+                    "| DFLOW-001 -> FLOW-001 | REQ-001, SP-001, INTENT-001 | PASS | No flow gap. | PASS |",
+                    "| DFLOW-001 -> FLOW-001 | REQ-001, SP-001, INTENT-001 | PASS | No flow gap. | PASS |\n| DFLOW-999 -> FLOW-999 | REQ-001 | PASS | No gap. | PASS |",
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown Definition Flow ID `DFLOW-999`", result.stdout)
+            self.assertIn("unknown Flow ID `FLOW-999`", result.stdout)
+
     def test_implementation_review_requires_completion_audit_rule(self) -> None:
         with temp_project() as root:
             self.create_project(root)
@@ -924,6 +983,51 @@ Approved.
             result = self.run_validator(root, "implementation")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("complete flow `FLOW-001` must have Flow Completion Evidence", result.stdout)
+
+    def test_implementation_requires_work_item_completion_evidence(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "implementation.md"
+            artifact.write_text(IMPLEMENTATION_TEXT.replace("## Work Item Completion Evidence", "## Removed Work Item Completion Evidence"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Work Item Completion Evidence", result.stdout)
+
+    def test_implementation_approved_work_item_requires_completion_evidence_row(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "implementation.md"
+            artifact.write_text(
+                IMPLEMENTATION_TEXT.replace(
+                    "| WORK-001 | Implementation-plan validator contract. | Validator, rule, prompt, and fixture changes enforce the approved work item. | `python -m unittest discover -s tests` passed and validates WORK-001. | FLOW-001 | completed |\n",
+                    "",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "implementation")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("approved work item `WORK-001` must have Work Item Completion Evidence", result.stdout)
+
+    def test_implementation_work_item_completion_evidence_status_must_be_completed(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "implementation.md"
+            artifact.write_text(IMPLEMENTATION_TEXT.replace("| FLOW-001 | completed |", "| FLOW-001 | incomplete |"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "implementation")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Work Item Completion Evidence row `WORK-001` Status must be completed", result.stdout)
+
+    def test_implementation_review_requires_separate_work_and_flow_rule(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            review = root / ".stageflow" / "requests" / REQUEST_ID / "03-implementation" / "review" / "final.md"
+            review.write_text("\n".join(line for line in review.read_text(encoding="utf-8").splitlines() if "IMPL-RULE-009" not in line), encoding="utf-8")
+            result = self.run_validator(root, "implementation")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("IMPL-RULE-009", result.stdout)
 
     def test_review_final_file_is_required(self) -> None:
         with temp_project() as root:
@@ -1120,6 +1224,26 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must not include the user stop signal as a question option", result.stdout)
+
+    def test_pending_clarification_must_not_include_stop_signal_transition_option(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which model? | Option 1: A; Option 2: B | Option 1 | 구현 계획으로 넘어가기 | This changes scope. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must not include the user stop signal in `Transition Option`", result.stdout)
+            self.assertIn("Transition Option must be `N/A`", result.stdout)
 
 
     def test_pending_clarification_allows_implementation_plan_artifact_option_text(self) -> None:
@@ -1766,6 +1890,26 @@ Already-decided content was incorrectly listed as risk.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("cites unknown Source ID `REQ-999`", result.stdout)
 
+    def test_definition_approved_flow_inventory_requires_requirement_coverage(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("DFLOW-001 | REQ-001, SP-001, INTENT-001", "DFLOW-001 | SP-001, INTENT-001"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must include Source ID `REQ-001`", result.stdout)
+
+    def test_definition_approved_flow_inventory_requires_policy_rule_coverage(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(DEFINITION_TEXT.replace("DFLOW-001 | REQ-001, SP-001, INTENT-001", "DFLOW-001 | REQ-001, INTENT-001"), encoding="utf-8")
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must include Source ID `SP-001`", result.stdout)
+
     def test_implementation_plan_requires_definition_fidelity_matrix(self) -> None:
         with temp_project() as root:
             self.create_project(root)
@@ -1865,6 +2009,23 @@ Already-decided content was incorrectly listed as risk.
             result = self.run_validator(root, "implementation-plan")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must include approved Definition Flow `DFLOW-002`", result.stdout)
+
+    def test_implementation_plan_external_boundary_definition_flow_cannot_be_complete(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            definition = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            definition.write_text(
+                DEFINITION_TEXT.replace(
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | User requests behavior. | User | User sees the planned corrected response. | Required state is updated according to policy. | Errors remain recoverable for the user. | in-scope |",
+                    "| DFLOW-001 | REQ-001, SP-001, INTENT-001 | External consumer requests behavior. | External consumer | Consumer observes the repo boundary response. | Current repo exposes the boundary; external consumer owns downstream state. | External consumer handles downstream failure. | external-boundary-by-definition |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.refresh_stage_fingerprint(root, "implementation-plan")
+            result = self.run_validator(root, "implementation-plan")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must use `external-boundary-by-definition`", result.stdout)
 
     def test_implementation_plan_rejects_unknown_primary_work_item(self) -> None:
         with temp_project() as root:
@@ -2010,7 +2171,7 @@ Already-decided content was incorrectly listed as risk.
                 DEFINITION_TEXT.replace(
                     "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |",
                     "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n| REQ-002 | feature | User answer. | Organizer lookup is read-only for this request. | Account lifecycle is out of scope. | OUT-001 |",
-                ),
+                ).replace("DFLOW-001 | REQ-001, SP-001, INTENT-001", "DFLOW-001 | REQ-001, REQ-002, SP-001, INTENT-001"),
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
@@ -2035,7 +2196,7 @@ Already-decided content was incorrectly listed as risk.
                 DEFINITION_TEXT.replace(
                     "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |",
                     "| REQ-001 | bugfix | User request. | Implement corrected behavior. | No unrelated scope. | OUT-001, PROB-001 |\n| REQ-002 | feature | User answer. | Organizer lookup is read-only for this request. | Account lifecycle is out of scope. | OUT-001 |",
-                ),
+                ).replace("DFLOW-001 | REQ-001, SP-001, INTENT-001", "DFLOW-001 | REQ-001, REQ-002, SP-001, INTENT-001"),
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
