@@ -5,6 +5,7 @@
 - [Responsibility](#responsibility)
 - [Path Contract](#path-contract)
 - [Project And Domain Context Policy](#project-and-domain-context-policy)
+- [Project Document Contract](#project-document-contract)
 - [Atomization Criteria Document](#atomization-criteria-document)
 - [Source Convention Document](#source-convention-document)
 - [Domain Discovery Policy](#domain-discovery-policy)
@@ -40,22 +41,24 @@ Every atom uses this exact organization:
 - `atom_key` is the stable atom identity. It must be globally unique across the docs set, lower-kebab-case, and unchanged by category moves, domain-path moves, file-slug changes, or file renames.
 - Existing atoms without `atom_key` use slug-derived identity only as a legacy fallback for discovery. Treat them as explicit `atom_key` migration candidates in refresh or change plans before relying on them for new graph/AID work.
 - Do not create new `<file-slug>/atomic.md` folder-shaped atoms. If an existing docs set uses that older shape, propose a migration before changing paths.
-- The atomization criteria document and source convention document are not atoms and are exempt from this path contract.
+- The project documents listed in the Project Document Contract, including the atomization criteria document and source convention document, are not atoms and are exempt from this path contract.
 
 ## Project And Domain Context Policy
 
 Use generic context atoms to preserve project and domain intent without hardcoding project-specific folder names.
 
-Default project-level atoms:
+Default project-level documents:
 
 ```text
-<doc-root>/project/project-goal-atom.md
-<doc-root>/project/project-glossary-atom.md
+<doc-root>/project/atomization-criteria.md
+<doc-root>/project/project-goal.md
+<doc-root>/project/project-glossary.md
+<doc-root>/project/service-logic-inventory.md
+<doc-root>/project/source-convention.md
 ```
 
-- `project-goal-atom.md` records the project-wide purpose, target users, success criteria, non-goals, current direction, planned direction, and uncertain project intent.
-- `project-glossary-atom.md` records terms used across the project. Each term should include its definition, relevant domains, aliases, forbidden conflations, related source identifiers, and uncertainty when applicable.
-- These default context atom paths are locator examples only. When created as atom files, they still require stable frontmatter `atom_key` values such as `project-goal`, `project-glossary`, `common-context`, or a similarly durable lower-kebab-case key.
+- Project-level documents are control, context, criteria, inventory, or source-interpretation documents. They are not service logic atoms and do not use atom frontmatter, AID, graph edges, or required atom sections unless a separate accepted migration explicitly converts them into atom files.
+- Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` files are legacy artifacts. Treat them as migration/update candidates; do not use those paths as defaults for new project goal or glossary work.
 
 Default project-level criteria document:
 
@@ -96,7 +99,42 @@ Default domain-level atom:
 - A domain context atom combines the domain goal and domain boundary.
 - It records the domain purpose, responsibilities, included behavior, excluded behavior, adjacent-domain boundaries, and conditions for promoting shared concepts to `common`.
 - When creating a new domain, create or update its context atom in the same accepted change plan. If the domain goal or boundary is unclear, present candidate boundaries and ask instead of writing confirmed intent.
-- Do not create a domain-specific glossary by default. Add domain-only terms to `project/project-glossary-atom.md` with their domain scope unless the user explicitly wants separate glossary atoms.
+- Do not create a domain-specific glossary by default. Add domain-only terms to `project/project-glossary.md` with their domain scope unless the user explicitly wants separate glossary documents or glossary atoms.
+
+## Project Document Contract
+
+Project documents are non-atom documents under `<doc-root>/project/`. They define criteria, project context, terminology, source interpretation, or writer/reviewer input. They do not directly judge whether code matches service behavior; that judgment must come from service logic atoms, source evidence, graph relationships, baseline metadata, and judgment labels.
+
+Default project documents are:
+
+```text
+<doc-root>/project/atomization-criteria.md
+<doc-root>/project/project-goal.md
+<doc-root>/project/project-glossary.md
+<doc-root>/project/service-logic-inventory.md
+<doc-root>/project/source-convention.md
+```
+
+These files must not follow the `*-atom.md` path contract, must not require frontmatter `atom_key`, must not require AID values, must not use `graph_edges`, and must not require the atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
+
+Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` are legacy project-document artifacts. When they are present, read them as possible source material, then propose a migration or update to `project/project-goal.md` and `project/project-glossary.md` instead of continuing the atom-named defaults.
+
+Project document writing rules:
+
+- `project-goal.md` records the service or product purpose, target users or callers, success criteria, non-goals, confirmed business direction, and source-unverifiable items as `confirmation_needed`. It must not turn config paths, baseline metadata paths, cache paths, reset notes, deletion notes, reviewer logs, or docs-operation status into the service goal.
+- `project-glossary.md` records each core term with structured fields for meaning, owning domain, actor/system action, source of truth, stored vs computed, related rules/status, aliases, forbidden conflations, and uncertainty. A glossary that only contains one-line term definitions is not enough to support core term coverage.
+- `service-logic-inventory.md` is a writer/reviewer input document, not a service logic atom. Each behavior item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. One-line behavior summaries are not enough for baseline readiness.
+- `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related service logic atom_key and AID, or to a coverage gap when no atom exists yet. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
+- `atomization-criteria.md` records generation criteria, domain/category boundary semantics, accepted scope semantics, and approval state. It is not direct code suitability evidence.
+
+Project document review rules:
+
+- Do not fail a project document only because it omits atom required sections, frontmatter `atom_key`, AID values, or `graph_edges`.
+- Fail when a project document directly claims code is implemented, missing, buggy, matching, or out of scope as if it were a service logic atom.
+- Fail when `project-goal.md` treats docs configuration, baseline paths, plugin cache paths, reset/delete notes, or operation logs as service/product goals.
+- Fail when `project-glossary.md` is only a list of one-line term definitions without the structured fields required above.
+- Fail when `service-logic-inventory.md` is only a one-line summary or lacks behavior-level fields needed by writer/reviewer work; do not write or update baseline metadata while the inventory is in that state.
+- Fail when `source-convention.md` records runtime-impacting behavior without a related atom_key/AID or a coverage gap.
 
 ## Atomization Criteria Document
 
@@ -291,7 +329,7 @@ Do not confirm a first-level domain when its main rationale is a documentation s
 
 ## Core Business Term Coverage Gate
 
-Before writing or refreshing atom files, identify source-repeated business nouns from type/interface names, collection keys, UI titles, API payloads, and existing domain atoms. Each core business term must be defined in `project/project-glossary-atom.md` or in an appropriate domain atom before derived behavior is treated as covered.
+Before writing or refreshing atom files, identify source-repeated business nouns from type/interface names, collection keys, UI titles, API payloads, and existing domain atoms. Each core business term must be defined in `project/project-glossary.md` or in an appropriate domain atom before derived behavior is treated as covered.
 
 Do not document a derived concept while its parent business term is missing or underdefined. If the parent meaning is uncertain, put the missing definition and source evidence in the change plan or `Gaps` instead of writing confirmed intent.
 
@@ -376,7 +414,7 @@ Section codes are:
 
 Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. New AID values use the target atom's stable `atom_key` as the prefix and must be globally unique across the docs set, not just unique within one atom.
 
-Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. The criteria document at `project/atomization-criteria.md` is not an atom and is not required to use AID values.
+Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. Project documents such as `project/atomization-criteria.md`, `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md` are not atoms and are not required to use AID values.
 
 Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. Category moves, file renames, path drift, and atom slug changes are not AID change reasons. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record the migration explicitly in the change plan and review findings. Do not infer the current owning atom only from an older preserved AID prefix; use frontmatter `atom_key` for current identity.
 
@@ -422,7 +460,7 @@ Each judgment-bearing item must include:
 
 `matches_confirmed_intent` is allowed only as an explicit review finding after the reviewer inspects source evidence and confirms that no higher-priority judgment label applies. Do not treat the lack of a `Gaps` item as proof that code matches confirmed intent.
 
-Project and domain context atoms must preserve non-goals, excluded behavior, and adjacent-domain boundaries clearly enough for `out_of_scope_behavior` judgments.
+Approved project documents may provide context such as non-goals or terminology boundaries, and domain context atoms must preserve excluded behavior and adjacent-domain boundaries clearly enough for `out_of_scope_behavior` review. A service judgment still needs service logic atom content, source evidence, baseline metadata, and a controlled judgment label.
 
 ## Forbidden Shapes
 

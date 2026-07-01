@@ -12,14 +12,20 @@ The baseline records the last source-code commit hash used for a confirmed docs 
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
+Baseline metadata may be updated only for the judgment-ready scope that passed post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
+
 ## Domain Context Discovery
 
 Before assigning changed source behavior to a domain, inspect the context atoms that exist:
 
-- `project/project-goal-atom.md` for project-wide purpose and success criteria
-- `project/project-glossary-atom.md` for project-wide terms and domain-scoped terminology
+- `project/project-goal.md` for project-wide service/product purpose, target callers, success criteria, non-goals, and confirmation-needed project context
+- `project/project-glossary.md` for project-wide terms and domain-scoped terminology
+- `project/service-logic-inventory.md` when an existing behavior inventory is present
+- `project/source-convention.md` when source interpretation conventions affect review
 - `common/common-context-atom.md` for shared concepts, policies, and code structures
 - `<domain>/<domain>-context-atom.md` for existing domain goals and boundaries
+
+If legacy `project/project-goal-atom.md` or `project/project-glossary-atom.md` exists, treat it as migration source material and propose a move/update to the non-atom project document paths instead of using the legacy atom paths as defaults.
 
 If a new domain, new common atom, category/subdomain path, or domain move is plausible, include the candidate domain path, evidence, affected atom files, and unresolved boundary questions in the change plan before writing docs.
 
@@ -90,11 +96,11 @@ Do not proceed to criteria approval state update, Codex Goal creation, service l
 
 Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria.md`, run criteria-review/revision cycles for that criteria draft, then stop for user review after criteria-review PASS.
 
-After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project, common, or domain atom writing; service logic inventory creation; domain writer or reviewer subagent execution; graph edge writing; and source-baseline metadata updates.
+After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project document writing, common or domain atom writing, service logic inventory creation, domain writer or reviewer subagent execution, graph edge writing, and source-baseline metadata updates.
 
 The Goal objective must name the approved criteria document path, docs root, accepted docs write scope, natural-language service logic coverage requirement, writer/reviewer cycle, and completion condition for the accepted docs operation. If an active Codex Goal already covers the same atomic-docs operation, continue inside that Goal instead of creating a duplicate.
 
-If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project/common/domain atoms, service logic inventory, domain writer/reviewer subagents, graph edges, and source-baseline metadata untouched.
+If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project documents, common/domain atoms, service logic inventory, domain writer/reviewer subagents, graph edges, and source-baseline metadata untouched.
 
 Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
 
@@ -110,6 +116,20 @@ The document should separate non-runtime code style from runtime-impacting conve
 
 Reviewer subagents must fail or request correction when a service logic atom mixes in simple code convention, source folder taxonomy, formatting, naming, import order, or layer-placement notes as if they were runtime behavior. If a runtime-impacting convention appears only in `project/source-convention.md` and is missing from the relevant service logic atom, record a coverage gap or `confirmation_needed` rather than treating the convention document as enough for `bug_or_regression`, `missing_required_behavior`, `matches_confirmed_intent`, `unapproved_implemented_behavior`, or `out_of_scope_behavior`.
 
+## Project Document Workflow
+
+Project documents are non-atom documents. Use `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, `project/source-convention.md`, and `project/atomization-criteria.md` for project-level control, context, terminology, inventory, and source interpretation. Do not give these files frontmatter `atom_key`, AID values, `graph_edges`, or required atom sections unless an explicit accepted migration converts a specific file into an atom.
+
+`project/project-goal.md` must describe the service or product purpose, target users or callers, success criteria, non-goals, and `confirmation_needed` project intent. It must not describe docs-root config, baseline metadata paths, plugin cache paths, reset/delete logs, reviewer-agent logs, or current operation status as if they were service goals.
+
+`project/project-glossary.md` must describe core terms with structured fields for meaning, owning domain, actor/system action, source of truth, stored vs computed, related rules/status, aliases, forbidden conflations, and uncertainty. A one-line glossary entry does not make derived behavior judgment-ready.
+
+`project/service-logic-inventory.md` must remain a behavior-level input for writers and reviewers. Each inventory item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. If the inventory is missing those fields or only contains one-line summaries, do not record source-baseline metadata and do not present the docs as judgment-ready.
+
+`project/source-convention.md` may help interpret source structure, but runtime-impacting conventions must link to a related service logic atom_key and AID or to a coverage gap. The source convention document alone cannot make a service behavior `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, or `out_of_scope_behavior`.
+
+Project document review must fail when a project document directly judges implementation status like a service logic atom, when it relies on atom-only metadata as required structure, when glossary terms are one-line-only, when inventory items are too shallow to support writer/reviewer work, or when runtime-impacting source conventions have no atom_key/AID or coverage-gap linkage.
+
 ## Service Logic Inventory
 
 When documenting source behavior, create a service logic inventory before drafting domain atoms. The inventory is behavior-oriented, not method-oriented: group source observations by meaningful runtime behavior rather than by endpoint, controller, service class, method, or file.
@@ -119,6 +139,8 @@ For each inventory item, record the inspected source identifiers, the natural-la
 Map every meaningful application, service, and domain logic item to an owning atom before claiming docs coverage. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`; do not treat unmapped source behavior as healthy or covered.
 
 Domain atom drafting must use the service logic inventory as input. A domain atom is incomplete when it only lists source files, endpoints, controllers, service classes, or method names without explaining the behavior in natural language.
+
+A service logic inventory that only summarizes source files or behaviors in one line is not sufficient input for domain atom drafting, reviewer PASS, Goal completion, or baseline metadata update.
 
 ## Domain Subagent Workflow
 
@@ -139,6 +161,10 @@ Run this gate after atom files, service logic inventories, graph edges, or parti
 Re-read the criteria document, accepted write scope, written atom files, known review findings, and source evidence touched by the operation. The gate must fail when an approved criteria document still contains pending-approval blockers, stale next-step wording for work that has already happened, completed Goal/inventory/writer/reviewer work described as future work, or obsolete draft-operation logs that are not active blockers.
 
 Partial scope is allowed, but it must be represented as the current accepted write scope, not as durable domain approval status. When only part of the docs set was written, summarize the result as an accepted partial-scope review target. Do not describe it as a complete project-wide code judgment baseline unless the accepted scope, source-baseline metadata, graph state, and relevant atoms actually cover that claim.
+
+The gate must also review project documents. It fails when project documents require or imitate atom-only structure, when `project-goal.md` contains docs-operation metadata instead of service/product goals, when `project-glossary.md` uses one-line-only term definitions, when `project/service-logic-inventory.md` lacks behavior-level fields required for writer/reviewer work, when `project/source-convention.md` records runtime-impacting conventions without related atom_key/AID or coverage-gap linkage, or when project documents directly assert code judgment labels without service logic atom evidence.
+
+Candidate or `needs_confirmation` domain output may remain a provisional review target, but it is not project-wide judgment-ready. Do not update source-baseline metadata for a project-wide baseline until accepted write scope, durable domain approval state, and judgment-ready scope are aligned and the post-write review passes.
 
 The post-write review must also apply the Source Fact Fidelity Gate from `atomic-document-contract.md` to the written or changed atom lines. If an atom says a source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail, that claim must match the inspected source branch or remain a labeled `confirmation_needed` gap with source evidence and next action.
 
@@ -161,13 +187,13 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 11. Stop graph expansion when related atom files no longer create modification candidates.
 12. Present a domain-grouped change plan before writing domain atom docs.
 13. Write confirmed updates only after the change plan is accepted.
-14. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete.
+14. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete, post-write review passes, and the updated scope is judgment-ready.
 
 ## Targeted Docs Operation
 
 Targeted domain or atom work is also a first-class flow. When targeted work overlaps with full-refresh scope, prioritize the current user-requested target. Put adjacent affected scope in follow-up proposals or `Gaps`.
 
-For domain-level work, update the domain context atom when the domain goal, responsibility, included behavior, excluded behavior, adjacent boundary, or common-promotion rule changes. Update `project/project-glossary-atom.md` when source or user intent changes project-wide terms, aliases, forbidden conflations, or domain-scoped terminology.
+For domain-level work, update the domain context atom when the domain goal, responsibility, included behavior, excluded behavior, adjacent boundary, or common-promotion rule changes. Update `project/project-glossary.md` when source or user intent changes project-wide terms, aliases, forbidden conflations, or domain-scoped terminology. If legacy `project/project-glossary-atom.md` exists, treat it as migration source material and include the migration/update action in the change plan.
 
 ## Change Plan Requirements
 
@@ -178,6 +204,7 @@ A change plan should group by domain and list:
 - user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
 - source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
+- project document creation, update, or legacy migration actions, including `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md`
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
 - service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
@@ -188,7 +215,7 @@ A change plan should group by domain and list:
 - related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings whenever the referenced atom lines are known
 - new domains, category or domain-path moves, atom splits, atom merges, and split proposals
 - atom identity changes, including `atom_key` preservation for moves/renames/splits/merges, legacy slug-derived fallback migrations, and duplicate `atom_key` conflicts
-- project goal, project glossary, common context, or domain context changes
+- project goal, project glossary, service logic inventory, source convention, common context, or domain context changes
 - core business terms that require glossary or domain atom coverage before derived behavior is treated as covered
 - parent business terms missing or underdefined in the glossary, including their source evidence and whether they belong in `Gaps`
 - inferred `Intent` or `Rules` that require confirmation
@@ -196,7 +223,7 @@ A change plan should group by domain and list:
 - `Planned Changes` reconciliation candidates
 - `Gaps`, bug candidates, uncertain mappings, rename/merge proposals, and implemented-plan candidates
 - graph path corrections, `target_key`/`target_path` consistency, or target-key conflicts
-- source-baseline metadata updates and docs-root config writes
+- source-baseline metadata updates and docs-root config writes, including whether the update is limited to a judgment-ready partial scope or a project-wide judgment-ready baseline
 - unresolved boundary questions that must be accepted before writing confirmed structure
 
 The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or docs-submodule structure before that acceptance.

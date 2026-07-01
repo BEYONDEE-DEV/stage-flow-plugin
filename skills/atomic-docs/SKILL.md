@@ -27,6 +27,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - The Atomic Docs Goal must cover the approved criteria document path, docs root, accepted docs write scope, natural-language service logic coverage, writer/reviewer cycle, and completion condition. If an active Goal already covers the same atomic-docs operation, continue inside that Goal; if Goal creation is unavailable or fails, stop before docs generation and report the blocker.
 - A Codex Goal does not replace criteria approval, accepted docs scope, judgment labels, source evidence, or user review. Complete the Goal only after the accepted docs operation is actually complete; do not complete it while work is incomplete, waiting for user input, or failing review.
 - Treat approved criteria as the rule for producing docs, not as the docs themselves or direct code suitability evidence. The criteria document must include domain partitioning criteria and a candidate or approved domain map, but the generated docs set must contain the meaningful service logic in natural language before it can be used as a code suitability standard.
+- Treat `project/atomization-criteria.md`, `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md` as non-atom project documents with separate writing and review rules. Legacy `project-goal-atom.md` and `project-glossary-atom.md` are migration candidates, not defaults for new work.
 - Define one shared writer/reviewer quality standard in the criteria document. Writer subagents produce docs and evidence that satisfy that standard; reviewer subagents verify the same standard. Do not create separate writer-only and reviewer-only quality rules that can drift.
 - Separate the criteria document's durable domain/category boundary map, behavior-level atom candidate map, full discovery candidate map, and current accepted write scope. Do not put leaf workflow or behavior candidates directly in the domain map. Do not encode operation-local write scope in durable domain approval status. Broad domains or broad category groupings are never valid as `candidate`, `approved`, or `needs_confirmation`; record them only as `rejected` broad groupings or convert them into concrete split proposals.
 - Use hybrid domain naming: start from project-native feature/root language, and promote only explicitly evidenced cross-feature capability/common boundaries. Do not replace project-native names with AI-renamed abstract labels unless the criteria records user approval, existing docs terminology, or durable promotion evidence.
@@ -43,7 +44,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 Before acting, read only the references needed for the requested operation:
 
 - `references/docs-root-and-config.md` for docs submodule discovery, confirmation, config, and recovery.
-- `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, the non-atom criteria document, project/common/domain context atoms, required sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
+- `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, non-atom project documents, project/common/domain context rules, required atom sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
 - `references/language-policy.md` for choosing the natural language used in docs content, preventing reference-example leakage into managed docs, and preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
 - `references/change-judgment-policy.md` for classifying source behavior as matching confirmed intent, bug/regression, missing required behavior, unapproved implementation, out-of-scope behavior, confirmation needed, or stale docs.
@@ -67,11 +68,12 @@ Before acting, read only the references needed for the requested operation:
 13. Write `Current Implementation` as natural-language behavior facts with source identifiers, not as source identifier lists.
 14. Use judgment labels on `Gaps`, change plan items, review findings, or evidence packet items when deciding whether source behavior is implemented, required, missing, buggy, unapproved, out of scope, stale, or confirmation-needed.
 15. For new atom files, set frontmatter `atom_key` and use it for AID prefixes and graph `target_key` references; treat category/domain paths and file slugs as mutable locators.
-16. Put code convention and source structure interpretation rules in `project/source-convention.md` when needed, and keep non-runtime convention notes out of service logic atoms.
-17. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
-18. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
-19. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
-20. Write only the paths and actions accepted by the user for the current docs operation.
+16. Use the project document contract for `project-goal.md`, `project-glossary.md`, `service-logic-inventory.md`, `source-convention.md`, and `atomization-criteria.md`; do not give these non-atom project documents `atom_key`, AID, `graph_edges`, or atom required sections.
+17. Put code convention and source structure interpretation rules in `project/source-convention.md` when needed, and keep non-runtime convention notes out of service logic atoms.
+18. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
+19. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+20. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
+21. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 

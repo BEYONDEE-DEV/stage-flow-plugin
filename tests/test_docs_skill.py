@@ -39,6 +39,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("endpoint lists, controller summaries, service class summaries", text)
         self.assertIn("not as the docs themselves or direct code suitability evidence", text)
         self.assertIn("domain partitioning criteria and a candidate or approved domain map", text)
+        self.assertIn("project/project-goal.md", text)
+        self.assertIn("project/project-glossary.md", text)
+        self.assertIn("project/service-logic-inventory.md", text)
+        self.assertIn("non-atom project documents with separate writing and review rules", text)
+        self.assertIn("Legacy `project-goal-atom.md` and `project-glossary-atom.md` are migration candidates", text)
         self.assertIn("durable domain/category boundary map, behavior-level atom candidate map", text)
         self.assertIn("Do not put leaf workflow or behavior candidates directly in the domain map", text)
         self.assertIn("full discovery candidate map, and current accepted write scope", text)
@@ -52,6 +57,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Keep source conventions separate from service logic atoms", text)
         self.assertIn("project/source-convention.md", text)
         self.assertIn("do not mix non-runtime conventions into service logic atoms", text)
+        self.assertIn("do not give these non-atom project documents `atom_key`, AID, `graph_edges`, or atom required sections", text)
         self.assertIn("post-write consistency and source fact review", text)
         self.assertIn("before reporting completion or presenting the docs as judgment-ready", text)
 
@@ -124,6 +130,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("`.stageflow/docs-submodule.json`", text)
         for field in ["docs_root", "source_root", "baseline_metadata_path"]:
             self.assertIn(field, text)
+        self.assertIn('"baseline_metadata_path": "source-baseline.json"', text)
+        self.assertIn("docs-root-relative path", text)
+        self.assertIn("The default is `source-baseline.json`", text)
+        self.assertIn("resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`", text)
         self.assertIn("source repository root used for diffs", text)
         self.assertIn("Do not silently create a real submodule", text)
         self.assertIn("accepted the docs-root setup scope and config write", text)
@@ -352,7 +362,8 @@ class DocsSkillTests(unittest.TestCase):
             "put the behavior under `Atom 후보 맵` or a concrete split proposal",
         ]:
             self.assertIn(atom_candidate_rule, text)
-        self.assertIn("stable frontmatter `atom_key` values such as `project-goal`, `project-glossary`, `common-context`", text)
+        self.assertIn("Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` files are legacy artifacts", text)
+        self.assertIn("do not use those paths as defaults for new project goal or glossary work", text)
         self.assertIn("one shared writer/reviewer quality standard", text)
         self.assertIn("atom candidate map use", text)
         self.assertIn("frontmatter `atom_key`", text)
@@ -376,6 +387,57 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("not fixed document types", text)
         self.assertIn("Do not accept a criteria document that only lists perspective names or domain names", text)
         self.assertNotIn("endpoint document", text)
+
+    def test_atomic_document_contract_defines_project_documents_as_non_atoms(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("Project Document Contract", text)
+        for project_doc in [
+            "<doc-root>/project/atomization-criteria.md",
+            "<doc-root>/project/project-goal.md",
+            "<doc-root>/project/project-glossary.md",
+            "<doc-root>/project/service-logic-inventory.md",
+            "<doc-root>/project/source-convention.md",
+        ]:
+            self.assertIn(project_doc, text)
+        self.assertIn("Project documents are non-atom documents", text)
+        self.assertIn("must not follow the `*-atom.md` path contract", text)
+        self.assertIn("must not require frontmatter `atom_key`", text)
+        self.assertIn("must not require AID values", text)
+        self.assertIn("must not use `graph_edges`", text)
+        self.assertIn("must not require the atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`", text)
+        self.assertIn("Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` are legacy project-document artifacts", text)
+        self.assertIn("propose a migration or update to `project/project-goal.md` and `project/project-glossary.md`", text)
+        self.assertIn("service or product purpose, target users or callers, success criteria, non-goals", text)
+        self.assertIn("config paths, baseline metadata paths, cache paths, reset notes, deletion notes, reviewer logs", text)
+        for glossary_field in [
+            "meaning",
+            "owning domain",
+            "actor/system action",
+            "source of truth",
+            "stored vs computed",
+            "related rules/status",
+            "aliases",
+            "forbidden conflations",
+            "uncertainty",
+        ]:
+            self.assertIn(glossary_field, text)
+        for inventory_field in [
+            "source identifiers",
+            "conditions/branches",
+            "validation/guard",
+            "state transition",
+            "persistence side effect",
+            "external call",
+            "error/recovery",
+            "basis",
+            "owning atom_key",
+            "related AID",
+            "judgment label",
+        ]:
+            self.assertIn(inventory_field, text)
+        self.assertIn("One-line behavior summaries are not enough for baseline readiness", text)
+        self.assertIn("runtime-impacting behavior without a related atom_key/AID or a coverage gap", text)
+        self.assertIn("Fail when a project document directly claims code is implemented, missing, buggy, matching, or out of scope", text)
 
     def test_atomic_document_contract_defines_source_convention_document_format(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -435,7 +497,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("one judgment label from `change-judgment-policy.md`", text)
         self.assertIn("Do not add top-level per-atom status fields", text)
         self.assertIn("lack of a `Gaps` item", text)
-        self.assertIn("non-goals, excluded behavior, and adjacent-domain boundaries", text)
+        self.assertIn("Approved project documents may provide context such as non-goals or terminology boundaries", text)
+        self.assertIn("domain context atoms must preserve excluded behavior and adjacent-domain boundaries", text)
+        self.assertIn("A service judgment still needs service logic atom content, source evidence, baseline metadata, and a controlled judgment label", text)
 
     def test_atomic_document_contract_requires_atom_line_ids(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -460,7 +524,8 @@ class DocsSkillTests(unittest.TestCase):
             "purely structural Markdown",
         ]:
             self.assertIn(excluded, text)
-        self.assertIn("criteria document at `project/atomization-criteria.md` is not an atom", text)
+        self.assertIn("Project documents such as `project/atomization-criteria.md`, `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md` are not atoms", text)
+        self.assertIn("not required to use AID values", text)
         self.assertIn("keep its existing AID", text)
         self.assertIn("category/domain-path move", text)
         self.assertIn("Category moves, file renames, path drift, and atom slug changes are not AID change reasons", text)
@@ -613,7 +678,7 @@ class DocsSkillTests(unittest.TestCase):
         ]:
             self.assertIn(evidence_source, text)
         self.assertIn("source-repeated business nouns", text)
-        self.assertIn("`project/project-glossary-atom.md`", text)
+        self.assertIn("`project/project-glossary.md`", text)
         self.assertIn("appropriate domain atom", text)
         self.assertIn("Do not document a derived concept while its parent business term is missing or underdefined", text)
         self.assertIn("Do not force admin, operator, or screen-centric language", text)
@@ -651,6 +716,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("rename/merge proposals", text)
         self.assertIn("source-baseline metadata updates and docs-root config writes", text)
         self.assertIn("Update the docs-root source commit baseline metadata only after confirmed docs writes", text)
+        self.assertIn("post-write review passes", text)
+        self.assertIn("judgment-ready scope", text)
+        self.assertIn("must not be used to claim a project-wide judgment-ready baseline", text)
         self.assertIn("core business terms that require glossary or domain atom coverage", text)
         self.assertIn("parent business terms missing or underdefined in the glossary", text)
         self.assertIn("Build a service logic inventory", text)
@@ -792,7 +860,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("then stop for user review after criteria-review PASS", text)
         self.assertIn("After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal`", text)
         for blocked_work in [
-            "project, common, or domain atom writing",
+            "project document writing",
+            "common or domain atom writing",
             "service logic inventory creation",
             "domain writer or reviewer subagent execution",
             "graph edge writing",
@@ -809,6 +878,7 @@ class DocsSkillTests(unittest.TestCase):
         ]:
             self.assertIn(objective_part, text)
         self.assertIn("If `create_goal` is unavailable or fails, do not start docs generation", text)
+        self.assertIn("project documents, common/domain atoms, service logic inventory", text)
         self.assertIn("domain writer/reviewer subagents", text)
         self.assertIn("Complete the Goal only after the accepted docs operation is actually complete", text)
         self.assertIn("waiting for user input, blocked by review FAIL", text)
@@ -854,6 +924,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Map every meaningful application, service, and domain logic item to an owning atom", text)
         self.assertIn("record a coverage gap with source evidence and `confirmation_needed`", text)
         self.assertIn("only lists source files, endpoints, controllers, service classes, or method names", text)
+        self.assertIn("A service logic inventory that only summarizes source files or behaviors in one line", text)
+        self.assertIn("not sufficient input for domain atom drafting, reviewer PASS, Goal completion, or baseline metadata update", text)
 
     def test_refresh_flow_requires_post_write_consistency_and_source_fact_review(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
@@ -868,6 +940,15 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("current accepted write scope, not as durable domain approval status", text)
         self.assertIn("accepted partial-scope review target", text)
         self.assertIn("complete project-wide code judgment baseline", text)
+        self.assertIn("The gate must also review project documents", text)
+        self.assertIn("project documents require or imitate atom-only structure", text)
+        self.assertIn("`project-goal.md` contains docs-operation metadata", text)
+        self.assertIn("`project-glossary.md` uses one-line-only term definitions", text)
+        self.assertIn("`project/service-logic-inventory.md` lacks behavior-level fields", text)
+        self.assertIn("`project/source-convention.md` records runtime-impacting conventions without related atom_key/AID", text)
+        self.assertIn("project documents directly assert code judgment labels without service logic atom evidence", text)
+        self.assertIn("Candidate or `needs_confirmation` domain output may remain a provisional review target", text)
+        self.assertIn("not project-wide judgment-ready", text)
         self.assertIn("Source Fact Fidelity Gate", text)
         self.assertIn("source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail", text)
         self.assertIn("Do not update source-baseline metadata, complete the Codex Goal, or present the docs as judgment-ready", text)
@@ -901,6 +982,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("whether the criteria document is draft or approved", text)
         self.assertIn("user-conversation criteria that must be recorded in the criteria document", text)
         self.assertIn("source exploration results that update the criteria document", text)
+        self.assertIn("project document creation, update, or legacy migration actions", text)
+        self.assertIn("`project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md`", text)
         self.assertIn("judgment labels for review findings", text)
         self.assertIn("matches_confirmed_intent", text)
         self.assertIn("unapproved_implemented_behavior", text)
@@ -911,6 +994,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("candidate owning atom key", text)
         self.assertIn("legacy slug-derived fallback migrations", text)
         self.assertIn("`target_key`/`target_path` consistency", text)
+        self.assertIn("judgment-ready partial scope or a project-wide judgment-ready baseline", text)
 
     def test_refresh_flow_rejects_generic_or_absence_based_judgment(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")

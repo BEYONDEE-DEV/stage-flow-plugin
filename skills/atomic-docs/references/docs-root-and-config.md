@@ -25,13 +25,13 @@ Required fields:
 {
   "docs_root": "path/to/documentation-submodule",
   "source_root": ".",
-  "baseline_metadata_path": "path/inside/docs-root/source-baseline.json"
+  "baseline_metadata_path": "source-baseline.json"
 }
 ```
 
 - `docs_root` is the selected documentation submodule root.
 - `source_root` is the source repository root used for diffs. It defaults to the parent repository root and may be overridden by configuration.
-- `baseline_metadata_path` points to the metadata file inside the docs submodule root that stores the last refreshed source-code commit hash.
+- `baseline_metadata_path` is a docs-root-relative path to the metadata file that stores the last refreshed source-code commit hash. The default is `source-baseline.json`; with `docs_root` set to `docs`, this resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`.
 
 ## Recovery Policy
 
