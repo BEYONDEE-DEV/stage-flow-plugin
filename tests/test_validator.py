@@ -348,6 +348,32 @@ class ValidatorThreeStageTests(unittest.TestCase):
         (stage_dir / "transition-risk-goal.md").write_text(self.transition_risk_goal_text(fingerprint), encoding="utf-8")
         (stage_dir / "transition-risk.md").write_text(self.transition_risk_text(), encoding="utf-8")
 
+    def write_question_scope_transition_review(
+        self,
+        root: Path,
+        transitions: tuple[str, ...] = ("큰방향 -> 주요결정",),
+        verdict: str = "PASS",
+        fingerprint: str | None = None,
+    ) -> None:
+        stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+        if fingerprint is None:
+            fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+        rows = "\n".join(
+            f"| {transition} | sha256:{fingerprint} | Clarification History, Resolved Decisions, Pending Clarifications, and question-backlog.md if present. | No remaining higher-scope questions for this transition. | question scope transition review subagent | {verdict} |"
+            for transition in transitions
+        )
+        (stage_dir / "question-scope-transition-review.md").write_text(
+            f"""# Question Scope Transition Review
+
+## Transition Checks
+
+| Transition | Definition Artifact Fingerprint | Evidence Reviewed | Remaining Higher-Scope Questions | Reviewer | Verdict |
+| --- | --- | --- | --- | --- | --- |
+{rows}
+""",
+            encoding="utf-8",
+        )
+
     @staticmethod
     def transition_risk_goal_text(fingerprint: str) -> str:
         return f"""# Transition Risk Goal
@@ -1353,6 +1379,10 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_question_scope_transition_review(
+                root,
+                transitions=("큰방향 -> 주요결정", "주요결정 -> 세부확인"),
+            )
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
@@ -1422,7 +1452,7 @@ Approved.
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Question Scope must be one of", result.stdout)
 
-    def test_pending_clarification_accepts_all_question_scopes(self) -> None:
+    def test_pending_clarification_rejects_mixed_question_scopes(self) -> None:
         with temp_project() as root:
             self.create_project(root)
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1440,10 +1470,109 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "definition")
             result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must use one Question Scope at a time", result.stdout)
+
+    def test_major_decision_pending_requires_question_scope_transition_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 주요결정 | Which behavior decision should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | This is a major service behavior decision. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-001 | Which top direction should definition capture? Options: immediate fix, reusable workflow guard. | User selected immediate fix. | no | N/A | REQ-001, SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("question-scope-transition-review.md", result.stdout)
+            self.assertIn("큰방향 -> 주요결정", result.stdout)
+
+    def test_major_decision_pending_rejects_failed_question_scope_transition_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 주요결정 | Which behavior decision should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | This is a major service behavior decision. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-001 | Which top direction should definition capture? Options: immediate fix, reusable workflow guard. | User selected immediate fix. | no | N/A | REQ-001, SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_question_scope_transition_review(root, verdict="FAIL")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Verdict must be PASS", result.stdout)
+
+    def test_major_decision_pending_rejects_stale_question_scope_transition_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 주요결정 | Which behavior decision should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | This is a major service behavior decision. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-001 | Which top direction should definition capture? Options: immediate fix, reusable workflow guard. | User selected immediate fix. | no | N/A | REQ-001, SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_question_scope_transition_review(root, fingerprint="0" * 64)
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("must reference current definition fingerprint", result.stdout)
+
+    def test_major_decision_pending_accepts_passed_question_scope_transition_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 주요결정 | Which behavior decision should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | This is a major service behavior decision. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-001 | Which top direction should definition capture? Options: immediate fix, reusable workflow guard. | User selected immediate fix. | no | N/A | REQ-001, SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_question_scope_transition_review(root)
+            result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
-            self.assertIn("질문 범위: 큰방향", result.stdout)
             self.assertIn("질문 범위: 주요결정", result.stdout)
-            self.assertIn("질문 범위: 세부확인", result.stdout)
+
+    def test_detail_check_pending_requires_both_question_scope_transition_reviews(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 세부확인 | Which acceptance detail should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | This refines the accepted behavior. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-001 | Which top direction should definition capture? Options: immediate fix, reusable workflow guard. | User selected immediate fix. | no | N/A | REQ-001, SP-001 |\n"
+                    "| CLAR-002 | Which behavior decision should definition capture? Options: preserve current flow, adjust policy flow. | User selected preserve current flow. | no | N/A | SP-001 |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_question_scope_transition_review(root, transitions=("큰방향 -> 주요결정",))
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("주요결정 -> 세부확인", result.stdout)
 
     def test_pending_clarification_rejects_old_question_depth_column(self) -> None:
         with temp_project() as root:

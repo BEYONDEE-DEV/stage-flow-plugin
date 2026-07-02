@@ -144,6 +144,15 @@ def is_question_generation_subagent(payload: dict[str, Any]) -> bool:
     )
 
 
+def is_question_scope_transition_review_subagent(payload: dict[str, Any]) -> bool:
+    text = subagent_text(payload)
+    return (
+        ("question" in text or "clarification" in text or "scope" in text or "질문" in text)
+        and ("transition" in text or "depth" in text or "전환" in text)
+        and ("review" in text or "audit" in text or "검토" in text)
+    )
+
+
 def resolve_root(args: argparse.Namespace, payload: dict[str, Any]) -> Path:
     root = args.root or payload.get("cwd") or "."
     return Path(str(root)).resolve()
@@ -585,10 +594,23 @@ def is_question_backlog_write(payload: dict[str, Any]) -> bool:
     return "question-backlog.md" in normalize_tool_path(command).lower()
 
 
+def is_question_scope_transition_review_write(payload: dict[str, Any]) -> bool:
+    tool_input = extract_tool_input(payload)
+    paths = payload_paths(tool_input)
+    if paths:
+        return all(
+            normalize_tool_path(path).lower().endswith("/01-definition/question-scope-transition-review.md")
+            for path in paths
+        )
+    command = str(tool_input.get("command") or "")
+    return "question-scope-transition-review.md" in normalize_tool_path(command).lower()
+
+
 def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
     allowed_suffixes = (
         "/01-definition/definition.md",
         "/01-definition/question-backlog.md",
+        "/01-definition/question-scope-transition-review.md",
         "/01-definition/transition-risk-goal.md",
         "/01-definition/transition-risk.md",
     )
@@ -604,6 +626,7 @@ def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
         (
             "01-definition/definition.md" in command
             or "01-definition/question-backlog.md" in command
+            or "01-definition/question-scope-transition-review.md" in command
             or "01-definition/transition-risk-goal.md" in command
             or "01-definition/transition-risk.md" in command
         )
@@ -634,7 +657,14 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
         if is_question_backlog_write(payload):
             result["question_backlog_write"] = True
             return result
-        block_result(result, "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates")
+        if is_question_scope_transition_review_write(payload):
+            result["question_scope_transition_review_write"] = True
+            return result
+        block_result(
+            result,
+            "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates "
+            "or `01-definition/question-scope-transition-review.md` scope transition reviews",
+        )
         return result
 
     if turn.get("status") == "AWAITING_USER" and is_stageflow_artifact_write(payload):
@@ -690,8 +720,15 @@ def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dic
         if is_question_generation_subagent(payload):
             result["status"] = "QUESTION_BACKLOG_SUBAGENT_ALLOWED"
             result["question_backlog_allowed"] = True
+        elif is_question_scope_transition_review_subagent(payload):
+            result["status"] = "QUESTION_SCOPE_TRANSITION_REVIEW_SUBAGENT_ALLOWED"
+            result["question_scope_transition_review_allowed"] = True
         else:
-            block_result(result, "AWAITING_USER allows only question-generation subagents for `01-definition/question-backlog.md` candidates")
+            block_result(
+                result,
+                "AWAITING_USER allows only question-generation subagents for `01-definition/question-backlog.md` "
+                "or question scope transition review subagents for `01-definition/question-scope-transition-review.md`",
+            )
     write_turn_state(root, payload, result)
     return result
 

@@ -907,6 +907,24 @@ Approved.
             self.assertEqual(result["status"], "QUESTION_BACKLOG_SUBAGENT_ALLOWED")
             self.assertTrue(result["question_backlog_allowed"])
 
+    def test_awaiting_user_allows_question_scope_transition_review_subagent(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-scope-review",
+                    "role": "question scope transition review subagent",
+                    "task": "Review whether 큰방향 questions are exhausted before moving to 주요결정",
+                },
+            )
+            self.assertEqual(result["status"], "QUESTION_SCOPE_TRANSITION_REVIEW_SUBAGENT_ALLOWED")
+            self.assertTrue(result["question_scope_transition_review_allowed"])
+
     def test_awaiting_user_blocks_non_question_generation_subagent(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -952,6 +970,25 @@ Approved.
             )
             self.assertEqual(blocked["status"], "BLOCKED")
             self.assertIn("question-backlog.md", "\n".join(blocked["warnings"]))
+
+    def test_awaiting_user_subagent_may_write_question_scope_transition_review(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-scope-review",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/question-scope-transition-review.md"
+                    },
+                },
+            )
+            self.assertEqual(allowed["_wire_output"], {})
 
     def test_awaiting_user_pending_answer_allows_main_definition_write(self) -> None:
         with temp_project() as root:

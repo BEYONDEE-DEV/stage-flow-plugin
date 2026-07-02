@@ -301,6 +301,19 @@ USER_STOP_SIGNAL_RE = re.compile(
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
 OPTION_LABEL_RE = re.compile(r"^(?:Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
 QUESTION_SCOPES = ("큰방향", "주요결정", "세부확인")
+QUESTION_SCOPE_ORDER = {scope: index for index, scope in enumerate(QUESTION_SCOPES)}
+QUESTION_SCOPE_TRANSITION_LABELS = {
+    ("큰방향", "주요결정"): "큰방향 -> 주요결정",
+    ("주요결정", "세부확인"): "주요결정 -> 세부확인",
+}
+QUESTION_SCOPE_TRANSITION_REVIEW_COLUMNS = (
+    "Transition",
+    "Definition Artifact Fingerprint",
+    "Evidence Reviewed",
+    "Remaining Higher-Scope Questions",
+    "Reviewer",
+    "Verdict",
+)
 TRANSITION_RISK_CATEGORIES = {
     "scope",
     "acceptance",
@@ -581,6 +594,8 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
         artifact_fingerprint = None
 
     if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
+        validate_question_scope_transition_review(stage_dir, artifact_path, artifact_text, artifact_fingerprint, errors)
+    if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
         validate_transition_risk_gate(stage_dir, artifact_text, artifact_fingerprint, errors, bool(pending_messages))
     if stage.phase != "definition":
         validate_goal(stage, goal_path, artifact_fingerprint, errors, bool(pending_messages))
@@ -842,7 +857,120 @@ def pending_clarification_messages(stage: Stage, text: str, path: Path, errors: 
         errors.append(
             f"`{display_path(path)}` Pending Clarifications must ask no more than five active questions per batch before the user explicitly stops"
         )
+    validate_pending_clarification_scope_batch(path, active_pending_rows(text), errors)
     return messages
+
+
+def validate_pending_clarification_scope_batch(path: Path, rows: list[dict[str, str]], errors: list[str]) -> None:
+    valid_scopes = [
+        row.get("Question Scope", "").strip()
+        for row in rows
+        if row.get("Question Scope", "").strip() in QUESTION_SCOPE_ORDER
+    ]
+    if len(set(valid_scopes)) <= 1:
+        return
+    ordered_scopes = sorted(set(valid_scopes), key=lambda scope: QUESTION_SCOPE_ORDER[scope])
+    errors.append(
+        f"`{display_path(path)}` Pending Clarifications active batch must use one Question Scope at a time; "
+        f"finish higher-scope questions before adding lower-scope questions ({', '.join(ordered_scopes)})"
+    )
+
+
+def required_question_scope_transitions(rows: list[dict[str, str]]) -> list[tuple[str, str]]:
+    ranks = [
+        QUESTION_SCOPE_ORDER[scope]
+        for row in rows
+        for scope in [row.get("Question Scope", "").strip()]
+        if scope in QUESTION_SCOPE_ORDER
+    ]
+    if not ranks:
+        return []
+    max_rank = max(ranks)
+    required: list[tuple[str, str]] = []
+    if max_rank >= QUESTION_SCOPE_ORDER["주요결정"]:
+        required.append(("큰방향", "주요결정"))
+    if max_rank >= QUESTION_SCOPE_ORDER["세부확인"]:
+        required.append(("주요결정", "세부확인"))
+    return required
+
+
+def validate_question_scope_transition_review(
+    stage_dir: Path,
+    artifact_path: Path,
+    definition_text: str,
+    definition_fingerprint: str,
+    errors: list[str],
+) -> None:
+    active_rows = active_pending_rows(definition_text)
+    required_transitions = required_question_scope_transitions(active_rows)
+    if not required_transitions:
+        return
+
+    review_path = stage_dir / "question-scope-transition-review.md"
+    if not review_path.is_file():
+        for transition in required_transitions:
+            label = QUESTION_SCOPE_TRANSITION_LABELS[transition]
+            errors.append(
+                f"`{display_path(artifact_path)}` pending `{transition[1]}` questions require PASS in "
+                f"`01-definition/question-scope-transition-review.md` for `{label}`"
+            )
+        return
+    review_text = read_required_text(review_path, errors)
+    if review_text is None:
+        return
+    if "# Question Scope Transition Review" not in review_text:
+        errors.append(f"`{display_path(review_path)}` must include `# Question Scope Transition Review`")
+    validate_table_columns(
+        review_path,
+        review_text,
+        TableRequirement("Transition Checks", QUESTION_SCOPE_TRANSITION_REVIEW_COLUMNS),
+        errors,
+    )
+
+    table = parse_first_markdown_table(section_text(review_text, "## Transition Checks"))
+    if not table.rows:
+        errors.append(f"`{display_path(review_path)}` Transition Checks must include required question scope transition rows")
+        return
+
+    allowed_labels = set(QUESTION_SCOPE_TRANSITION_LABELS.values())
+    rows_by_transition: dict[str, dict[str, str]] = {}
+    for row in table.rows:
+        transition = normalized_cell(row.get("Transition", ""))
+        display_transition = transition or "<unknown>"
+        if transition not in allowed_labels:
+            errors.append(f"`{display_path(review_path)}` Transition Checks row `{display_transition}` uses an unknown transition")
+            continue
+        if transition in rows_by_transition:
+            errors.append(f"`{display_path(review_path)}` Transition Checks repeats transition `{transition}`")
+        rows_by_transition[transition] = row
+
+        for column in (
+            "Definition Artifact Fingerprint",
+            "Evidence Reviewed",
+            "Remaining Higher-Scope Questions",
+            "Reviewer",
+        ):
+            if is_placeholder_cell(row.get(column, "")):
+                errors.append(f"`{display_path(review_path)}` Transition Checks row `{transition}` must include substantive `{column}`")
+
+        expected_fingerprint = f"sha256:{definition_fingerprint}"
+        if expected_fingerprint not in row.get("Definition Artifact Fingerprint", ""):
+            errors.append(
+                f"`{display_path(review_path)}` Transition Checks row `{transition}` must reference current "
+                f"definition fingerprint `{expected_fingerprint}`"
+            )
+
+        verdict = row.get("Verdict", "").strip()
+        if verdict != "PASS":
+            errors.append(f"`{display_path(review_path)}` Transition Checks row `{transition}` Verdict must be PASS before lower-scope questions are pending")
+
+    for transition in required_transitions:
+        label = QUESTION_SCOPE_TRANSITION_LABELS[transition]
+        if label not in rows_by_transition:
+            errors.append(
+                f"`{display_path(artifact_path)}` pending `{transition[1]}` questions require PASS in "
+                f"`01-definition/question-scope-transition-review.md` for `{label}`"
+            )
 
 
 def split_option_items(text: str) -> list[str]:
@@ -2054,6 +2182,7 @@ def render_stage_tree() -> str:
         if stage.phase == "definition":
             parts.extend([
                 f"`{stage.folder}/{stage.artifact}`",
+                f"`{stage.folder}/question-scope-transition-review.md` (before lower-scope pending questions)",
                 f"`{stage.folder}/transition-risk-goal.md` (after stop signal)",
                 f"`{stage.folder}/transition-risk.md` (after stop signal)",
             ])

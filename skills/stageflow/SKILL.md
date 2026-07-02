@@ -22,6 +22,7 @@ Definition contains these required files, plus a conditional transition-risk pai
   definition.md
   transition-risk-goal.md  (required after user stop signal before definition approval)
   transition-risk.md       (required after user stop signal before definition approval)
+  question-scope-transition-review.md  (required before lower-scope pending questions)
   review/final.md
   review/subagents/001-full-bounded-review.md
   approval.md
@@ -76,7 +77,8 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 - Treat implementation-plan transition stop signals as user stop signals, not as options inside pending clarification questions or `Transition Option` cells. Use the exact stop-signal examples from the definition writing rules.
 - Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:` and `Option 2:`; `Option 3:` and higher are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
 - Classify each pending question by `Question Scope` using the exact labels from the definition writing rules. Start with top-direction batches, keep asking top-direction questions while top-direction ambiguities remain, and move to major-decision or detail-check questions only when clarification history or resolved decisions show the previous question scope has been sufficiently covered.
-- During `AWAITING_USER`, the main response answers follow-ups, restates pending questions/options, and stops, while a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates in parallel. Backlog candidates are not final pending questions until the main agent evaluates the user answer impact and promotes, revises, or discards them.
+- Before moving from `큰방향` pending questions to `주요결정`, or from `주요결정` pending questions to `세부확인`, run a question scope transition review subagent. Record the PASS result in `01-definition/question-scope-transition-review.md` with the current `definition.md` fingerprint before showing the lower-scope pending batch. If the subagent finds remaining higher-scope questions, keep asking that higher scope instead of moving deeper.
+- During `AWAITING_USER`, the main response answers follow-ups, restates pending questions/options, and stops, while a question-generation subagent may prepare optional `01-definition/question-backlog.md` candidates in parallel. A question scope transition review subagent may write only `01-definition/question-scope-transition-review.md` when the main agent is preparing to move to a lower question scope. Backlog candidates are not final pending questions until the main agent evaluates the user answer impact and promotes, revises, or discards them.
 
 ## Definition Question Scope Criteria
 

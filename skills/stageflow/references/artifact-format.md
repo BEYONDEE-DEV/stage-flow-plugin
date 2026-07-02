@@ -7,6 +7,7 @@
 - [Stage Writing And Review Rule Files](#stage-writing-and-review-rule-files)
 - [Stage Review Agent Prompt Files](#stage-review-agent-prompt-files)
 - [Optional Definition Question Backlog](#optional-definition-question-backlog)
+- [Definition Question Scope Transition Review](#definition-question-scope-transition-review)
 - [Definition Transition Risk Gate](#definition-transition-risk-gate)
 - [goal.md](#goalmd)
 - [review folder](#review-folder)
@@ -64,6 +65,7 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
   01-definition/
     definition.md
     question-backlog.md       (optional helper)
+    question-scope-transition-review.md  (required before lower-scope pending questions)
     transition-risk-goal.md   (required after user stop signal before definition approval)
     transition-risk.md        (required after user stop signal before definition approval)
     review/
@@ -121,6 +123,22 @@ Use `references/language-policy.md` whenever starter templates, review evidence,
 Definition artifacts include `## Purpose And Intent` as required first-class purpose coverage; confidence must be `confirmed`, `inferred`, or `unknown`, and inferred/unknown purpose requires a purpose-focused 큰방향 pending question.
 
 `01-definition/question-backlog.md` may be created by a question-generation subagent in parallel while definition is waiting for user clarification. It is a helper artifact only: it does not replace `definition.md`, `review/final.md`, `approval.md`, or the current `Pending Clarifications`, and it is not required for validation. Use it to record candidate next questions, question scope (`큰방향`, `주요결정`, `세부확인`), labeled options, affected definition areas, and invalidation triggers before the main agent decides whether to promote, revise, or discard them after the user answer.
+
+## Definition Question Scope Transition Review
+
+`01-definition/question-scope-transition-review.md` is written by a question scope transition review subagent before lower-scope pending questions are shown. It is required when the active `Pending Clarifications` batch contains `주요결정` or `세부확인`. The file records whether higher-scope questions are truly exhausted, cites the current `definition.md` fingerprint, and uses `PASS` only when the subagent finds no remaining higher-scope questions.
+
+Required table:
+
+```md
+# Question Scope Transition Review
+
+## Transition Checks
+
+| Transition | Definition Artifact Fingerprint | Evidence Reviewed | Remaining Higher-Scope Questions | Reviewer | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 큰방향 -> 주요결정 | sha256:<definition-fingerprint> | Reviewed definition-stage evidence. | 남은 큰방향 질문 없음: 근거를 기록한다. | question scope transition review subagent | PASS |
+```
 
 ## Definition Transition Risk Gate
 
