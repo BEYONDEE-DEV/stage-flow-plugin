@@ -6,6 +6,7 @@
 - [Request Tree](#request-tree)
 - [Stage Writing And Review Rule Files](#stage-writing-and-review-rule-files)
 - [Stage Review Agent Prompt Files](#stage-review-agent-prompt-files)
+- [Definition Store Hot Path](#definition-store-hot-path)
 - [Optional Definition Question Backlog](#optional-definition-question-backlog)
 - [Definition Question Scope Transition Review](#definition-question-scope-transition-review)
 - [Definition Transition Risk Gate](#definition-transition-risk-gate)
@@ -64,6 +65,13 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
   state.json
   01-definition/
     definition.md
+    definition-store/         (optional hot-path store)
+      working-set.json
+      decision-ledger.jsonl
+      trace-index.json
+      sync-state.json
+      impact-candidates.json      (optional helper)
+      targeted-sync-plan.json     (optional helper)
     question-backlog.md       (optional helper)
     question-scope-transition-review.md  (required before lower-scope pending questions)
     transition-risk-goal.md   (required after user stop signal before definition approval)
@@ -117,6 +125,12 @@ Each prompt file owns the review mission, allowed inputs, forbidden actions, rev
 
 Use `references/intent-fidelity.md` when stage artifacts involve user wording that could be narrowed into unapproved UX, route, screen, state, data, API, or persistence behavior.
 Use `references/language-policy.md` whenever starter templates, review evidence, or user-facing Stageflow workflow messages are written so template filler such as `Describe...`, `No pending...`, or `Record...` is replaced with request-specific prose in the selected language.
+
+## Definition Store Hot Path
+
+`01-definition/definition-store/` is optional and backward compatible. When present, it is the active clarification hot path while `definition.md` remains the approval-ready snapshot.
+
+Required store files are `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`. Helper subagents may prepare `impact-candidates.json` and `targeted-sync-plan.json` during `AWAITING_USER`. Before review or approval, `sync-state.json` must show the current `definition.md` fingerprint and no unsynced medium/high-risk decisions.
 
 ## Optional Definition Question Backlog
 

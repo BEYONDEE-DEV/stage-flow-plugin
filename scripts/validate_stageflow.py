@@ -314,6 +314,19 @@ QUESTION_SCOPE_TRANSITION_REVIEW_COLUMNS = (
     "Reviewer",
     "Verdict",
 )
+RISK_LEVELS = {"low", "medium", "high"}
+SYNC_STATUSES = {
+    "pending",
+    "working-set-only",
+    "targeted-synced",
+    "full-synced",
+    "synced",
+}
+TARGETED_SYNC_STATUSES = {"targeted-synced", "full-synced", "synced"}
+FULL_SYNC_STATUSES = {"full-synced", "synced"}
+PENDING_ID_RE = re.compile(r"\bPENDING-\d+\b", re.IGNORECASE)
+DEC_ID_RE = re.compile(r"\bDEC-\d+\b", re.IGNORECASE)
+DEFINITION_STORE_AFFECTED_ID_RE = re.compile(r"\b(?:REQ|SP|DFLOW|DEC|INTENT)-\d+\b", re.IGNORECASE)
 TRANSITION_RISK_CATEGORIES = {
     "scope",
     "acceptance",
@@ -594,6 +607,7 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
         artifact_fingerprint = None
 
     if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
+        validate_definition_store(stage_dir, artifact_path, artifact_text, artifact_fingerprint, bool(pending_messages), errors)
         validate_question_scope_transition_review(stage_dir, artifact_path, artifact_text, artifact_fingerprint, errors)
     if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
         validate_transition_risk_gate(stage_dir, artifact_text, artifact_fingerprint, errors, bool(pending_messages))
@@ -874,6 +888,197 @@ def validate_pending_clarification_scope_batch(path: Path, rows: list[dict[str, 
         f"`{display_path(path)}` Pending Clarifications active batch must use one Question Scope at a time; "
         f"finish higher-scope questions before adding lower-scope questions ({', '.join(ordered_scopes)})"
     )
+
+
+def json_string(data: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str):
+            return value.strip()
+    return ""
+
+
+def json_list(data: dict[str, Any], *keys: str) -> list[Any]:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def uppercase_json_ids(pattern: re.Pattern[str], values: list[Any]) -> set[str]:
+    ids: set[str] = set()
+    for value in values:
+        if isinstance(value, str) and pattern.fullmatch(value.strip()):
+            ids.add(value.strip().upper())
+    return ids
+
+
+def read_store_json(path: Path, errors: list[str]) -> dict[str, Any] | None:
+    if not path.is_file():
+        errors.append(f"missing `{display_path(path)}`")
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        errors.append(f"`{display_path(path)}` is invalid JSON: {exc}")
+        return None
+    if not isinstance(value, dict):
+        errors.append(f"`{display_path(path)}` must contain a JSON object")
+        return None
+    return value
+
+
+def read_decision_ledger(path: Path, errors: list[str]) -> list[dict[str, Any]]:
+    if not path.is_file():
+        errors.append(f"missing `{display_path(path)}`")
+        return []
+    rows: list[dict[str, Any]] = []
+    for index, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            errors.append(f"`{display_path(path)}` line {index} is invalid JSON: {exc}")
+            continue
+        if not isinstance(value, dict):
+            errors.append(f"`{display_path(path)}` line {index} must contain a JSON object")
+            continue
+        rows.append(value)
+    return rows
+
+
+def trace_index_entries(trace_index: dict[str, Any], path: Path, errors: list[str]) -> dict[tuple[str, str], set[str]]:
+    entries: dict[tuple[str, str], set[str]] = {}
+
+    def add_entry(pending_id: str, decision_id: str, affected_values: list[Any], label: str) -> None:
+        pending = pending_id.strip().upper()
+        decision = decision_id.strip().upper()
+        if not fullmatch_id(PENDING_ID_RE, pending):
+            errors.append(f"`{display_path(path)}` trace `{label}` must include a `PENDING-*` pending id")
+            return
+        if not fullmatch_id(DEC_ID_RE, decision):
+            errors.append(f"`{display_path(path)}` trace `{label}` must include a `DEC-*` decision id")
+            return
+        affected = uppercase_json_ids(DEFINITION_STORE_AFFECTED_ID_RE, affected_values)
+        if not affected:
+            errors.append(f"`{display_path(path)}` trace `{label}` must include non-empty affected IDs")
+        entries[(pending, decision)] = affected
+
+    pending_map = trace_index.get("pending")
+    if isinstance(pending_map, dict):
+        for pending_id, item in pending_map.items():
+            if not isinstance(item, dict):
+                errors.append(f"`{display_path(path)}` pending trace `{pending_id}` must be an object")
+                continue
+            decision_id = json_string(item, "decision_id", "decisionId", "decision")
+            add_entry(str(pending_id), decision_id, json_list(item, "affected_ids", "affectedIds", "affected"), str(pending_id))
+
+    traces = trace_index.get("traces")
+    if isinstance(traces, list):
+        for index, item in enumerate(traces, start=1):
+            if not isinstance(item, dict):
+                errors.append(f"`{display_path(path)}` traces[{index}] must be an object")
+                continue
+            pending_id = json_string(item, "pending_id", "pendingId", "pending")
+            decision_id = json_string(item, "decision_id", "decisionId", "decision")
+            add_entry(pending_id, decision_id, json_list(item, "affected_ids", "affectedIds", "affected"), f"traces[{index}]")
+
+    return entries
+
+
+def validate_definition_store(
+    stage_dir: Path,
+    artifact_path: Path,
+    definition_text: str,
+    definition_fingerprint: str,
+    has_pending_clarifications: bool,
+    errors: list[str],
+) -> None:
+    store_dir = stage_dir / "definition-store"
+    if not store_dir.exists():
+        return
+    if not store_dir.is_dir():
+        errors.append(f"`{display_path(store_dir)}` must be a directory")
+        return
+
+    working_set_path = store_dir / "working-set.json"
+    decision_ledger_path = store_dir / "decision-ledger.jsonl"
+    trace_index_path = store_dir / "trace-index.json"
+    sync_state_path = store_dir / "sync-state.json"
+
+    working_set = read_store_json(working_set_path, errors)
+    trace_index = read_store_json(trace_index_path, errors)
+    sync_state = read_store_json(sync_state_path, errors)
+    ledger_rows = read_decision_ledger(decision_ledger_path, errors)
+    if working_set is None or trace_index is None or sync_state is None:
+        return
+
+    active_pending_ids = {row.get("ID", "").strip().upper() for row in active_pending_rows(definition_text) if row.get("ID", "").strip()}
+    store_pending_ids = uppercase_json_ids(PENDING_ID_RE, json_list(working_set, "active_pending_ids", "activePendingIds"))
+    if store_pending_ids != active_pending_ids:
+        errors.append(
+            f"`{display_path(working_set_path)}` active pending IDs must match definition.md Pending Clarifications "
+            f"({', '.join(sorted(active_pending_ids)) or 'none'})"
+        )
+
+    current_scope = json_string(working_set, "current_scope", "currentScope")
+    active_scopes = {row.get("Question Scope", "").strip() for row in active_pending_rows(definition_text) if row.get("Question Scope", "").strip()}
+    if current_scope and current_scope not in QUESTION_SCOPES:
+        errors.append(f"`{display_path(working_set_path)}` current_scope must be one of {', '.join(QUESTION_SCOPES)}")
+    if active_scopes and current_scope and current_scope not in active_scopes:
+        errors.append(f"`{display_path(working_set_path)}` current_scope must match active Pending Clarifications scope")
+
+    working_risk = json_string(working_set, "risk_level", "riskLevel")
+    if working_risk and working_risk not in RISK_LEVELS:
+        errors.append(f"`{display_path(working_set_path)}` risk_level must be one of {', '.join(sorted(RISK_LEVELS))}")
+
+    trace_entries = trace_index_entries(trace_index, trace_index_path, errors)
+    sync_entries = sync_state.get("decision_sync")
+    if not isinstance(sync_entries, dict):
+        errors.append(f"`{display_path(sync_state_path)}` must include object `decision_sync`")
+        sync_entries = {}
+
+    snapshot_fingerprint = json_string(sync_state, "definition_fingerprint", "definitionFingerprint", "snapshot_fingerprint", "snapshotFingerprint")
+    expected_fingerprint = f"sha256:{definition_fingerprint}"
+    if not snapshot_fingerprint:
+        errors.append(f"`{display_path(sync_state_path)}` must include current definition snapshot fingerprint")
+    elif snapshot_fingerprint != expected_fingerprint and not has_pending_clarifications:
+        errors.append(f"`{display_path(sync_state_path)}` snapshot fingerprint must match current definition.md `{expected_fingerprint}` before review or approval")
+
+    for row in ledger_rows:
+        decision_id = json_string(row, "decision_id", "decisionId", "id").upper()
+        pending_id = json_string(row, "source_pending_id", "sourcePendingId", "pending_id", "pendingId").upper()
+        affected_ids = uppercase_json_ids(DEFINITION_STORE_AFFECTED_ID_RE, json_list(row, "affected_ids", "affectedIds", "affected"))
+        risk_level = json_string(row, "risk_level", "riskLevel")
+        if not fullmatch_id(DEC_ID_RE, decision_id):
+            errors.append(f"`{display_path(decision_ledger_path)}` decision row must include `DEC-*` decision_id")
+            continue
+        if not fullmatch_id(PENDING_ID_RE, pending_id):
+            errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` must include `PENDING-*` source_pending_id")
+        if not affected_ids:
+            errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` must include non-empty affected_ids")
+        if risk_level not in RISK_LEVELS:
+            errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` risk_level must be one of {', '.join(sorted(RISK_LEVELS))}")
+
+        trace_affected = trace_entries.get((pending_id, decision_id), set())
+        if not trace_affected:
+            errors.append(f"`{display_path(trace_index_path)}` must include trace for `{pending_id}` -> `{decision_id}`")
+        for affected_id in sorted(affected_ids - trace_affected):
+            errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` affected ID `{affected_id}` must appear in trace-index")
+
+        sync_entry = sync_entries.get(decision_id)
+        if not isinstance(sync_entry, dict):
+            errors.append(f"`{display_path(sync_state_path)}` decision_sync must include `{decision_id}`")
+            continue
+        sync_status = json_string(sync_entry, "status")
+        if sync_status not in SYNC_STATUSES:
+            errors.append(f"`{display_path(sync_state_path)}` decision `{decision_id}` status must be one of {', '.join(sorted(SYNC_STATUSES))}")
+        if risk_level == "medium" and not has_pending_clarifications and sync_status not in TARGETED_SYNC_STATUSES:
+            errors.append(f"`{display_path(sync_state_path)}` medium-risk decision `{decision_id}` requires targeted sync before review or approval")
+        if risk_level == "high" and sync_status not in FULL_SYNC_STATUSES:
+            errors.append(f"`{display_path(sync_state_path)}` high-risk decision `{decision_id}` requires full consistency sync before continuing")
 
 
 def required_question_scope_transitions(rows: list[dict[str, str]]) -> list[tuple[str, str]]:

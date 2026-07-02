@@ -925,6 +925,24 @@ Approved.
             self.assertEqual(result["status"], "QUESTION_SCOPE_TRANSITION_REVIEW_SUBAGENT_ALLOWED")
             self.assertTrue(result["question_scope_transition_review_allowed"])
 
+    def test_awaiting_user_allows_definition_store_helper_subagent(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-impact",
+                    "role": "definition-store impact candidate helper subagent",
+                    "task": "Prepare impact candidates for definition-store/impact-candidates.json",
+                },
+            )
+            self.assertEqual(result["status"], "DEFINITION_STORE_HELPER_SUBAGENT_ALLOWED")
+            self.assertTrue(result["definition_store_helper_allowed"])
+
     def test_awaiting_user_blocks_non_question_generation_subagent(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -989,6 +1007,40 @@ Approved.
                 },
             )
             self.assertEqual(allowed["_wire_output"], {})
+
+    def test_awaiting_user_subagent_may_write_definition_store_json_helper(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-impact",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/impact-candidates.json"
+                    },
+                },
+            )
+            self.assertEqual(allowed["_wire_output"], {})
+            blocked = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-impact",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/decision-ledger.jsonl"
+                    },
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(blocked["status"], "BLOCKED")
+            self.assertIn("definition-store/*.json", "\n".join(blocked["warnings"]))
 
     def test_awaiting_user_pending_answer_allows_main_definition_write(self) -> None:
         with temp_project() as root:

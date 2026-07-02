@@ -153,6 +153,14 @@ def is_question_scope_transition_review_subagent(payload: dict[str, Any]) -> boo
     )
 
 
+def is_definition_store_helper_subagent(payload: dict[str, Any]) -> bool:
+    text = subagent_text(payload)
+    return (
+        ("definition-store" in text or "impact" in text or "targeted sync" in text or "trace-index" in text)
+        and ("candidate" in text or "plan" in text or "helper" in text or "후보" in text or "계획" in text)
+    )
+
+
 def resolve_root(args: argparse.Namespace, payload: dict[str, Any]) -> Path:
     root = args.root or payload.get("cwd") or "."
     return Path(str(root)).resolve()
@@ -424,7 +432,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         severity = "info"
         action = "handle_awaiting_user_clarification"
         instruction = (
-            "The current Stageflow stage has an active pending clarification batch. Interpret the latest user message semantically against the pending questions: reflect answers into definition.md and create the next pending batch, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. Do not review, approve, advance, or implement while AWAITING_USER remains active."
+            "The current Stageflow stage has an active pending clarification batch. Interpret the latest user message semantically against the pending questions: record answers in definition-store when present or definition.md in legacy mode, create the next pending batch after the required risk check, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. Do not review, approve, advance, or implement while AWAITING_USER remains active."
         )
     else:
         status = "WARNING"
@@ -606,6 +614,16 @@ def is_question_scope_transition_review_write(payload: dict[str, Any]) -> bool:
     return "question-scope-transition-review.md" in normalize_tool_path(command).lower()
 
 
+def is_definition_store_json_write(payload: dict[str, Any]) -> bool:
+    tool_input = extract_tool_input(payload)
+    paths = payload_paths(tool_input)
+    if paths:
+        normalized_paths = [normalize_tool_path(path).lower() for path in paths]
+        return all("/01-definition/definition-store/" in path and path.endswith(".json") for path in normalized_paths)
+    command = normalize_tool_path(str(tool_input.get("command") or "")).lower()
+    return "/01-definition/definition-store/" in command and ".json" in command
+
+
 def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
     allowed_suffixes = (
         "/01-definition/definition.md",
@@ -618,7 +636,11 @@ def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
     paths = payload_paths(tool_input)
     if paths:
         normalized_paths = [normalize_tool_path(path).lower() for path in paths]
-        return all(any(path.endswith(suffix) for suffix in allowed_suffixes) for path in normalized_paths)
+        return all(
+            any(path.endswith(suffix) for suffix in allowed_suffixes)
+            or ("/01-definition/definition-store/" in path and (path.endswith(".json") or path.endswith(".jsonl")))
+            for path in normalized_paths
+        )
     command = normalize_tool_path(str(tool_input.get("command") or "")).lower()
     if not command:
         return False
@@ -627,6 +649,7 @@ def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
             "01-definition/definition.md" in command
             or "01-definition/question-backlog.md" in command
             or "01-definition/question-scope-transition-review.md" in command
+            or "01-definition/definition-store/" in command
             or "01-definition/transition-risk-goal.md" in command
             or "01-definition/transition-risk.md" in command
         )
@@ -660,10 +683,14 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
         if is_question_scope_transition_review_write(payload):
             result["question_scope_transition_review_write"] = True
             return result
+        if is_definition_store_json_write(payload):
+            result["definition_store_helper_write"] = True
+            return result
         block_result(
             result,
             "AWAITING_USER subagents may only write `01-definition/question-backlog.md` helper candidates "
-            "or `01-definition/question-scope-transition-review.md` scope transition reviews",
+            "`01-definition/question-scope-transition-review.md` scope transition reviews, "
+            "or `01-definition/definition-store/*.json` helper files",
         )
         return result
 
@@ -671,7 +698,12 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
         if is_awaiting_user_definition_write(payload):
             result["awaiting_user_definition_write"] = True
             return result
-        block_result(result, "AWAITING_USER turns may only write `01-definition/definition.md`, `01-definition/question-backlog.md`, `01-definition/transition-risk-goal.md`, or `01-definition/transition-risk.md` before clarification is resolved")
+        block_result(
+            result,
+            "AWAITING_USER turns may only write `01-definition/definition.md`, `01-definition/definition-store/*`, "
+            "`01-definition/question-backlog.md`, `01-definition/question-scope-transition-review.md`, "
+            "`01-definition/transition-risk-goal.md`, or `01-definition/transition-risk.md` before clarification is resolved",
+        )
         return result
 
     if is_stageflow_artifact_write(payload):
@@ -723,11 +755,15 @@ def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dic
         elif is_question_scope_transition_review_subagent(payload):
             result["status"] = "QUESTION_SCOPE_TRANSITION_REVIEW_SUBAGENT_ALLOWED"
             result["question_scope_transition_review_allowed"] = True
+        elif is_definition_store_helper_subagent(payload):
+            result["status"] = "DEFINITION_STORE_HELPER_SUBAGENT_ALLOWED"
+            result["definition_store_helper_allowed"] = True
         else:
             block_result(
                 result,
                 "AWAITING_USER allows only question-generation subagents for `01-definition/question-backlog.md` "
-                "or question scope transition review subagents for `01-definition/question-scope-transition-review.md`",
+                "question scope transition review subagents for `01-definition/question-scope-transition-review.md`, "
+                "or definition-store helper subagents for `01-definition/definition-store/*.json`",
             )
     write_turn_state(root, payload, result)
     return result
