@@ -2,6 +2,11 @@
   "currentSessionId": "default",
   "requests": [
     {
+      "id": "20260702-1753-atomic-docs-storage-mode",
+      "phase": "completed",
+      "createdAt": "2026-07-02T17:53:06+09:00"
+    },
+    {
       "id": "20260702-1124-question-depth-review",
       "phase": "completed",
       "createdAt": "2026-07-02T11:24:00+09:00"

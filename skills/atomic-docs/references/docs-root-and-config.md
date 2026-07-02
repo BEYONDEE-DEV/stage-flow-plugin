@@ -2,40 +2,57 @@
 
 ## Responsibility
 
-This reference defines how the `atomic-docs` skill discovers, confirms, and persists the documentation submodule root for a target project.
+This reference defines how the `atomic-docs` skill discovers, confirms, and persists the managed documentation root and storage mode for a target project.
 
 ## Discovery Policy
 
-- Do not assume a hardcoded `docs/` root. A project may already have a normal `docs/` folder that is not the managed documentation submodule.
-- If `.stageflow/docs-submodule.json` exists, read it as the configured docs root contract.
-- If no configured root exists, inspect `.gitmodules` for submodule candidates.
-- If `.gitmodules` has exactly one candidate, still ask the user to confirm before persisting it.
-- If `.gitmodules` has multiple candidates, present the candidates and ask the user to choose.
-- If `.gitmodules` has no suitable candidate, report that the docs submodule root is missing and ask for the minimum recovery action.
+- Do not assume a hardcoded `docs/` root. A project may already have a normal `docs/` folder that is not the managed documentation root.
+- If `.stageflow/atomic-docs.json` exists, read it as the configured docs root and storage-mode contract.
+- If no configured root exists, ask the user to choose a storage mode before persisting config.
+- Supported storage modes are `submodule` and `repository`.
+- For `submodule` mode, inspect `.gitmodules` for documentation submodule candidates. If `.gitmodules` has exactly one candidate, still ask the user to confirm it before persisting config. If `.gitmodules` has multiple candidates, present the candidates and ask the user to choose. If `.gitmodules` has no suitable candidate, report that the documentation submodule root is missing and ask for the minimum recovery action.
+- For `repository` mode, ask the user to select or confirm a repository-local managed docs root. This root does not need to appear in `.gitmodules`.
+- Do not infer `submodule` mode merely because `.gitmodules` exists.
+- Do not infer `repository` mode merely because a `docs/` directory exists.
 
 ## Configuration File
 
-Persist the confirmed root in target-project config at `.stageflow/docs-submodule.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
+Persist the confirmed root and storage mode in target-project config at `.stageflow/atomic-docs.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
 
-If the current user request explicitly selects a managed docs root and asks to start, redo, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/docs-submodule.json`. That bootstrap acceptance does not authorize any other docs writes except the paired draft criteria document allowed by `refresh-flow.md`.
+If the current user request explicitly selects a storage mode, selects a managed docs root, and asks to start, redo, regenerate, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/atomic-docs.json`. That bootstrap acceptance does not authorize any other docs writes except the paired draft criteria document allowed by `refresh-flow.md`.
 
 Required fields:
 
 ```json
 {
-  "docs_root": "path/to/documentation-submodule",
+  "storage_mode": "submodule",
+  "docs_root": "path/to/managed-docs-root",
   "source_root": ".",
   "baseline_metadata_path": "source-baseline.json"
 }
 ```
 
-- `docs_root` is the selected documentation submodule root.
+- `storage_mode` is either `submodule` or `repository`.
+- `docs_root` is the selected managed docs root.
 - `source_root` is the source repository root used for diffs. It defaults to the parent repository root and may be overridden by configuration.
 - `baseline_metadata_path` is a docs-root-relative path to the metadata file that stores the last refreshed source-code commit hash. The default is `source-baseline.json`; with `docs_root` set to `docs`, this resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`.
 
+For `repository` mode, the config shape is the same except `storage_mode` is `repository`:
+
+```json
+{
+  "storage_mode": "repository",
+  "docs_root": "docs",
+  "source_root": ".",
+  "baseline_metadata_path": "source-baseline.json"
+}
+```
+
 ## Recovery Policy
 
-- If the configured docs root is missing, dirty, inaccessible, detached, or not initialized, report the state before writing docs.
-- Do not silently create a real submodule, remote repository, or migration. Those are separate user requests.
-- Do not write managed docs outside the confirmed docs submodule root.
+- If the configured managed docs root is missing or inaccessible, report the state before writing docs.
+- In `submodule` mode, also report when the configured docs root is dirty, detached, or not initialized as a submodule.
+- In `repository` mode, do not require `.gitmodules` membership or submodule initialization.
+- Do not silently create a real submodule, remote repository, repository-local docs directory, or migration. Those are separate user requests.
+- Do not write managed docs outside the confirmed managed docs root.
 - If the stored source commit hash is not reachable from `source_root`, report uncertainty and ask whether to rebaseline or inspect from the current source state.

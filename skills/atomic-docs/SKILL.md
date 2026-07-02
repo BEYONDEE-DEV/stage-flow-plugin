@@ -1,26 +1,28 @@
 ---
 name: atomic-docs
-description: "Use when the user says atomic-docs, atomic docs, atomic docs, the Stageflow atomic documentation skill, or asks Stageflow to create, update, inspect, refresh, or manage atomic project docs as a submodule-backed natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
+description: "Use when the user says atomic-docs, atomic docs, atomic docs, the Stageflow atomic documentation skill, or asks Stageflow to create, update, inspect, refresh, or manage atomic project docs as a storage-mode-aware natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
 ---
 
 # Atomic Docs
 
-Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured documentation submodule. The goal is to preserve service logic as natural-language source-of-truth docs: user intent, rules, current implementation facts, planned changes, and gaps must be detailed enough that future AI/code review can judge whether source code matches the approved docs baseline, is buggy, is missing required behavior, implements unapproved behavior, is out of scope, is stale, or still needs confirmation.
+Use this skill to create, update, inspect, refresh, and manage durable project documentation in a configured managed docs root. The managed docs root may use `submodule` storage or `repository` storage, based on the user's explicit selection. The goal is to preserve service logic as natural-language source-of-truth docs: user intent, rules, current implementation facts, planned changes, and gaps must be detailed enough that future AI/code review can judge whether source code matches the approved docs baseline, is buggy, is missing required behavior, implements unapproved behavior, is out of scope, is stale, or still needs confirmation.
 
 ## Core Contract
 
 - Inspect the target project before writing confirmed atom docs. A criteria draft may be created first from the user's conversation after the docs root and limited draft write action are accepted.
 - Do not assume a hardcoded `docs/` root.
-- Use the documentation submodule root selected through the docs-root discovery contract.
-- Ask the user to confirm the docs submodule root even when `.gitmodules` contains exactly one candidate.
-- Persist the confirmed root in target-project config at `.stageflow/docs-submodule.json`.
-- Keep docs output inside the configured documentation submodule by default.
-- Do not create a real submodule, remote repository, generated docs set, or migration unless the user separately asks for that operation.
+- Ask the user to choose `submodule` or `repository` storage mode when no config exists.
+- Use the managed docs root selected through the docs-root discovery contract.
+- In `submodule` mode, ask the user to confirm the documentation submodule root even when `.gitmodules` contains exactly one candidate.
+- In `repository` mode, let the user select a repository-local managed docs root without requiring `.gitmodules`.
+- Persist the confirmed storage mode and root in target-project config at `.stageflow/atomic-docs.json`.
+- Keep docs output inside the configured managed docs root by default.
+- Do not create a real submodule, remote repository, repository-local docs directory, generated docs set, or migration unless the user separately asks for that operation.
 - Treat source files as the default evidence for docs refresh, not Stageflow request artifacts.
 - Respect Stageflow gates when invoked during Stageflow-controlled work.
-- Do not write managed docs, atom files, graph corrections, source-baseline metadata, migrations, or `.stageflow/docs-submodule.json` until the user has accepted the explicit docs operation scope and change plan.
-- If the current user request explicitly asks to start, redo, or recreate atomic docs and confirms the managed docs root, treat that request as accepted bootstrap scope for only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria.md`; write those bootstrap files in the same turn and then stop for criteria review.
-- Treat Stageflow plan approval as separate from docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
+- Do not write managed docs, atom files, graph corrections, source-baseline metadata, migrations, or `.stageflow/atomic-docs.json` until the user has accepted the explicit docs operation scope and change plan.
+- If the current user request explicitly asks to start, redo, or recreate atomic docs and confirms both the storage mode and managed docs root, treat that request as accepted bootstrap scope for only `.stageflow/atomic-docs.json` and `<doc-root>/project/atomization-criteria.md`; write those bootstrap files in the same turn and then stop for criteria review.
+- Treat Stageflow plan approval as separate from managed-docs-root approval unless the approved docs operation names the affected docs paths and write actions.
 - Make `project/atomization-criteria.md` the first atomic-docs write action after docs-root confirmation when atomization criteria are needed. This criteria document is not an atom: it does not follow the `*-atom.md` path contract, required atom sections, or atomic graph contract. Run criteria-review/revision cycles until the criteria draft has no blocking structure issues, then use it as a draft review artifact until the user approves the criteria.
 - Use only an approved criteria document as required input for domain writer and review subagents.
 - Do not require a Codex Goal for bootstrap criteria draft creation or criteria-review subagents. After criteria approval, require a Codex `create_goal` call before starting docs generation work such as project/common/domain atom writing, service logic inventory, domain writer/reviewer subagents, graph edges, or source-baseline updates.
@@ -43,7 +45,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 
 Before acting, read only the references needed for the requested operation:
 
-- `references/docs-root-and-config.md` for docs submodule discovery, confirmation, config, and recovery.
+- `references/docs-root-and-config.md` for storage mode selection, docs root discovery, confirmation, config, and recovery.
 - `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, non-atom project documents, project/common/domain context rules, required atom sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
 - `references/language-policy.md` for choosing the natural language used in docs content, preventing reference-example leakage into managed docs, and preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for full refresh, targeted docs work, source-code commit baseline metadata, changed source behavior files, and change-plan review.
@@ -55,7 +57,7 @@ Before acting, read only the references needed for the requested operation:
 
 1. Identify whether the user wants root setup, full refresh, targeted docs work, inspection, graph maintenance, or Stageflow-adjacent documentation.
 2. Read the relevant reference files before making changes.
-3. Confirm the docs-submodule root and inspect existing docs-submodule state. Treat an explicit user-selected managed docs root in the current request as confirmed for the bootstrap scope.
+3. Confirm the storage mode and managed docs root, then inspect the configured managed docs state. Treat an explicit user-selected storage mode and managed docs root in the current request as confirmed for the bootstrap scope.
 4. If atomization criteria are needed, make the first atomic-docs write action a limited draft creation or update of `project/atomization-criteria.md`. When the current request already accepted bootstrap scope, create or update the config and criteria draft before stopping.
 5. Put user conversation criteria, prohibitions, atomization concerns, and pending approval state into that criteria draft before relying on chat summaries.
 6. Inspect source state to enrich the criteria draft with evidence, not just the change plan.
@@ -71,12 +73,12 @@ Before acting, read only the references needed for the requested operation:
 16. Use the project document contract for `project-goal.md`, `project-glossary.md`, `service-logic-inventory.md`, `source-convention.md`, and `atomization-criteria.md`; do not give these non-atom project documents `atom_key`, AID, `graph_edges`, or atom required sections.
 17. Put code convention and source structure interpretation rules in `project/source-convention.md` when needed, and keep non-runtime convention notes out of service logic atoms.
 18. After docs generation or partial-scope atom writes, pass post-write consistency and source fact review before reporting completion or presenting the docs as judgment-ready.
-19. Follow the docs language policy: use the user-requested language, otherwise the existing docs-submodule dominant language, otherwise the current conversation language.
+19. Follow the docs language policy: use the user-requested language, otherwise the existing managed docs root's dominant language, otherwise the current conversation language.
 20. Store freshness as one source-code commit hash baseline in docs-root metadata, not as per-atomic freshness/status fields inside atom files.
 21. Write only the paths and actions accepted by the user for the current docs operation.
 
 ## Boundaries
 
-- This skill is instruction-first. It does not imply a runtime parser, generator script, external service, or automatic docs write outside the configured documentation submodule.
+- This skill is instruction-first. It does not imply a runtime parser, generator script, external service, or automatic docs write outside the configured managed docs root.
 - Stageflow request artifacts may explain workflow state, but docs refresh evidence defaults to source files.
 - If the docs root, domain boundary, atom target, source-to-atom mapping, or graph relationship is ambiguous, ask or put the uncertainty in a change plan or `Gaps` instead of writing confirmed intent.

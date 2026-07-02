@@ -6,7 +6,7 @@ This reference defines full refresh and targeted docs operations against source 
 
 ## Source Baseline
 
-Freshness is tracked with one source-code commit hash stored in metadata at the documentation submodule root. The baseline metadata is outside individual atom files.
+Freshness is tracked with one source-code commit hash stored in metadata at the managed docs root. The baseline metadata is outside individual atom files.
 
 The baseline records the last source-code commit hash used for a confirmed docs refresh. The `atomic-docs` skill should compare `git diff <stored-source-hash>..HEAD` or the equivalent source-root diff to prioritize changed source behavior files.
 
@@ -35,9 +35,9 @@ If a domain candidate or category grouping looks broad instead of being a durabl
 
 When atomization criteria are needed, do not keep reviewed atomization perspectives only in chat or only in the change plan. For Korean managed docs, record this as `검토된 Atom화 관점`. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria.md` as the criteria proposal.
 
-If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms the managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria.md` as a draft criteria proposal in the same turn, then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS.
+If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms both the storage mode and managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/atomic-docs.json` when needed and `<doc-root>/project/atomization-criteria.md` as a draft criteria proposal in the same turn, then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS.
 
-Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria.md`, and the draft criteria write action unless the current request already accepted that bootstrap scope. If `.stageflow/docs-submodule.json` is missing, the same first approved or bootstrap-accepted write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, domain writer/reviewer subagent work, service logic inventory, or source baseline metadata.
+Before that first draft write, present a narrow change plan that names only the docs root config write when needed, `project/atomization-criteria.md`, and the draft criteria write action unless the current request already accepted that bootstrap scope. If `.stageflow/atomic-docs.json` is missing, the same first approved or bootstrap-accepted write scope may create that config and the criteria draft; it must not also create project goal, project glossary, common context, common policy atoms, domain atoms, graph edges, domain writer/reviewer subagent work, service logic inventory, or source baseline metadata.
 
 The draft should first record criteria already stated in the user conversation and pending user approval state. It must not record reference example prose as criteria.
 
@@ -94,7 +94,7 @@ Do not proceed to criteria approval state update, Codex Goal creation, service l
 
 ## Atomic Docs Goal Gate
 
-Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/docs-submodule.json` and `<doc-root>/project/atomization-criteria.md`, run criteria-review/revision cycles for that criteria draft, then stop for user review after criteria-review PASS.
+Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/atomic-docs.json` and `<doc-root>/project/atomization-criteria.md`, run criteria-review/revision cycles for that criteria draft, then stop for user review after criteria-review PASS.
 
 After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project document writing, common or domain atom writing, service logic inventory creation, domain writer or reviewer subagent execution, graph edge writing, and source-baseline metadata updates.
 
@@ -108,7 +108,7 @@ Complete the Goal only after the accepted docs operation is actually complete. D
 
 When the user asks for a separate source convention format, or when repeated source interpretation conventions would otherwise be mixed into service logic atoms, propose a separate write scope for `<doc-root>/project/source-convention.md`.
 
-The source convention document is not part of the pre-approval criteria bootstrap scope. The first bootstrap scope remains limited to `.stageflow/docs-submodule.json` when needed and `<doc-root>/project/atomization-criteria.md`. Do not create `project/source-convention.md` during criteria bootstrap or before criteria approval.
+The source convention document is not part of the pre-approval criteria bootstrap scope. The first bootstrap scope remains limited to `.stageflow/atomic-docs.json` when needed and `<doc-root>/project/atomization-criteria.md`. Do not create `project/source-convention.md` during criteria bootstrap or before criteria approval.
 
 For normal docs generation, create or update `project/source-convention.md` only after the criteria document is approved, the accepted docs write scope includes the source convention document, and the Atomic Docs Goal Gate is satisfied. Use it as source interpretation context, not as service behavior evidence.
 
@@ -226,7 +226,7 @@ A change plan should group by domain and list:
 - source-baseline metadata updates and docs-root config writes, including whether the update is limited to a judgment-ready partial scope or a project-wide judgment-ready baseline
 - unresolved boundary questions that must be accepted before writing confirmed structure
 
-The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or docs-submodule structure before that acceptance.
+The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or managed docs root structure before that acceptance.
 
 ## Inference And Gaps
 

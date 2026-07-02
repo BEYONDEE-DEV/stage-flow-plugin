@@ -34,6 +34,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("controlled judgment labels", text)
         self.assertIn("stale installed cache path", text)
         self.assertIn("fresh cachebuster", text)
+        self.assertIn("storage-mode-aware", text)
+        self.assertIn("Ask the user to choose `submodule` or `repository` storage mode", text)
+        self.assertIn("repository-local managed docs root", text)
+        self.assertIn("`.stageflow/atomic-docs.json`", text)
         self.assertIn("service logic as natural-language source-of-truth docs", text)
         self.assertIn("meaningful service logic in natural language", text)
         self.assertIn("endpoint lists, controller summaries, service class summaries", text)
@@ -76,6 +80,7 @@ class DocsSkillTests(unittest.TestCase):
             "Gaps",
             "atom_key",
             "graph_edges",
+            "storage_mode",
             "docs_root",
             "source-code identifiers",
             "[AID:paid-order-processing.impl.003]",
@@ -117,27 +122,38 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn('"skills": "./skills/"', manifest)
         self.assertIn("Documentation", manifest)
         self.assertIn("expose an atomic-docs skill", manifest)
-        self.assertIn("Use atomic-docs to create submodule-backed project documentation.", manifest)
+        self.assertIn("Use atomic-docs to create storage-mode-aware project documentation.", manifest)
         self.assertIn("Use atomic-docs to refresh atom files from source-code changes.", manifest)
         self.assertNotIn("refresh atomic.md docs", manifest)
         self.assertIn("Use atomic-docs to inspect intent, implementation, planned changes, and gaps.", manifest)
 
-    def test_docs_root_contract_preserves_submodule_and_confirmation_rules(self) -> None:
+    def test_docs_root_contract_supports_storage_mode_selection(self) -> None:
         text = read(DOCS_REFS / "docs-root-and-config.md")
         self.assertIn("Do not assume a hardcoded `docs/` root", text)
+        self.assertIn("ask the user to choose a storage mode", text)
+        self.assertIn("Supported storage modes are `submodule` and `repository`", text)
+        self.assertIn("`.stageflow/atomic-docs.json`", text)
+        self.assertIn("storage-mode contract", text)
         self.assertIn("inspect `.gitmodules`", text)
         self.assertIn("exactly one candidate, still ask the user to confirm", text)
-        self.assertIn("`.stageflow/docs-submodule.json`", text)
-        for field in ["docs_root", "source_root", "baseline_metadata_path"]:
+        self.assertIn("For `repository` mode", text)
+        self.assertIn("repository-local managed docs root", text)
+        self.assertIn("This root does not need to appear in `.gitmodules`", text)
+        self.assertIn("Do not infer `submodule` mode merely because `.gitmodules` exists", text)
+        self.assertIn("Do not infer `repository` mode merely because a `docs/` directory exists", text)
+        for field in ["storage_mode", "docs_root", "source_root", "baseline_metadata_path"]:
             self.assertIn(field, text)
+        self.assertIn('"storage_mode": "submodule"', text)
+        self.assertIn('"storage_mode": "repository"', text)
         self.assertIn('"baseline_metadata_path": "source-baseline.json"', text)
         self.assertIn("docs-root-relative path", text)
         self.assertIn("The default is `source-baseline.json`", text)
         self.assertIn("resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`", text)
         self.assertIn("source repository root used for diffs", text)
         self.assertIn("Do not silently create a real submodule", text)
+        self.assertIn("repository-local docs directory", text)
         self.assertIn("accepted the docs-root setup scope and config write", text)
-        self.assertIn("explicitly selects a managed docs root and asks to start, redo, or recreate atomic docs", text)
+        self.assertIn("explicitly selects a storage mode, selects a managed docs root", text)
         self.assertIn("paired draft criteria document allowed by `refresh-flow.md`", text)
 
     def test_docs_skill_requires_write_approval_for_managed_state(self) -> None:
@@ -151,10 +167,10 @@ class DocsSkillTests(unittest.TestCase):
             "atom files",
             "graph corrections",
             "source-baseline metadata",
-            "`.stageflow/docs-submodule.json`",
+            "`.stageflow/atomic-docs.json`",
         ]:
             self.assertIn(write_target, text)
-        self.assertIn("Stageflow plan approval as separate from docs-submodule approval", text)
+        self.assertIn("Stageflow plan approval as separate from managed-docs-root approval", text)
         self.assertIn("Write only the paths and actions accepted by the user", text)
 
     def test_docs_skill_uses_file_first_criteria_before_subagent_writing_and_review(self) -> None:
@@ -655,7 +671,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("AI-renamed domain labels are not valid default domain names", text)
         self.assertIn("must not silently rename that root into a new abstract capability label", text)
         self.assertIn("user approval or user vocabulary", text)
-        self.assertIn("existing docs-submodule terminology", text)
+        self.assertIn("existing managed-docs-root terminology", text)
         self.assertIn("durable ownership evidence showing the capability crosses multiple source feature roots", text)
         self.assertIn("cross-feature ownership, shared persistence or state, shared policy, or shared recovery question", text)
         self.assertIn("Without that evidence, keep the project-native feature/root name", text)
@@ -700,7 +716,7 @@ class DocsSkillTests(unittest.TestCase):
     def test_refresh_flow_contract_uses_source_baseline_and_change_plan(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
         self.assertIn("one source-code commit hash", text)
-        self.assertIn("metadata at the documentation submodule root", text)
+        self.assertIn("metadata at the managed docs root", text)
         self.assertIn("git diff <stored-source-hash>..HEAD", text)
         self.assertIn("classify the finding as `docs_stale`", text)
         self.assertIn("map baseline diffs to affected atoms", text)
@@ -736,6 +752,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("limited draft creation or update", text)
         self.assertIn("draft criteria write action", text)
         self.assertIn("docs root config write when needed", text)
+        self.assertIn("confirms both the storage mode and managed docs root", text)
+        self.assertIn("`.stageflow/atomic-docs.json`", text)
         self.assertIn("current user request explicitly asks to start, redo, regenerate, or recreate atomic docs", text)
         self.assertIn("do not stop at an approval request", text)
         self.assertIn("then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS", text)
@@ -1082,9 +1100,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("implementation-plan gate passes", text)
         self.assertIn("Source files are the default evidence source", text)
         self.assertIn("Stageflow artifacts are not the default docs refresh evidence source", text)
-        self.assertIn("modify only files inside the configured documentation submodule root", text)
+        self.assertIn("modify only files inside the configured managed docs root", text)
         self.assertIn("prioritize the current explicit user-requested scope", text)
-        self.assertIn("Stageflow plan approval alone is not docs-submodule approval", text)
+        self.assertIn("Stageflow plan approval alone is not managed-docs-root approval", text)
         self.assertIn("names the affected docs paths and write actions", text)
         self.assertIn("Gaps", text)
         self.assertIn("Use a Stageflow artifact as required behavior evidence only when", text)

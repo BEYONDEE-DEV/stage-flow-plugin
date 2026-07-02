@@ -8,16 +8,16 @@ This reference defines how the `atomic-docs` skill behaves when invoked during S
 
 - Respect Stageflow definition, implementation-plan, implementation, review, and approval gates.
 - Do not perform non-Stageflow code edits before the active implementation-plan gate passes.
-- Writing Stageflow request artifacts does not mean docs submodule files are approved for update.
-- Writing docs submodule files requires the docs operation's own confirmed scope and change plan.
-- Stageflow plan approval alone is not docs-submodule approval unless the approved docs operation names the affected docs paths and write actions.
+- Writing Stageflow request artifacts does not mean managed docs files are approved for update.
+- Writing managed docs files requires the docs operation's own confirmed scope and change plan.
+- Stageflow plan approval alone is not managed-docs-root approval unless the approved docs operation names the affected docs paths and write actions.
 
 ## Evidence Boundaries
 
 - Source files are the default evidence source for docs refresh.
 - Stageflow artifacts own workflow state, decisions, approvals, and implementation evidence.
 - Stageflow artifacts are not the default docs refresh evidence source.
-- Docs submodule files own durable externalized project knowledge.
+- Managed docs files own durable externalized project knowledge.
 
 ## Requirement Evidence
 
@@ -29,7 +29,7 @@ Do not promote a Stageflow implementation detail into confirmed `Intent` or `Rul
 
 ## Output Scope
 
-By default, `atomic-docs` write operations modify only files inside the configured documentation submodule root. Plugin code, Stageflow request artifacts, and source files are outside docs output scope unless a separate approved request expands scope.
+By default, `atomic-docs` write operations modify only files inside the configured managed docs root. Plugin code, Stageflow request artifacts, and source files are outside docs output scope unless a separate approved request expands scope.
 
 ## Conflict Policy
 

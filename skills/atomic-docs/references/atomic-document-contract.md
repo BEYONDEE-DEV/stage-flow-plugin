@@ -23,7 +23,7 @@
 
 ## Responsibility
 
-This reference defines the managed documentation shape inside the configured documentation submodule.
+This reference defines the managed documentation shape inside the configured managed docs root.
 
 ## Path Contract
 
@@ -33,7 +33,7 @@ Every atom uses this exact organization:
 <doc-root>/<domain-path>/<file-slug>-atom.md
 ```
 
-- `<doc-root>` is the confirmed documentation submodule root.
+- `<doc-root>` is the confirmed managed docs root.
 - `<domain-path>` is one or more folder segments below the docs root. It may include category or subdomain segments, but it is a mutable placement path, not atom identity.
 - `<file-slug>` is a readable file slug for one user-visible behavior, policy, rule, state, plan, context, or gap boundary. It is a mutable locator, not atom identity.
 - Every atom file must end with `-atom.md`.
@@ -272,7 +272,7 @@ Choose domain paths from project evidence, not from a fixed project-specific lis
 Use this priority order:
 
 1. User-confirmed product, business, or bounded-context language.
-2. Existing docs-submodule domain language and existing context atoms.
+2. Existing managed-docs-root domain language and existing context atoms.
 3. Source-observed user-visible capabilities, workflows, policies, or domain models.
 4. Cross-cutting boundaries such as shared platform, integration contract, infrastructure, or policy only when the content coherently affects multiple domains.
 
@@ -299,7 +299,7 @@ The criteria document must distinguish:
 AI-renamed domain labels are not valid default domain names. If the source uses a feature root such as `auth`, `commerce`, `refund`, `resource`, `ticketgroup`, `web`, or `admin`, a criteria draft must not silently rename that root into a new abstract capability label such as `sales-fulfillment` unless one of these bases is recorded:
 
 - user approval or user vocabulary for the new capability label
-- existing docs-submodule terminology that already uses that capability label
+- existing managed-docs-root terminology that already uses that capability label
 - durable ownership evidence showing the capability crosses multiple source feature roots
 
 Capability or common promotion requires at least one of these evidence types: cross-feature ownership, shared persistence or state, shared policy, or shared recovery question. Without that evidence, keep the project-native feature/root name and put the cross-feature idea in `optional capability alias` or `needs_confirmation`.

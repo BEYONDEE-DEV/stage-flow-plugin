@@ -9,10 +9,10 @@ This reference defines which natural language the `atomic-docs` skill uses when 
 Use this priority order for prose inside managed docs and docs change plans:
 
 1. Use the language explicitly requested by the user for the current docs operation.
-2. If the user did not specify a language, use the dominant language already used in the configured documentation submodule.
+2. If the user did not specify a language, use the dominant language already used in the configured managed docs root.
 3. If there is no existing documentation language to infer from, use the current conversation language.
 
-For the current Korean workflow, managed docs prose, docs change plans, review notes, and user-facing operation summaries should default to Korean unless the user requests another language or the existing docs submodule clearly uses another dominant language.
+For the current Korean workflow, managed docs prose, docs change plans, review notes, and user-facing operation summaries should default to Korean unless the user requests another language or the existing managed docs root clearly uses another dominant language.
 
 ## Fixed Terms And Identifiers
 
@@ -20,7 +20,7 @@ Keep these values unchanged even when the surrounding prose is written in anothe
 
 - schema headings such as `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
 - frontmatter keys such as `atom_key`, `graph_edges`, `type`, `target_key`, `target_path`, and `reason`
-- config keys such as `docs_root`, `source_root`, and `baseline_metadata_path`
+- config keys such as `storage_mode`, `docs_root`, `source_root`, and `baseline_metadata_path`
 - source-code identifiers, API names, file paths, enum values, commands, package names, and commit hashes
 - atom line ID tokens such as `[AID:paid-order-processing.impl.003]`
 - option labels, status/control values, or workflow terms required by a connected validator or Stageflow artifact
@@ -54,7 +54,7 @@ Controlled judgment labels, fixed headings, schema keys, `atom_key` values, AID 
 
 - Do not translate code identifiers or schema keys to make prose feel more natural.
 - Do not translate or localize AID tokens. Korean docs must preserve `[AID:...]` exactly.
-- If the existing docs submodule mixes languages, prefer the language used by the target domain or atomic document being edited.
+- If the existing managed docs root mixes languages, prefer the language used by the target domain or atomic document being edited.
 - If a document's language is ambiguous and the choice may affect user review, ask before writing confirmed docs.
 - AI-inferred `Intent` or `Rules` must still be marked as inferred in the selected docs language and connected to `Gaps` until confirmed.
 
