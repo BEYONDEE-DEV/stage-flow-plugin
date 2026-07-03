@@ -1470,7 +1470,7 @@ Approved.
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message})
             self.assertEqual(result["status"], "PREPASS")
 
-    def test_awaiting_user_stop_blocks_response_without_pending_question_restatement(self) -> None:
+    def test_awaiting_user_stop_does_not_guess_follow_up_from_missing_pending_questions(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1493,11 +1493,7 @@ Approved.
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
-            self.assertEqual(result["status"], "BLOCKED")
-            self.assertEqual(
-                result["_wire_output"]["reason"],
-                "Stageflow cannot advance yet because the current workflow gate is not complete.",
-            )
+            self.assertEqual(result["status"], "PREPASS")
 
     def test_awaiting_user_stop_ignores_completion_words_in_question_options(self) -> None:
         with temp_project() as root:
@@ -1505,8 +1501,7 @@ Approved.
             self.write_pending_definition(root)
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             last_message = (
-                "PENDING-001\n"
-                "질문: Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                "1. 모의거래 결과 확정 단위\n"
                 "Option 1: 하루 장이 끝날 때마다 일별 결과를 확정한다\n"
                 "Option 2: 선택 완료 기준은 전략 실행 기간 전체를 하나의 run으로 본다\n"
                 "Option 3: 일별 스냅샷과 run 전체 누적 결과를 함께 둔다"
@@ -1516,7 +1511,7 @@ Approved.
             self.assertEqual(result["_wire_output"], {})
             self.assertNotIn("completion_validation", result)
 
-    def test_awaiting_user_stop_blocks_restatement_without_labeled_options(self) -> None:
+    def test_awaiting_user_stop_does_not_enforce_labeled_options_from_hook_guess(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1546,11 +1541,7 @@ Approved.
                 + "제안: status text only로 가겠습니다."
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
-            self.assertEqual(result["status"], "BLOCKED")
-            self.assertEqual(
-                result["_wire_output"]["reason"],
-                "Stageflow cannot advance yet because the current workflow gate is not complete.",
-            )
+            self.assertEqual(result["status"], "PREPASS")
 
 
     def test_awaiting_user_stop_does_not_enforce_question_scope_label_from_hook_guess(self) -> None:

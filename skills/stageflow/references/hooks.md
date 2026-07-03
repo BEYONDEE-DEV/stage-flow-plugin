@@ -85,10 +85,10 @@ The stop hook reads the previous turn state from `.stageflow/hook-state/`.
 Behavior:
 
 - The preflight marker is internal tracking state; the stop hook does not check whether the assistant response includes it.
-- `AWAITING_USER` responses must not claim completion or next-stage progress. Before stopping, the response must restate an active pending clarification by including its pending ID or question text plus `Option 1:` and `Option 2:`. The hook checks this structural restatement but still does not classify whether the user answered, asked a follow-up, or gave a stop signal; that semantic contract belongs to the Stageflow skill instructions.
+- `AWAITING_USER` responses must not claim completion or next-stage progress. The hook does not enforce pending-question restatement from a guessed user intent, and it does not run the general completion-like `--phase all` validation while waiting for user answers; that semantic contract belongs to the Stageflow skill instructions.
 - `TARGETED_SYNC_REQUIRED`, `FULL_CONSISTENCY_REQUIRED`, and `SNAPSHOT_CURRENT_REQUIRED` responses run definition validation on Stop and block if required gate artifacts or fingerprints are incomplete.
 - Non-`AWAITING_USER` completion-like responses validate `--phase all`.
-- Missing current pointers after explicit Stageflow prompts, missing `definition-store/` after request creation or store repair, invalid current pointers, `AWAITING_USER` completion/next-stage claims, missing `AWAITING_USER` pending-question restatement, and completion validation failures return a block decision instead of silently warning.
+- Missing current pointers after explicit Stageflow prompts, missing `definition-store/` after request creation or store repair, invalid current pointers, `AWAITING_USER` completion/next-stage claims, and completion validation failures return a block decision instead of silently warning.
 
 ## Subagent Hooks
 
