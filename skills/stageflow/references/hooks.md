@@ -27,6 +27,8 @@ Codex runs hook commands with the session `cwd`, so plugin-bundled hook commands
 
 `stageflow_hook_check.py` resolves `validate_stageflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `hooks/stageflow_hook.py` or `scripts/validate_stageflow.py`.
 
+The hook resolves the Stageflow project root from the provided root or payload `cwd` by walking upward to the nearest `.stageflow/sessions/<session-id>/current.json`, then falling back to the nearest `.stageflow/index.json` or `.stageflow/requests/`. It intentionally does not use the Git repository root, because Stageflow may live in an orchestration directory that contains multiple nested Git worktrees.
+
 ## Stdout Wire Output
 
 `stageflow_hook_check.py` keeps Stageflow's internal audit result separate from the Codex hook stdout response. Internal fields such as `event`, `status`, `severity`, `turn_start_action`, `validation`, `warnings`, and pending clarification details are stored under `.stageflow/hook-state/`; they must not be emitted as top-level stdout JSON fields because Codex hook schemas reject unknown properties.

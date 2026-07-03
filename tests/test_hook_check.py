@@ -724,6 +724,29 @@ Approved.
             self.assertNotIn("status", wire_output)
             self.assertNotIn("turn_start_action", wire_output)
 
+    def test_user_prompt_submit_resolves_parent_stageflow_root_from_nested_cwd(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            nested = root / "events-api" / "src" / "main"
+            nested.mkdir(parents=True)
+
+            payload = {"session_id": "session-1", "prompt": "workflow status"}
+            proc = subprocess.run(
+                [sys.executable, str(HOOK_CHECK), "--event", "user_prompt_submit", "--root", str(nested)],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            result = self.read_hook_state(root, payload)
+            self.assertEqual(result["root"], str(root))
+            self.assertEqual(result["status"], "AWAITING_USER")
+            self.assertEqual(result["turn_start_action"], "handle_awaiting_user_clarification")
+            self.assertIn("pending clarification", result["pending_clarification_output"])
+            self.assertFalse((nested / ".stageflow" / "hook-state").exists())
+
     def test_stop_blocks_request_creation_without_definition_store(self) -> None:
         with temp_project() as root:
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})

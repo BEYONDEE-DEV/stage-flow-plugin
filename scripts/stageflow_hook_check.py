@@ -192,8 +192,17 @@ def is_full_consistency_subagent(payload: dict[str, Any]) -> bool:
 
 
 def resolve_root(args: argparse.Namespace, payload: dict[str, Any]) -> Path:
-    root = args.root or payload.get("cwd") or "."
-    return Path(str(root)).resolve()
+    start = Path(str(args.root or payload.get("cwd") or ".")).resolve()
+    candidates = (start, *start.parents)
+    session_id = safe_segment(str(payload.get("session_id") or "")) or "no-session"
+    for candidate in candidates:
+        if (candidate / ".stageflow" / "sessions" / session_id / "current.json").is_file():
+            return candidate
+    for candidate in candidates:
+        stageflow_dir = candidate / ".stageflow"
+        if (stageflow_dir / "index.json").is_file() or (stageflow_dir / "requests").is_dir():
+            return candidate
+    return start
 
 
 def current_path(root: Path, payload: dict[str, Any]) -> Path:
