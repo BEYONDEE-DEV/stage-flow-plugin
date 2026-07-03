@@ -53,6 +53,9 @@ AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
     re.IGNORECASE,
 )
+PENDING_ID_RE = re.compile(r"\bPENDING-\d+\b", re.IGNORECASE)
+OPTION_ONE_RE = re.compile(r"(?:\boption\s*1\s*:|선택지?\s*1\s*:|1\s*번\s*:)", re.IGNORECASE)
+OPTION_TWO_RE = re.compile(r"(?:\boption\s*2\s*:|선택지?\s*2\s*:|2\s*번\s*:)", re.IGNORECASE)
 PREFLIGHT_MARKER_PREFIX = "Stageflow preflight:"
 WRITE_TOOL_TOKENS = (
     "edit",
@@ -521,6 +524,65 @@ def format_store_pending_output(request_dir: Path, questions: list[dict[str, str
     return "\n".join(lines)
 
 
+def normalized_presence_text(value: str) -> str:
+    return "".join(char.lower() for char in value if char.isalnum())
+
+
+def labeled_fragment(text: str, label: str, end_labels: tuple[str, ...]) -> str:
+    if label not in text:
+        return ""
+    tail = text.split(label, 1)[1]
+    stops = [tail.find(end_label) for end_label in end_labels if tail.find(end_label) >= 0]
+    if stops:
+        tail = tail[: min(stops)]
+    return tail.strip()
+
+
+def pending_items_from_output(output: str) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if "pending clarification" not in line.lower():
+            continue
+        match = PENDING_ID_RE.search(line)
+        question = labeled_fragment(line, "Question:", (" Options:", " Recommended:", " Transition option:", " Why this matters:"))
+        options = labeled_fragment(line, "Options:", (" Recommended:", " Transition option:", " Why this matters:"))
+        items.append(
+            {
+                "id": match.group(0).upper() if match else "",
+                "question": question,
+                "options": options,
+            }
+        )
+    if items:
+        return items
+    return [{"id": match.group(0).upper(), "question": "", "options": ""} for match in PENDING_ID_RE.finditer(output)]
+
+
+def pending_item_mentioned(item: dict[str, str], response_text: str) -> bool:
+    response_norm = normalized_presence_text(response_text)
+    pending_id = normalized_presence_text(item.get("id", ""))
+    if pending_id and pending_id in response_norm:
+        return True
+    question = normalized_presence_text(item.get("question", ""))
+    if not question:
+        return False
+    signature = question[: min(len(question), 24)]
+    return len(signature) >= 8 and signature in response_norm
+
+
+def awaiting_user_response_restates_pending(turn: dict[str, Any], response_text: str) -> bool:
+    pending_output = str(turn.get("pending_clarification_output") or "").strip()
+    if not pending_output:
+        return True
+    items = pending_items_from_output(pending_output)
+    if not items:
+        return True
+    if not (OPTION_ONE_RE.search(response_text) and OPTION_TWO_RE.search(response_text)):
+        return False
+    return any(pending_item_mentioned(item, response_text) for item in items)
+
+
 def store_fast_path_result(
     root: Path,
     payload: dict[str, Any],
@@ -568,7 +630,8 @@ def store_fast_path_result(
         action = "handle_awaiting_user_clarification"
         instruction = (
             "The current definition has active store-backed pending questions. Interpret the latest user message semantically, "
-            "record the answer in `definition-store/`, set `sync-state.current_gate` by risk, and do not read or write `definition.md` on the store-only path."
+            "record the answer in `definition-store/`, set `sync-state.current_gate` by risk, and do not read or write `definition.md` on the store-only path. "
+            "Before ending an AWAITING_USER response, restate at least one active pending question with Option 1 and Option 2."
         )
 
     result.update(
@@ -798,6 +861,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         action = "handle_awaiting_user_clarification"
         instruction = (
             "The current Stageflow stage has an active pending clarification batch with a valid definition-store. Interpret the latest user message semantically against the pending questions: record answers in definition-store, create the next pending batch after the required risk check, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. Do not review, approve, advance, or implement while AWAITING_USER remains active."
+            " Before ending an AWAITING_USER response, restate at least one active pending question with Option 1 and Option 2."
         )
     else:
         status = "WARNING"
@@ -880,6 +944,11 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") == "AWAITING_USER":
             if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
                 block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
+            elif not awaiting_user_response_restates_pending(turn, last_message):
+                block_result(
+                    result,
+                    "AWAITING_USER response must restate an active pending clarification question with Option 1 and Option 2",
+                )
             return result
 
         if turn.get("status") == "DEFINITION_STORE_REQUIRED":
