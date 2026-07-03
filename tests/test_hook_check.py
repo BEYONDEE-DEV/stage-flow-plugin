@@ -371,8 +371,90 @@ class HookCheckThreeStageTests(unittest.TestCase):
             (stage_dir / "goal.md").write_text(self.goal_text(phase, folder, artifact_name, fingerprint), encoding="utf-8")
         self.write_review_files(stage_dir, phase, fingerprint, STAGE_RULE_IDS[phase])
 
+    def write_definition_store(
+        self,
+        root: Path,
+        *,
+        active_pending_ids: list[str],
+        current_scope: str,
+        fingerprint: str | None = None,
+        current_gate: str = "pending-answer",
+        active_pending_questions: list[dict[str, str]] | None = None,
+    ) -> None:
+        stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+        store_dir = stage_dir / "definition-store"
+        store_dir.mkdir(exist_ok=True)
+        if fingerprint is None:
+            fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+        if active_pending_questions is None:
+            active_pending_questions = self.pending_questions_from_definition(stage_dir / "definition.md", active_pending_ids)
+        (store_dir / "working-set.json").write_text(
+            json.dumps(
+                {
+                    "active_pending_ids": active_pending_ids,
+                    "active_pending_questions": active_pending_questions,
+                    "current_scope": current_scope,
+                    "latest_answer": None,
+                    "next_question_candidate_ids": [],
+                    "risk_level": "low",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (store_dir / "decision-ledger.jsonl").write_text("", encoding="utf-8")
+        (store_dir / "trace-index.json").write_text(
+            json.dumps({"traces": []}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (store_dir / "sync-state.json").write_text(
+            json.dumps(
+                {"definition_fingerprint": f"sha256:{fingerprint}", "current_gate": current_gate, "decision_sync": {}},
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
-    def write_pending_definition(self, root: Path) -> None:
+    def pending_questions_from_definition(self, path: Path, active_pending_ids: list[str]) -> list[dict[str, str]]:
+        text = path.read_text(encoding="utf-8")
+        marker = "## Pending Clarifications"
+        if marker not in text:
+            return []
+        tail = text.split(marker, 1)[1]
+        next_heading = tail.find("\n## ")
+        section = tail[:next_heading] if next_heading != -1 else tail
+        lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+        if len(lines) < 3:
+            return []
+        headers = [cell.strip() for cell in lines[0].strip("|").split("|")]
+        wanted = {item.upper() for item in active_pending_ids}
+        questions: list[dict[str, str]] = []
+        for line in lines[2:]:
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            row = {header: cells[index] if index < len(cells) else "" for index, header in enumerate(headers)}
+            if row.get("ID", "").upper() not in wanted:
+                continue
+            if row.get("Status", "").strip().lower() not in {"pending", "awaiting"}:
+                continue
+            questions.append(
+                {
+                    "id": row.get("ID", ""),
+                    "scope": row.get("Question Scope", ""),
+                    "question": row.get("Question", ""),
+                    "options": row.get("Options", ""),
+                    "recommended_option": row.get("Recommended Option", ""),
+                    "transition_option": row.get("Transition Option", "N/A"),
+                    "why_this_matters": row.get("Why This Matters", ""),
+                    "status": row.get("Status", "pending"),
+                }
+            )
+        return questions
+
+    def write_pending_definition(self, root: Path, *, include_store: bool = True) -> None:
         artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
         artifact.write_text(
             artifact.read_text(encoding="utf-8").replace(
@@ -385,6 +467,8 @@ class HookCheckThreeStageTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.refresh_stage_fingerprint(root, "definition")
+        if include_store:
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
 
     def write_transition_risk_files(self, root: Path, fingerprint: str | None = None) -> None:
         stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
@@ -635,9 +719,69 @@ Approved.
             self.assertEqual(hook_output["hookEventName"], "UserPromptSubmit")
             self.assertIn("REQUEST_REQUIRED", hook_output["additionalContext"])
             self.assertIn("create_request", hook_output["additionalContext"])
+            self.assertIn("definition-store", result["turn_start_instruction"])
             self.assertNotIn("event", wire_output)
             self.assertNotIn("status", wire_output)
             self.assertNotIn("turn_start_action", wire_output)
+
+    def test_stop_blocks_request_creation_without_definition_store(self) -> None:
+        with temp_project() as root:
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            request_dir = root / ".stageflow" / "requests" / REQUEST_ID
+            (root / ".stageflow" / "sessions" / "session-1").mkdir(parents=True)
+            request_dir.mkdir(parents=True)
+            (root / ".stageflow" / "index.json").write_text(
+                json.dumps({"version": "1", "requests": [{"id": REQUEST_ID, "title": "Test", "status": "definition"}]}, indent=2),
+                encoding="utf-8",
+            )
+            (root / ".stageflow" / "sessions" / "session-1" / "current.json").write_text(
+                json.dumps({"request_id": REQUEST_ID, "phase": "definition"}, indent=2),
+                encoding="utf-8",
+            )
+            (request_dir / "state.json").write_text(
+                json.dumps({"request_id": REQUEST_ID, "phase": "definition"}, indent=2),
+                encoding="utf-8",
+            )
+            (request_dir / "01-definition").mkdir()
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "created request"},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["_wire_output"]["reason"], "Stageflow cannot advance yet because the current workflow gate is not complete.")
+
+    def test_stop_blocks_request_creation_with_invalid_definition_store(self) -> None:
+        with temp_project() as root:
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.create_project(root, "definition")
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            store_dir.mkdir()
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "created request"},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["_wire_output"]["reason"], "Stageflow cannot advance yet because the current workflow gate is not complete.")
+
+    def test_request_creation_allows_stageflow_apply_patch_artifacts(self) -> None:
+        with temp_project() as root:
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "apply_patch",
+                    "tool_input": {
+                        "command": "*** Begin Patch\n*** Add File: .stageflow/requests/20260621-1200-test-request/state.json\n+{}\n*** End Patch\n"
+                    },
+                },
+            )
+            self.assertEqual(result["_wire_output"], {})
 
     def test_plain_prompt_without_current_prepasses(self) -> None:
         with temp_project() as root:
@@ -708,6 +852,24 @@ Approved.
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "COMPLETED_CURRENT")
             self.assertEqual(result["turn_start_action"], "start_new_request")
+
+    def test_completed_current_non_stageflow_prompt_prepasses(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "completed")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "README 문구 수정해줘"})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertTrue(result["completed_current_prepass"])
+            self.assertEqual(result["_stdout"], "")
+
+    def test_completed_current_does_not_block_non_stageflow_write(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "completed")
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}},
+            )
+            self.assertEqual(result["_wire_output"], {})
 
     def test_implementation_prompt_checks_implementation_plan_gate(self) -> None:
         with temp_project() as root:
@@ -794,6 +956,11 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
+                current_scope="큰방향",
+            )
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             self.assertEqual(result["status"], "AWAITING_USER")
             self.assertEqual(result["turn_start_action"], "handle_awaiting_user_clarification")
@@ -823,13 +990,70 @@ Approved.
                     self.assertNotIn("awaiting_user_prompt_kind", result)
                     self.assertIn("pending clarification", result["pending_clarification_output"])
 
+    def test_active_pending_without_store_returns_definition_store_required(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root, include_store=False)
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            self.assertEqual(result["status"], "DEFINITION_STORE_REQUIRED")
+            self.assertEqual(result["turn_start_action"], "create_definition_store")
+            self.assertIn("definition-store", result["turn_start_instruction"])
+
+    def test_definition_store_required_allows_only_required_store_files(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root, include_store=False)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/working-set.json"
+                    },
+                },
+            )
+            self.assertEqual(allowed["_wire_output"], {})
+
+            blocked = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"
+                    },
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(blocked["status"], "BLOCKED")
+            self.assertIn("DEFINITION_STORE_REQUIRED turns may only create required", "\n".join(blocked["warnings"]))
+
+    def test_stop_blocks_when_definition_store_required_remains_missing(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root, include_store=False)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "준비했습니다."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(result["_wire_output"]["reason"], "Stageflow cannot advance yet because the current workflow gate is not complete.")
+
     def test_awaiting_user_allows_only_definition_clarification_writes_before_resolution(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             self.write_pending_definition(root)
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번은 2번, 2번은 3번"})
             allowed_paths = (
-                ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md",
+                ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/working-set.json",
+                ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/decision-ledger.jsonl",
                 ".stageflow/requests/20260621-1200-test-request/01-definition/question-backlog.md",
                 ".stageflow/requests/20260621-1200-test-request/01-definition/transition-risk-goal.md",
                 ".stageflow/requests/20260621-1200-test-request/01-definition/transition-risk.md",
@@ -848,6 +1072,7 @@ Approved.
                     self.assertEqual(allowed["_wire_output"], {})
 
             blocked_paths = (
+                ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md",
                 ".stageflow/requests/20260621-1200-test-request/01-definition/review/final.md",
                 ".stageflow/requests/20260621-1200-test-request/01-definition/approval.md",
                 ".stageflow/requests/20260621-1200-test-request/02-implementation-plan/implementation-plan.md",
@@ -866,7 +1091,7 @@ Approved.
                         expected_returncode=0,
                     )
                     self.assertEqual(blocked["status"], "BLOCKED")
-                    self.assertIn("AWAITING_USER turns may only write", "\n".join(blocked["warnings"]))
+                    self.assertIn("definition", "\n".join(blocked["warnings"]))
 
 
     def test_stop_signal_blocks_definition_approval_claim_before_transition_risk(self) -> None:
@@ -955,15 +1180,25 @@ Approved.
                 expected_returncode=0,
             )
             self.assertEqual(result["status"], "BLOCKED")
-            self.assertIn("question-generation subagents", "\n".join(result["warnings"]))
+            self.assertIn("definition clarification allows only", "\n".join(result["warnings"]))
             self.assertFalse(result["_wire_output"]["continue"])
-            self.assertIn("question-generation subagents", result["_wire_output"]["stopReason"])
+            self.assertIn("definition clarification allows only", result["_wire_output"]["stopReason"])
 
     def test_awaiting_user_subagent_may_only_write_question_backlog(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             self.write_pending_definition(root)
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-questions",
+                    "role": "question-generation backlog candidate subagent",
+                    "task": "Prepare clarification question backlog candidates for question-backlog.md",
+                },
+            )
             allowed = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -987,13 +1222,23 @@ Approved.
                 expected_returncode=0,
             )
             self.assertEqual(blocked["status"], "BLOCKED")
-            self.assertIn("question-backlog.md", "\n".join(blocked["warnings"]))
+            self.assertIn("registered role", "\n".join(blocked["warnings"]))
 
     def test_awaiting_user_subagent_may_write_question_scope_transition_review(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             self.write_pending_definition(root)
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-scope-review",
+                    "role": "question scope transition review subagent",
+                    "task": "Review whether 큰방향 questions are exhausted before moving to 주요결정",
+                },
+            )
             allowed = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -1013,6 +1258,16 @@ Approved.
             self.create_project(root, "definition")
             self.write_pending_definition(root)
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-impact",
+                    "role": "definition-store impact candidate helper subagent",
+                    "task": "Prepare impact candidates for definition-store/impact-candidates.json",
+                },
+            )
             allowed = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -1040,9 +1295,31 @@ Approved.
                 expected_returncode=0,
             )
             self.assertEqual(blocked["status"], "BLOCKED")
-            self.assertIn("definition-store/*.json", "\n".join(blocked["warnings"]))
+            self.assertIn("registered role", "\n".join(blocked["warnings"]))
 
-    def test_awaiting_user_pending_answer_allows_main_definition_write(self) -> None:
+    def test_awaiting_user_unregistered_subagent_write_is_blocked(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1 설명해줘"})
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-spoof",
+                    "role": "definition-store impact candidate helper subagent",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/impact-candidates.json"
+                    },
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("registered by SubagentStart", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_pending_answer_blocks_main_definition_write(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             self.write_pending_definition(root)
@@ -1055,8 +1332,116 @@ Approved.
                     "tool_name": "Write",
                     "tool_input": {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"},
                 },
+                expected_returncode=0,
             )
-            self.assertEqual(result["_wire_output"], {})
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertIn("store-only", "\n".join(result["warnings"]))
+
+    def test_awaiting_user_store_only_blocks_definition_read(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            for tool_name, tool_input in (
+                ("Read", {"file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition.md"}),
+                ("shell_command", {"command": "sed -n '1,120p' .stageflow/requests/20260621-1200-test-request/01-definition/definition.md"}),
+            ):
+                with self.subTest(tool_name=tool_name):
+                    result = self.run_hook(
+                        root,
+                        "pre_tool_use",
+                        {"session_id": "session-1", "tool_name": tool_name, "tool_input": tool_input},
+                        expected_returncode=0,
+                    )
+                    self.assertEqual(result["status"], "BLOCKED")
+                    self.assertIn("may not read", "\n".join(result["warnings"]))
+
+    def test_invalid_store_gate_does_not_use_fast_path(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            sync_state = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store" / "sync-state.json"
+            data = json.loads(sync_state.read_text(encoding="utf-8"))
+            data["current_gate"] = "typo-gate"
+            sync_state.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            self.assertEqual(result["status"], "WARNING")
+            self.assertEqual(result["validation"]["status"], "FAIL")
+            self.assertIn("current_gate", result["validation"]["output"])
+
+    def test_targeted_sync_gate_registers_subagent_and_allows_plan_write(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="targeted-sync-required",
+            )
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            self.assertEqual(prompt_result["status"], "TARGETED_SYNC_REQUIRED")
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-targeted",
+                    "role": "targeted-sync subagent",
+                    "task": "Prepare targeted-sync-plan.json for affected definition sections",
+                },
+            )
+            self.assertEqual(result["status"], "TARGETED_SYNC_SUBAGENT_ALLOWED")
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-targeted",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/targeted-sync-plan.json"
+                    },
+                },
+            )
+            self.assertEqual(allowed["_wire_output"], {})
+
+    def test_full_consistency_gate_registers_subagent_and_allows_report_write(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
+            self.assertEqual(prompt_result["status"], "FULL_CONSISTENCY_REQUIRED")
+            result = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-full",
+                    "role": "full-consistency subagent",
+                    "task": "Prepare full-consistency-report.json with PASS or blocking issues",
+                },
+            )
+            self.assertEqual(result["status"], "FULL_CONSISTENCY_SUBAGENT_ALLOWED")
+            allowed = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-full",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/full-consistency-report.json"
+                    },
+                },
+            )
+            self.assertEqual(allowed["_wire_output"], {})
 
     def test_awaiting_user_follow_up_allows_full_restatement_with_scope_label(self) -> None:
         with temp_project() as root:
@@ -1073,6 +1458,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
@@ -1099,6 +1485,11 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
+                current_scope="큰방향",
+            )
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
@@ -1135,6 +1526,11 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
+                current_scope="큰방향",
+            )
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
@@ -1163,6 +1559,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
@@ -1188,6 +1585,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
@@ -1213,6 +1611,11 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
+                current_scope="큰방향",
+            )
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (

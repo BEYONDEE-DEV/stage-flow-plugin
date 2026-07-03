@@ -65,13 +65,14 @@ Allowed phases are `definition`, `implementation-plan`, `implementation`, and `c
   state.json
   01-definition/
     definition.md
-    definition-store/         (optional hot-path store)
+    definition-store/         (required hot-path store for active clarification)
       working-set.json
       decision-ledger.jsonl
       trace-index.json
       sync-state.json
       impact-candidates.json      (optional helper)
       targeted-sync-plan.json     (optional helper)
+      full-consistency-report.json (required for full-consistency-required gate)
     question-backlog.md       (optional helper)
     question-scope-transition-review.md  (required before lower-scope pending questions)
     transition-risk-goal.md   (required after user stop signal before definition approval)
@@ -128,9 +129,18 @@ Use `references/language-policy.md` whenever starter templates, review evidence,
 
 ## Definition Store Hot Path
 
-`01-definition/definition-store/` is optional and backward compatible. When present, it is the active clarification hot path while `definition.md` remains the approval-ready snapshot.
+`01-definition/definition-store/` is required for new requests and for any existing definition that has active `Pending Clarifications`. It is the active clarification hot path while `definition.md` remains the approval-ready snapshot.
 
-Required store files are `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`. Helper subagents may prepare `impact-candidates.json` and `targeted-sync-plan.json` during `AWAITING_USER`. Before review or approval, `sync-state.json` must show the current `definition.md` fingerprint and no unsynced medium/high-risk decisions.
+Required store files are `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`. During active clarification, `working-set.json.active_pending_questions` is the canonical visible pending batch; `definition.md` is the approval-ready snapshot. Initial files for a pending batch use active pending IDs, `active_pending_questions`, and scope in `working-set.json`, an empty `decision-ledger.jsonl`, `{"traces":[]}` in `trace-index.json`, and the current `definition.md` fingerprint with `current_gate: "pending-answer"` and `decision_sync: {}` in `sync-state.json`.
+
+`sync-state.current_gate` controls the allowed path:
+
+- `pending-answer`, `store-only`, or `store-only-next-question`: answer/follow-up hot path; do not read or write `definition.md`.
+- `targeted-sync-required`: medium-risk answer; registered targeted-sync subagent writes `targeted-sync-plan.json` before affected snapshot work.
+- `full-consistency-required`: high-risk, stop, transition, review, or approval path; registered full-consistency subagent writes PASS `full-consistency-report.json`.
+- `snapshot-current`: main agent may sync `definition.md` from the store and update the current snapshot fingerprint.
+
+Before review or approval, `sync-state.json` must show the current `definition.md` fingerprint and no unsynced medium/high-risk decisions.
 
 ## Optional Definition Question Backlog
 

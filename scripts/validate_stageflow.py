@@ -324,6 +324,12 @@ SYNC_STATUSES = {
 }
 TARGETED_SYNC_STATUSES = {"targeted-synced", "full-synced", "synced"}
 FULL_SYNC_STATUSES = {"full-synced", "synced"}
+STORE_PENDING_GATES = {"pending-answer", "store-only", "store-only-next-question"}
+STORE_SYNC_GATES = {"targeted-sync-required", "full-consistency-required", "snapshot-current"}
+STORE_GATES = STORE_PENDING_GATES | STORE_SYNC_GATES
+TARGETED_SYNC_GATE = "targeted-sync-required"
+FULL_CONSISTENCY_GATE = "full-consistency-required"
+SNAPSHOT_CURRENT_GATE = "snapshot-current"
 PENDING_ID_RE = re.compile(r"\bPENDING-\d+\b", re.IGNORECASE)
 DEC_ID_RE = re.compile(r"\bDEC-\d+\b", re.IGNORECASE)
 DEFINITION_STORE_AFFECTED_ID_RE = re.compile(r"\b(?:REQ|SP|DFLOW|DEC|INTENT)-\d+\b", re.IGNORECASE)
@@ -597,6 +603,10 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
     pending_messages: list[str] = []
     if artifact_text is not None:
         pending_messages = pending_clarification_messages(stage, artifact_text, artifact_path, errors)
+        if stage.phase == "definition":
+            store_messages = store_pending_messages(stage_dir)
+            if store_messages:
+                pending_messages = store_messages
         validate_artifact(stage, artifact_text, artifact_path, errors, bool(pending_messages))
         if stage.phase == "implementation-plan":
             validate_implementation_plan_against_definition(context, artifact_path, artifact_text, errors)
@@ -906,6 +916,134 @@ def json_list(data: dict[str, Any], *keys: str) -> list[Any]:
     return []
 
 
+def store_question_options_text(value: Any) -> str:
+    if isinstance(value, list):
+        return "; ".join(str(item).strip() for item in value if str(item).strip())
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
+def normalize_store_pending_question(raw: Any) -> dict[str, str] | None:
+    if not isinstance(raw, dict):
+        return None
+    question_id = json_string(raw, "id", "pending_id", "pendingId", "ID").upper()
+    status = json_string(raw, "status", "Status") or "pending"
+    if not PENDING_STATUS_RE.fullmatch(status.strip()):
+        return None
+    return {
+        "ID": question_id,
+        "Question Scope": json_string(raw, "scope", "question_scope", "questionScope", "Question Scope"),
+        "Question": json_string(raw, "question", "Question"),
+        "Options": store_question_options_text(raw.get("options", raw.get("Options", ""))),
+        "Recommended Option": json_string(raw, "recommended_option", "recommendedOption", "recommended", "Recommended Option"),
+        "Transition Option": json_string(raw, "transition_option", "transitionOption", "Transition Option") or "N/A",
+        "Why This Matters": json_string(raw, "why_this_matters", "whyThisMatters", "why", "Why This Matters"),
+        "Status": status,
+    }
+
+
+def store_active_pending_questions(working_set: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for raw in json_list(working_set, "active_pending_questions", "activePendingQuestions"):
+        row = normalize_store_pending_question(raw)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def validate_store_active_pending_questions(working_set: dict[str, Any], path: Path, errors: list[str]) -> list[dict[str, str]]:
+    raw_questions = json_list(working_set, "active_pending_questions", "activePendingQuestions")
+    rows: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_questions, start=1):
+        if not isinstance(raw, dict):
+            errors.append(f"`{display_path(path)}` active_pending_questions[{index}] must be an object")
+            continue
+        row = normalize_store_pending_question(raw)
+        if row is None:
+            errors.append(f"`{display_path(path)}` active_pending_questions[{index}] must use pending/awaiting status")
+            continue
+        pending_id = row.get("ID", "")
+        if not fullmatch_id(PENDING_ID_RE, pending_id):
+            errors.append(f"`{display_path(path)}` active_pending_questions[{index}] must include `PENDING-*` id")
+        elif pending_id in seen_ids:
+            errors.append(f"`{display_path(path)}` active_pending_questions repeats pending ID `{pending_id}`")
+        seen_ids.add(pending_id)
+
+        scope = row.get("Question Scope", "").strip()
+        question = row.get("Question", "").strip()
+        options = row.get("Options", "").strip()
+        recommended = row.get("Recommended Option", "").strip()
+        transition = row.get("Transition Option", "").strip()
+        why = row.get("Why This Matters", "").strip()
+        missing = [
+            name
+            for name, value in (
+                ("Question Scope", scope),
+                ("Question", question),
+                ("Options", options),
+                ("Recommended Option", recommended),
+                ("Why This Matters", why),
+            )
+            if not value or value.lower() in {"n/a", "none"}
+        ]
+        if missing:
+            errors.append(
+                f"`{display_path(path)}` active_pending_questions row `{pending_id or index}` is missing user-answerable fields: {', '.join(missing)}"
+            )
+        if scope and scope not in QUESTION_SCOPES:
+            errors.append(f"`{display_path(path)}` active_pending_questions row `{pending_id or index}` Question Scope must be one of {', '.join(QUESTION_SCOPES)}")
+        if options and len(labeled_proposal_options(options)) < 2:
+            errors.append(
+                f"`{display_path(path)}` active_pending_questions row `{pending_id or index}` must include at least two explicit labeled proposal options"
+            )
+        if any(is_stop_signal_option_item(option) for option in split_option_items(options)):
+            errors.append(
+                f"`{display_path(path)}` active_pending_questions row `{pending_id or index}` must not include the user stop signal as a question option"
+            )
+        if transition.lower() != "n/a":
+            errors.append(f"`{display_path(path)}` active_pending_questions row `{pending_id or index}` Transition Option must be `N/A` while pending")
+        validate_definition_question_stage_boundary(
+            path,
+            "definition-store active_pending_questions",
+            pending_id or f"active_pending_questions[{index}]",
+            " ".join((question, options, recommended, why)),
+            errors,
+        )
+        rows.append(row)
+
+    if len(rows) > 5:
+        errors.append(f"`{display_path(path)}` active_pending_questions must contain no more than five active questions")
+    validate_pending_clarification_scope_batch(path, rows, errors)
+    return rows
+
+
+def store_pending_messages(stage_dir: Path) -> list[str]:
+    working_set_path = stage_dir / "definition-store" / "working-set.json"
+    if not working_set_path.is_file():
+        return []
+    try:
+        value = json.loads(working_set_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(value, dict):
+        return []
+    rows = store_active_pending_questions(value)
+    if not rows:
+        return []
+    messages: list[str] = []
+    for row in rows:
+        scope = row.get("Question Scope", "").strip()
+        messages.append(
+            f"`{display_path(working_set_path)}` pending clarification `{row.get('ID', '<unknown>')}`: "
+            f"질문 범위: {scope} [{scope}] Question: {row.get('Question', '')} "
+            f"Options: {row.get('Options', '')} Recommended: {row.get('Recommended Option', '')} "
+            f"Transition option: {row.get('Transition Option', 'N/A')} Why this matters: {row.get('Why This Matters', '')}"
+        )
+    return messages
+
+
 def uppercase_json_ids(pattern: re.Pattern[str], values: list[Any]) -> set[str]:
     ids: set[str] = set()
     for value in values:
@@ -988,6 +1126,35 @@ def trace_index_entries(trace_index: dict[str, Any], path: Path, errors: list[st
     return entries
 
 
+def validate_gate_json_fingerprint(path: Path, value: dict[str, Any], expected_fingerprint: str, errors: list[str]) -> None:
+    fingerprint = json_string(value, "definition_fingerprint", "definitionFingerprint", "snapshot_fingerprint", "snapshotFingerprint")
+    if fingerprint and fingerprint != expected_fingerprint:
+        errors.append(f"`{display_path(path)}` definition_fingerprint must match current definition.md `{expected_fingerprint}`")
+
+
+def validate_definition_store_gate_artifacts(
+    store_dir: Path,
+    current_gate: str,
+    expected_fingerprint: str,
+    errors: list[str],
+) -> None:
+    if current_gate == TARGETED_SYNC_GATE:
+        plan_path = store_dir / "targeted-sync-plan.json"
+        plan = read_store_json(plan_path, errors)
+        if plan is not None:
+            validate_gate_json_fingerprint(plan_path, plan, expected_fingerprint, errors)
+        return
+
+    if current_gate == FULL_CONSISTENCY_GATE:
+        report_path = store_dir / "full-consistency-report.json"
+        report = read_store_json(report_path, errors)
+        if report is not None:
+            validate_gate_json_fingerprint(report_path, report, expected_fingerprint, errors)
+            verdict = json_string(report, "verdict", "Verdict", "status", "Status")
+            if verdict.upper() != "PASS":
+                errors.append(f"`{display_path(report_path)}` verdict must be PASS for full-consistency-required")
+
+
 def validate_definition_store(
     stage_dir: Path,
     artifact_path: Path,
@@ -998,6 +1165,11 @@ def validate_definition_store(
 ) -> None:
     store_dir = stage_dir / "definition-store"
     if not store_dir.exists():
+        if has_pending_clarifications:
+            errors.append(
+                f"`{display_path(store_dir)}` is required while definition has active Pending Clarifications; "
+                "create the definition-store hot path before processing the next user answer"
+            )
         return
     if not store_dir.is_dir():
         errors.append(f"`{display_path(store_dir)}` must be a directory")
@@ -1015,16 +1187,27 @@ def validate_definition_store(
     if working_set is None or trace_index is None or sync_state is None:
         return
 
+    store_question_rows = validate_store_active_pending_questions(working_set, working_set_path, errors)
+    store_question_ids = {row.get("ID", "").strip().upper() for row in store_question_rows if row.get("ID", "").strip()}
     active_pending_ids = {row.get("ID", "").strip().upper() for row in active_pending_rows(definition_text) if row.get("ID", "").strip()}
     store_pending_ids = uppercase_json_ids(PENDING_ID_RE, json_list(working_set, "active_pending_ids", "activePendingIds"))
-    if store_pending_ids != active_pending_ids:
+    if store_question_ids:
+        if store_pending_ids and store_pending_ids != store_question_ids:
+            errors.append(
+                f"`{display_path(working_set_path)}` active_pending_ids must match active_pending_questions "
+                f"({', '.join(sorted(store_question_ids))})"
+            )
+    elif store_pending_ids != active_pending_ids:
         errors.append(
             f"`{display_path(working_set_path)}` active pending IDs must match definition.md Pending Clarifications "
             f"({', '.join(sorted(active_pending_ids)) or 'none'})"
         )
 
     current_scope = json_string(working_set, "current_scope", "currentScope")
-    active_scopes = {row.get("Question Scope", "").strip() for row in active_pending_rows(definition_text) if row.get("Question Scope", "").strip()}
+    store_scopes = {row.get("Question Scope", "").strip() for row in store_question_rows if row.get("Question Scope", "").strip()}
+    active_scopes = store_scopes or {row.get("Question Scope", "").strip() for row in active_pending_rows(definition_text) if row.get("Question Scope", "").strip()}
+    if active_scopes and not current_scope:
+        errors.append(f"`{display_path(working_set_path)}` must include current_scope while Pending Clarifications are active")
     if current_scope and current_scope not in QUESTION_SCOPES:
         errors.append(f"`{display_path(working_set_path)}` current_scope must be one of {', '.join(QUESTION_SCOPES)}")
     if active_scopes and current_scope and current_scope not in active_scopes:
@@ -1040,12 +1223,18 @@ def validate_definition_store(
         errors.append(f"`{display_path(sync_state_path)}` must include object `decision_sync`")
         sync_entries = {}
 
+    current_gate = json_string(sync_state, "current_gate", "currentGate", "gate") or json_string(working_set, "current_gate", "currentGate", "gate")
+    if current_gate and current_gate not in STORE_GATES:
+        errors.append(f"`{display_path(sync_state_path)}` current_gate must be one of {', '.join(sorted(STORE_GATES))}")
+
     snapshot_fingerprint = json_string(sync_state, "definition_fingerprint", "definitionFingerprint", "snapshot_fingerprint", "snapshotFingerprint")
     expected_fingerprint = f"sha256:{definition_fingerprint}"
     if not snapshot_fingerprint:
         errors.append(f"`{display_path(sync_state_path)}` must include current definition snapshot fingerprint")
-    elif snapshot_fingerprint != expected_fingerprint and not has_pending_clarifications:
+    elif snapshot_fingerprint != expected_fingerprint and (not has_pending_clarifications or current_gate == SNAPSHOT_CURRENT_GATE):
         errors.append(f"`{display_path(sync_state_path)}` snapshot fingerprint must match current definition.md `{expected_fingerprint}` before review or approval")
+
+    validate_definition_store_gate_artifacts(store_dir, current_gate, expected_fingerprint, errors)
 
     for row in ledger_rows:
         decision_id = json_string(row, "decision_id", "decisionId", "id").upper()
@@ -2387,6 +2576,10 @@ def render_stage_tree() -> str:
         if stage.phase == "definition":
             parts.extend([
                 f"`{stage.folder}/{stage.artifact}`",
+                f"`{stage.folder}/definition-store/working-set.json`",
+                f"`{stage.folder}/definition-store/decision-ledger.jsonl`",
+                f"`{stage.folder}/definition-store/trace-index.json`",
+                f"`{stage.folder}/definition-store/sync-state.json`",
                 f"`{stage.folder}/question-scope-transition-review.md` (before lower-scope pending questions)",
                 f"`{stage.folder}/transition-risk-goal.md` (after stop signal)",
                 f"`{stage.folder}/transition-risk.md` (after stop signal)",

@@ -387,6 +387,8 @@ class ValidatorThreeStageTests(unittest.TestCase):
         sync_status: str = "working-set-only",
         trace_affected_ids: list[str] | None = None,
         fingerprint: str | None = None,
+        current_gate: str = "pending-answer",
+        active_pending_questions: list[dict[str, str]] | None = None,
     ) -> None:
         affected_ids = affected_ids or ["REQ-001"]
         trace_affected_ids = trace_affected_ids if trace_affected_ids is not None else affected_ids
@@ -395,10 +397,13 @@ class ValidatorThreeStageTests(unittest.TestCase):
         store_dir.mkdir(exist_ok=True)
         if fingerprint is None:
             fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+        if active_pending_questions is None:
+            active_pending_questions = self.pending_questions_from_definition(stage_dir / "definition.md", active_pending_ids)
         (store_dir / "working-set.json").write_text(
             json.dumps(
                 {
                     "active_pending_ids": active_pending_ids,
+                    "active_pending_questions": active_pending_questions,
                     "current_scope": current_scope,
                     "risk_level": risk_level,
                     "latest_answer": {"source_pending_id": source_pending_id, "decision_id": decision_id},
@@ -444,6 +449,7 @@ class ValidatorThreeStageTests(unittest.TestCase):
             json.dumps(
                 {
                     "definition_fingerprint": f"sha256:{fingerprint}",
+                    "current_gate": current_gate,
                     "decision_sync": {
                         decision_id: {
                             "risk_level": risk_level,
@@ -457,6 +463,41 @@ class ValidatorThreeStageTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+
+    def pending_questions_from_definition(self, path: Path, active_pending_ids: list[str]) -> list[dict[str, str]]:
+        text = path.read_text(encoding="utf-8")
+        marker = "## Pending Clarifications"
+        if marker not in text:
+            return []
+        tail = text.split(marker, 1)[1]
+        next_heading = tail.find("\n## ")
+        section = tail[:next_heading] if next_heading != -1 else tail
+        lines = [line.strip() for line in section.splitlines() if line.strip().startswith("|")]
+        if len(lines) < 3:
+            return []
+        headers = [cell.strip() for cell in lines[0].strip("|").split("|")]
+        wanted = {item.upper() for item in active_pending_ids}
+        questions: list[dict[str, str]] = []
+        for line in lines[2:]:
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            row = {header: cells[index] if index < len(cells) else "" for index, header in enumerate(headers)}
+            if row.get("ID", "").upper() not in wanted:
+                continue
+            if row.get("Status", "").strip().lower() not in {"pending", "awaiting"}:
+                continue
+            questions.append(
+                {
+                    "id": row.get("ID", ""),
+                    "scope": row.get("Question Scope", ""),
+                    "question": row.get("Question", ""),
+                    "options": row.get("Options", ""),
+                    "recommended_option": row.get("Recommended Option", ""),
+                    "transition_option": row.get("Transition Option", "N/A"),
+                    "why_this_matters": row.get("Why This Matters", ""),
+                    "status": row.get("Status", "pending"),
+                }
+            )
+        return questions
 
     @staticmethod
     def transition_risk_goal_text(fingerprint: str) -> str:
@@ -709,6 +750,10 @@ Approved.
                 self.assertIn(expected, result.stdout)
                 if template == "stage-tree":
                     self.assertNotIn("01-definition/goal.md", result.stdout)
+                    self.assertIn("01-definition/definition-store/working-set.json", result.stdout)
+                    self.assertIn("01-definition/definition-store/decision-ledger.jsonl", result.stdout)
+                    self.assertIn("01-definition/definition-store/trace-index.json", result.stdout)
+                    self.assertIn("01-definition/definition-store/sync-state.json", result.stdout)
                     self.assertIn("01-definition/transition-risk-goal.md", result.stdout)
                     self.assertIn("01-definition/transition-risk.md", result.stdout)
                 if template == "definition":
@@ -1371,6 +1416,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
@@ -1463,6 +1509,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="세부확인")
             self.write_question_scope_transition_review(
                 root,
                 transitions=("큰방향 -> 주요결정", "주요결정 -> 세부확인"),
@@ -1632,6 +1679,7 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="주요결정")
             self.write_question_scope_transition_review(root)
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
@@ -1715,11 +1763,36 @@ Approved.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
+                current_scope="큰방향",
+            )
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
             self.assertIn("Option 3: docs plus hook metadata", result.stdout)
             self.assertNotIn("구현 계획으로 넘어가기", result.stdout)
+
+    def test_definition_store_required_for_active_pending_clarification(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which goal should be clarified? | Option 1: A; Option 2: B | Option 1 | N/A | Active clarification requires a store. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("definition-store", result.stdout)
+            self.assertIn("is required while definition has active Pending Clarifications", result.stdout)
 
     def test_definition_store_cheap_check_keeps_awaiting_user(self) -> None:
         with temp_project() as root:
@@ -1740,6 +1813,31 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
+
+    def test_definition_store_active_questions_are_canonical_while_pending(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-777"],
+                current_scope="큰방향",
+                active_pending_questions=[
+                    {
+                        "id": "PENDING-777",
+                        "scope": "큰방향",
+                        "question": "Which top-level scope should remain active in the store?",
+                        "options": "Option 1: Store canonical scope; Option 2: Snapshot definition scope",
+                        "recommended_option": "Option 1",
+                        "transition_option": "N/A",
+                        "why_this_matters": "The hot path should not require rewriting definition.md for every answer.",
+                        "status": "pending",
+                    }
+                ],
+            )
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+            self.assertIn("PENDING-777", result.stdout)
+            self.assertIn("Store canonical scope", result.stdout)
 
     def test_definition_store_rejects_active_pending_mismatch(self) -> None:
         with temp_project() as root:
@@ -1854,6 +1952,97 @@ Approved.
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("질문 범위: 주요결정", result.stdout)
+
+    def test_definition_store_targeted_gate_requires_plan(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which policy should be targeted? | Option 1: A; Option 2: B | Option 1 | N/A | Targeted sync must be planned. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향", current_gate="targeted-sync-required")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("targeted-sync-plan.json", result.stdout)
+
+    def test_definition_store_targeted_gate_passes_with_plan(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which policy should be targeted? | Option 1: A; Option 2: B | Option 1 | N/A | Targeted sync must be planned. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향", current_gate="targeted-sync-required")
+            stage_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition"
+            fingerprint = hashlib.sha256((stage_dir / "definition.md").read_bytes()).hexdigest()
+            (stage_dir / "definition-store" / "targeted-sync-plan.json").write_text(
+                json.dumps({"definition_fingerprint": f"sha256:{fingerprint}", "affected_ids": ["REQ-001"]}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            result = self.run_validator(root, "definition")
+            self.assertEqual(result.returncode, 3, result.stdout)
+
+    def test_definition_store_full_gate_requires_pass_report(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which ownership should be reconciled? | Option 1: A; Option 2: B | Option 1 | N/A | Full consistency must pass before continuing. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향", current_gate="full-consistency-required")
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("full-consistency-report.json", result.stdout)
+
+    def test_definition_store_snapshot_gate_rejects_stale_pending_snapshot(self) -> None:
+        with temp_project() as root:
+            self.create_project(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                DEFINITION_TEXT.replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | Which snapshot should be current? | Option 1: Current store; Option 2: Existing snapshot | Option 1 | N/A | Snapshot sync must be current before review. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                fingerprint="0" * 64,
+                current_gate="snapshot-current",
+            )
+            result = self.run_validator(root, "definition")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("snapshot fingerprint must match", result.stdout)
 
     def test_definition_stop_signal_requires_transition_risk_files(self) -> None:
         with temp_project() as root:
@@ -2114,6 +2303,7 @@ Already-decided content was incorrectly listed as risk.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
@@ -2213,6 +2403,7 @@ Already-decided content was incorrectly listed as risk.
                 encoding="utf-8",
             )
             self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
             result = self.run_validator(root, "definition")
             self.assertEqual(result.returncode, 3, result.stdout)
             self.assertIn("AWAITING_USER definition", result.stdout)
