@@ -136,9 +136,13 @@ Required store files are `working-set.json`, `decision-ledger.jsonl`, `trace-ind
 `sync-state.current_gate` controls the allowed path:
 
 - `pending-answer`, `store-only`, or `store-only-next-question`: answer/follow-up hot path; do not read or write `definition.md`.
-- `targeted-sync-required`: medium-risk answer; registered targeted-sync subagent writes `targeted-sync-plan.json` before affected snapshot work.
-- `full-consistency-required`: high-risk, stop, transition, review, or approval path; registered full-consistency subagent writes PASS `full-consistency-report.json`.
+- `targeted-sync-required`: medium-risk answer with a valid medium-risk store decision; registered targeted-sync subagent writes `targeted-sync-plan.json` before affected snapshot work.
+- `full-consistency-required`: high-risk, stop, transition, review, or approval path with a valid high-risk store decision; registered full-consistency subagent writes PASS `full-consistency-report.json`.
 - `snapshot-current`: main agent may sync `definition.md` from the store and update the current snapshot fingerprint.
+
+Store progress invariant: an `AWAITING_USER` answer-like turn must record a valid store decision before it can stop. A valid decision means a new `DEC-*` ledger row whose `source_pending_id` was active at turn start, non-empty affected IDs, a matching `trace-index.json` entry, and a matching `sync-state.decision_sync` entry. If no sync gate is active, that valid decision must also change the active pending batch before the response stops. If the turn moves to `targeted-sync-required`, `full-consistency-required`, or `snapshot-current`, the same valid decision evidence is still required. Follow-up turns may leave the store unchanged only if the response shows the full current pending batch and all labeled options. A store with no active pending questions and no recognized sync gate is invalid; older stop-like text in `Clarification History` does not make that state valid.
+
+Duplicate or derived pending questions retire through the same store shape as user answers: append a `DEC-*` row with `source_pending_id`, affected existing `DEC/REQ/SP/DFLOW/INTENT-*` IDs, and `risk_level`; add a matching `trace-index.json` trace; and update `sync-state.decision_sync` with the risk and sync status before replacing the visible batch or leaving a required sync gate.
 
 Before review or approval, `sync-state.json` must show the current `definition.md` fingerprint and no unsynced medium/high-risk decisions.
 

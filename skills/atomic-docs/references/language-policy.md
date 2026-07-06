@@ -26,6 +26,22 @@ Keep these values unchanged even when the surrounding prose is written in anothe
 - option labels, status/control values, or workflow terms required by a connected validator or Stageflow artifact
 - quoted user text when exact wording matters for intent preservation
 
+## User-Facing Terminology Policy
+
+For user-facing docs operation summaries, approval requests, first-step bootstrap summaries, and change plans, use plain user language first. Keep schema keys, frontmatter keys, file paths, AID values, judgment labels, and option labels unchanged, but do not present them to the user as unexplained standalone lines.
+
+Use the order "쉬운 설명 + 원문 식별자" when an internal identifier matters. For Korean interactions, apply these mappings:
+
+- `storage_mode`: `문서 저장 방식`
+- `repository`: `현재 프로젝트 안의 폴더에 저장`
+- `submodule`: `별도 문서 저장소/submodule에 저장`
+- `docs_root` and managed docs root: `문서 저장 위치`
+- `.stageflow/atomic-docs.json`: `atomic docs 설정 파일`
+- `project/atomization-criteria.md`: `문서 작성 기준 초안`
+- `bootstrap`: `첫 설정 단계` or `처음 준비 단계`
+
+Avoid first responses that consist only of raw config summaries such as `storage mode: repository`, `docs root: docs`, or `작성/갱신: .stageflow/atomic-docs.json`. Prefer a short natural-language explanation first, then put the exact key, option, or path in backticks when it helps the user identify the file or setting.
+
 ## Template And Filler Prose
 
 Starter examples are scaffolding, not approved docs content. Replace generic English filler such as `Describe...`, `No pending...`, or placeholder row prose with request-specific prose in the selected language before asking for review or write approval.

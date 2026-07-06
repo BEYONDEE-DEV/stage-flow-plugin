@@ -116,6 +116,40 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Controlled judgment labels, fixed headings, schema keys", text)
         self.assertIn("change plan and managed docs prose should use the user/artifact language", text)
 
+    def test_atomic_docs_uses_user_facing_terms_before_raw_config(self) -> None:
+        skill = read(DOCS_SKILL)
+        language = read(DOCS_REFS / "language-policy.md")
+        docs_root = read(DOCS_REFS / "docs-root-and-config.md")
+        refresh = read(DOCS_REFS / "refresh-flow.md")
+
+        self.assertIn("explain storage and write scope in plain user terms before showing raw config keys", skill)
+        self.assertIn("Do not present first setup as only `storage mode: repository`, `docs root: docs`, or `작성/갱신: ...`", skill)
+        self.assertIn("별도 submodule 없이 현재 repository 안에 문서를 저장합니다", skill)
+        self.assertIn("문서 작성 기준 초안", skill)
+
+        self.assertIn("User-Facing Terminology Policy", language)
+        self.assertIn("쉬운 설명 + 원문 식별자", language)
+        for required_mapping in [
+            "`storage_mode`: `문서 저장 방식`",
+            "`repository`: `현재 프로젝트 안의 폴더에 저장`",
+            "`submodule`: `별도 문서 저장소/submodule에 저장`",
+            "`docs_root` and managed docs root: `문서 저장 위치`",
+            "`.stageflow/atomic-docs.json`: `atomic docs 설정 파일`",
+            "`project/atomization-criteria.md`: `문서 작성 기준 초안`",
+            "`bootstrap`: `첫 설정 단계` or `처음 준비 단계`",
+        ]:
+            self.assertIn(required_mapping, language)
+        self.assertIn("unexplained standalone lines", language)
+        self.assertIn("raw config summaries such as `storage mode: repository`, `docs root: docs`, or `작성/갱신: .stageflow/atomic-docs.json`", language)
+
+        for text in [docs_root, refresh]:
+            self.assertIn("atomic docs 설정 파일", text)
+            self.assertIn("문서 작성 기준 초안", text)
+        self.assertIn("현재 프로젝트 안의 폴더에 문서를 저장", docs_root)
+        self.assertIn("별도 문서 저장소/submodule에 문서를 저장", docs_root)
+        self.assertIn("first setup step before real atom document writing", refresh)
+        self.assertIn("첫 설정 단계", refresh)
+        self.assertIn("Do not summarize this first step only as raw key-value lines", refresh)
 
     def test_plugin_manifest_exposes_docs_skill_prompts(self) -> None:
         manifest = read(ROOT / ".codex-plugin" / "plugin.json")

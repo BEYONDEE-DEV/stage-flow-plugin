@@ -419,6 +419,82 @@ class HookCheckThreeStageTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def append_store_decision(
+        self,
+        root: Path,
+        *,
+        decision_id: str = "DEC-901",
+        source_pending_id: str = "PENDING-001",
+        affected_ids: list[str] | None = None,
+        risk_level: str = "low",
+        sync_status: str = "working-set-only",
+        include_trace: bool = True,
+        include_sync: bool = True,
+    ) -> None:
+        affected_ids = affected_ids or ["REQ-001"]
+        store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+        ledger_path = store_dir / "decision-ledger.jsonl"
+        with ledger_path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "decision_id": decision_id,
+                        "source_pending_id": source_pending_id,
+                        "decision": "Recorded user answer for hook test.",
+                        "affected_ids": affected_ids,
+                        "risk_level": risk_level,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+        if include_trace:
+            trace_path = store_dir / "trace-index.json"
+            trace_index = json.loads(trace_path.read_text(encoding="utf-8"))
+            trace_index.setdefault("traces", []).append(
+                {
+                    "pending_id": source_pending_id,
+                    "decision_id": decision_id,
+                    "affected_ids": affected_ids,
+                }
+            )
+            trace_path.write_text(json.dumps(trace_index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if include_sync:
+            sync_path = store_dir / "sync-state.json"
+            sync_state = json.loads(sync_path.read_text(encoding="utf-8"))
+            sync_state.setdefault("decision_sync", {})[decision_id] = {
+                "risk_level": risk_level,
+                "status": sync_status,
+            }
+            sync_path.write_text(json.dumps(sync_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def replace_store_batch(self, root: Path, *, pending_id: str = "PENDING-002") -> None:
+        store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+        working_set_path = store_dir / "working-set.json"
+        working_set = json.loads(working_set_path.read_text(encoding="utf-8"))
+        working_set["active_pending_ids"] = [pending_id]
+        working_set["active_pending_questions"] = [
+            {
+                "id": pending_id,
+                "scope": "큰방향",
+                "question": "Which outcome should this clarify?",
+                "options": "Option 1: status readability; Option 2: traceability for reviewers",
+                "recommended_option": "Option 1",
+                "transition_option": "N/A",
+                "why_this_matters": "결과 우선순위는 아직 큰방향 질문입니다.",
+                "status": "pending",
+            }
+        ]
+        working_set_path.write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    @staticmethod
+    def next_batch_message() -> str:
+        return (
+            "Which outcome should this clarify?\n"
+            "Option 1: status readability\n"
+            "Option 2: traceability for reviewers"
+        )
+
     def pending_questions_from_definition(self, path: Path, active_pending_ids: list[str]) -> list[dict[str, str]]:
         text = path.read_text(encoding="utf-8")
         marker = "## Pending Clarifications"
@@ -1392,6 +1468,82 @@ Approved.
             self.assertEqual(result["validation"]["status"], "FAIL")
             self.assertIn("current_gate", result["validation"]["output"])
 
+    def test_invalid_store_batches_do_not_use_fast_path(self) -> None:
+        cases = [
+            (
+                "stop option",
+                [
+                    {
+                        "id": "PENDING-101",
+                        "scope": "큰방향",
+                        "question": "Which option is valid?",
+                        "options": "Option 1: proceed; Option 2: keep clarifying",
+                        "recommended_option": "Option 2",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Stop signals must not count as proposal options.",
+                        "status": "pending",
+                    }
+                ],
+                "must include at least two explicit labeled proposal options",
+            ),
+            (
+                "mixed scope",
+                [
+                    {
+                        "id": "PENDING-101",
+                        "scope": "큰방향",
+                        "question": "Which top scope?",
+                        "options": "Option 1: A; Option 2: B",
+                        "recommended_option": "Option 1",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Top scope matters.",
+                        "status": "pending",
+                    },
+                    {
+                        "id": "PENDING-102",
+                        "scope": "주요결정",
+                        "question": "Which major decision?",
+                        "options": "Option 1: A; Option 2: B",
+                        "recommended_option": "Option 1",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Major decision matters.",
+                        "status": "pending",
+                    },
+                ],
+                "must use one Question Scope at a time",
+            ),
+            (
+                "too many",
+                [
+                    {
+                        "id": f"PENDING-10{index}",
+                        "scope": "큰방향",
+                        "question": f"Question {index}?",
+                        "options": "Option 1: A; Option 2: B",
+                        "recommended_option": "Option 1",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Batch size matters.",
+                        "status": "pending",
+                    }
+                    for index in range(1, 7)
+                ],
+                "no more than five",
+            ),
+        ]
+        for label, questions, expected in cases:
+            with self.subTest(label=label), temp_project() as root:
+                self.create_project(root, "definition")
+                self.write_definition_store(
+                    root,
+                    active_pending_ids=[question["id"] for question in questions],
+                    current_scope=questions[0]["scope"],
+                    active_pending_questions=questions,
+                )
+                result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+                self.assertEqual(result["status"], "WARNING")
+                self.assertEqual(result["validation"]["status"], "FAIL")
+                self.assertIn(expected, result["validation"]["output"])
+
     def test_targeted_sync_gate_registers_subagent_and_allows_plan_write(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -1402,6 +1554,7 @@ Approved.
                 current_scope="큰방향",
                 current_gate="targeted-sync-required",
             )
+            self.append_store_decision(root, risk_level="medium", sync_status="pending")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
             self.assertEqual(prompt_result["status"], "TARGETED_SYNC_REQUIRED")
             result = self.run_hook(
@@ -1429,6 +1582,61 @@ Approved.
             )
             self.assertEqual(allowed["_wire_output"], {})
 
+    def test_live_sync_gate_overrides_turn_start_pending_answer_permissions(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            sync_state_path = store_dir / "sync-state.json"
+            sync_state = json.loads(sync_state_path.read_text(encoding="utf-8"))
+            sync_state["current_gate"] = "targeted-sync-required"
+            sync_state_path.write_text(json.dumps(sync_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.append_store_decision(root, risk_level="medium", sync_status="pending")
+
+            subagent = self.run_hook(
+                root,
+                "subagent_start",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-targeted",
+                    "role": "targeted-sync subagent",
+                    "task": "Prepare targeted-sync-plan.json for affected definition sections",
+                },
+            )
+            self.assertEqual(subagent["status"], "TARGETED_SYNC_SUBAGENT_ALLOWED")
+
+            stale_main_write = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/decision-ledger.jsonl"
+                    },
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(stale_main_write["status"], "BLOCKED")
+            self.assertIn("current `definition-store` gate", "\n".join(stale_main_write["warnings"]))
+
+            targeted_write = self.run_hook(
+                root,
+                "pre_tool_use",
+                {
+                    "session_id": "session-1",
+                    "agent_id": "agent-targeted",
+                    "tool_name": "Write",
+                    "tool_input": {
+                        "file_path": ".stageflow/requests/20260621-1200-test-request/01-definition/definition-store/targeted-sync-plan.json"
+                    },
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(targeted_write["_wire_output"], {})
+
     def test_full_consistency_gate_registers_subagent_and_allows_report_write(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
@@ -1439,6 +1647,7 @@ Approved.
                 current_scope="큰방향",
                 current_gate="full-consistency-required",
             )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "Option 1"})
             self.assertEqual(prompt_result["status"], "FULL_CONSISTENCY_REQUIRED")
             result = self.run_hook(
@@ -1493,7 +1702,230 @@ Approved.
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message})
             self.assertEqual(result["status"], "PREPASS")
 
-    def test_awaiting_user_stop_does_not_guess_follow_up_from_missing_pending_questions(self) -> None:
+    def test_awaiting_user_answer_requires_store_progress_even_when_batch_restated(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            last_message = (
+                "Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                "Option 1: docs-wide status only\n"
+                "Option 2: docs-wide status plus review-session scope\n"
+                "Option 3: docs-wide status plus hook metadata"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_duplicate_challenge_requires_store_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "이거 이미 정해진 같은 질문 아니야?"})
+            last_message = (
+                "Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                "Option 1: docs-wide status only\n"
+                "Option 2: docs-wide status plus review-session scope\n"
+                "Option 3: docs-wide status plus hook metadata"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_malformed_ledger_does_not_count_as_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            with (store_dir / "decision-ledger.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write("{not-json}\n")
+            self.replace_store_batch(root)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": self.next_batch_message()}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_decision_without_trace_or_sync_does_not_count_as_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            self.append_store_decision(root, include_trace=False, include_sync=False)
+            self.replace_store_batch(root)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": self.next_batch_message()}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_decision_for_unrelated_pending_does_not_count_as_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            self.append_store_decision(root, source_pending_id="PENDING-999")
+            self.replace_store_batch(root)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": self.next_batch_message()}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_valid_decision_must_advance_pending_batch(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            self.append_store_decision(root)
+            last_message = (
+                "Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                "Option 1: docs-wide status only\n"
+                "Option 2: docs-wide status plus review-session scope\n"
+                "Option 3: docs-wide status plus hook metadata"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_valid_decision_and_next_batch_passes(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            self.append_store_decision(root)
+            self.replace_store_batch(root)
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": self.next_batch_message()}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_stop_signal_requires_sync_gate(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "질문 그만"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = []
+            working_set["active_pending_questions"] = []
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "질문 루프를 멈춥니다."}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_yes_is_not_clarification_stop_signal(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "yes"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = []
+            working_set["active_pending_questions"] = []
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "yes로 확인했습니다."}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_stop_allows_korean_option_labels(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 큰방향 | 어느 범위로 정리할까요? | 선택지 1: 현재 범위만 정리; 선택지 2: 인접 범위까지 정리 | 선택지 1 | N/A | 범위 결정은 후속 질문을 줄입니다. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "선택지 설명해줘"})
+            self.assertEqual(prompt_result["status"], "AWAITING_USER")
+            last_message = "어느 범위로 정리할까요?\n선택지 1: 현재 범위만 정리\n선택지 2: 인접 범위까지 정리"
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_stop_allows_letter_option_labels(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-777"],
+                current_scope="큰방향",
+                active_pending_questions=[
+                    {
+                        "id": "PENDING-777",
+                        "scope": "큰방향",
+                        "question": "Which lettered option should remain available?",
+                        "options": "A: Keep current scope; B: Expand adjacent scope",
+                        "recommended_option": "A",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Letter labels are accepted by the validator and hook.",
+                        "status": "pending",
+                    }
+                ],
+            )
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "옵션 설명"})
+            self.assertEqual(prompt_result["status"], "AWAITING_USER")
+            last_message = "Which lettered option should remain available?\nA: Keep current scope\nB: Expand adjacent scope"
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_letter_answer_requires_store_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-777"],
+                current_scope="큰방향",
+                active_pending_questions=[
+                    {
+                        "id": "PENDING-777",
+                        "scope": "큰방향",
+                        "question": "Which lettered option should remain available?",
+                        "options": "A: Keep current scope; B: Expand adjacent scope",
+                        "recommended_option": "A",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Letter labels are accepted by the validator and hook.",
+                        "status": "pending",
+                    }
+                ],
+            )
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "A"})
+            last_message = "Which lettered option should remain available?\nA: Keep current scope\nB: Expand adjacent scope"
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_letter_follow_up_can_restate_batch_without_progress(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-777"],
+                current_scope="큰방향",
+                active_pending_questions=[
+                    {
+                        "id": "PENDING-777",
+                        "scope": "큰방향",
+                        "question": "Which lettered option should remain available?",
+                        "options": "A: Keep current scope; B: Expand adjacent scope",
+                        "recommended_option": "A",
+                        "transition_option": "N/A",
+                        "why_this_matters": "Letter labels are accepted by the validator and hook.",
+                        "status": "pending",
+                    }
+                ],
+            )
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "A 옵션 설명해줘"})
+            last_message = "Which lettered option should remain available?\nA: Keep current scope\nB: Expand adjacent scope"
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_decision_criteria_follow_up_is_not_duplicate_challenge(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "결정 기준이 뭐야?"})
+            last_message = (
+                "Docs sync status의 큰방향 범위는 어디까지인가요?\n"
+                "Option 1: docs-wide status only\n"
+                "Option 2: docs-wide status plus review-session scope\n"
+                "Option 3: docs-wide status plus hook metadata"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_stop_blocks_missing_pending_batch_restatement(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1516,15 +1948,27 @@ Approved.
             prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
-            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["status"], "BLOCKED")
 
     def test_awaiting_user_stop_ignores_completion_words_in_question_options(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
-            self.write_pending_definition(root)
+            artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
+            artifact.write_text(
+                artifact.read_text(encoding="utf-8").replace(
+                    "| PENDING-000 | N/A | No pending clarification. | N/A | N/A | N/A | N/A | none |",
+                    "| PENDING-001 | 세부확인 | 모의거래 결과 확정 단위는 무엇인가요? | Option 1: 하루 장이 끝날 때마다 일별 결과를 확정한다; Option 2: 선택 완료 기준은 전략 실행 기간 전체를 하나의 run으로 본다; Option 3: 일별 스냅샷과 run 전체 누적 결과를 함께 둔다 | Option 3 | N/A | 확정 단위는 결과 표시와 회귀 방지 기준을 바꿉니다. | pending |",
+                ).replace(
+                    "| CLAR-001 | Which correction boundary should definition capture? Options: fix only reported behavior, include adjacent regression guard. | User said `질문 그만, 구현 계획으로 넘어가기`. | no | 질문 그만, 구현 계획으로 넘어가기 | REQ-001, SP-001 |",
+                    "| CLAR-000 | No completed clarification yet. | N/A | no | N/A | N/A |",
+                ),
+                encoding="utf-8",
+            )
+            self.refresh_stage_fingerprint(root, "definition")
+            self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="세부확인")
             self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
             last_message = (
-                "1. 모의거래 결과 확정 단위\n"
+                "모의거래 결과 확정 단위는 무엇인가요?\n"
                 "Option 1: 하루 장이 끝날 때마다 일별 결과를 확정한다\n"
                 "Option 2: 선택 완료 기준은 전략 실행 기간 전체를 하나의 run으로 본다\n"
                 "Option 3: 일별 스냅샷과 run 전체 누적 결과를 함께 둔다"
@@ -1534,7 +1978,7 @@ Approved.
             self.assertEqual(result["_wire_output"], {})
             self.assertNotIn("completion_validation", result)
 
-    def test_awaiting_user_stop_does_not_enforce_labeled_options_from_hook_guess(self) -> None:
+    def test_awaiting_user_stop_blocks_partial_pending_batch_restatement(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1564,7 +2008,7 @@ Approved.
                 + "제안: status text only로 가겠습니다."
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
-            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["status"], "BLOCKED")
 
 
     def test_awaiting_user_stop_does_not_enforce_question_scope_label_from_hook_guess(self) -> None:
@@ -1593,7 +2037,7 @@ Approved.
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "PREPASS")
 
-    def test_awaiting_user_stop_does_not_enforce_missing_third_option_from_hook_guess(self) -> None:
+    def test_awaiting_user_stop_blocks_missing_third_option(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
             artifact = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition.md"
@@ -1617,7 +2061,102 @@ Approved.
                 + "선택지: Option 1: docs-wide status only / Option 2: docs-wide status plus review-session scope"
             )
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_stop_blocks_next_pending_when_not_shown(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = ["PENDING-002"]
+            working_set["active_pending_questions"] = [
+                {
+                    "id": "PENDING-002",
+                    "scope": "큰방향",
+                    "question": "Which outcome should this clarify?",
+                    "options": "Option 1: status readability; Option 2: traceability for reviewers",
+                    "recommended_option": "Option 1",
+                    "transition_option": "N/A",
+                    "why_this_matters": "결과 우선순위는 아직 큰방향 질문입니다.",
+                    "status": "pending",
+                }
+            ]
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "답변 반영했습니다."}, expected_returncode=0)
+            self.assertEqual(result["status"], "BLOCKED")
+
+    def test_awaiting_user_stop_allows_next_pending_when_full_batch_shown(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = ["PENDING-002"]
+            working_set["active_pending_questions"] = [
+                {
+                    "id": "PENDING-002",
+                    "scope": "큰방향",
+                    "question": "Which outcome should this clarify?",
+                    "options": "Option 1: status readability; Option 2: traceability for reviewers",
+                    "recommended_option": "Option 1",
+                    "transition_option": "N/A",
+                    "why_this_matters": "결과 우선순위는 아직 큰방향 질문입니다.",
+                    "status": "pending",
+                }
+            ]
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.append_store_decision(root)
+            last_message = (
+                "Which outcome should this clarify?\n"
+                "Option 1: status readability\n"
+                "Option 2: traceability for reviewers"
+            )
+            result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": last_message}, expected_returncode=0)
             self.assertEqual(result["status"], "PREPASS")
+
+    def test_awaiting_user_stop_blocks_sync_gate_transition_without_valid_decision(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = []
+            working_set["active_pending_questions"] = []
+            working_set["risk_level"] = "medium"
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            sync_state = json.loads((store_dir / "sync-state.json").read_text(encoding="utf-8"))
+            sync_state["current_gate"] = "targeted-sync-required"
+            (store_dir / "sync-state.json").write_text(json.dumps(sync_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            stop_result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "답변을 store에 기록했고 영향 범위 동기화가 필요합니다."}, expected_returncode=0)
+            self.assertEqual(stop_result["status"], "BLOCKED")
+
+    def test_awaiting_user_stop_allows_sync_gate_transition_and_next_turn_catches_gate(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "1번"})
+            store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
+            working_set = json.loads((store_dir / "working-set.json").read_text(encoding="utf-8"))
+            working_set["active_pending_ids"] = []
+            working_set["active_pending_questions"] = []
+            working_set["risk_level"] = "medium"
+            (store_dir / "working-set.json").write_text(json.dumps(working_set, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            sync_state = json.loads((store_dir / "sync-state.json").read_text(encoding="utf-8"))
+            sync_state["current_gate"] = "targeted-sync-required"
+            (store_dir / "sync-state.json").write_text(json.dumps(sync_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.append_store_decision(root, risk_level="medium", sync_status="pending")
+
+            stop_result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "답변을 store에 기록했고 영향 범위 동기화가 필요합니다."}, expected_returncode=0)
+            self.assertEqual(stop_result["status"], "PREPASS")
+
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(prompt_result["status"], "TARGETED_SYNC_REQUIRED")
+            self.assertEqual(prompt_result["turn_start_action"], "run_targeted_sync_subagent")
 
     def test_awaiting_user_stop_blocks_completion_claim_even_with_questions(self) -> None:
         with temp_project() as root:

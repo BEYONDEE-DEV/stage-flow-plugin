@@ -294,8 +294,8 @@ NO_BLOCKING_RE = re.compile(
 )
 BLOCKING_OPEN_QUESTION_RE = re.compile(r"^(yes|true|blocking|block)$", re.IGNORECASE)
 USER_STOP_SIGNAL_RE = re.compile(
-    r"\b(implementation plan|proceed|go ahead|approve|approved|yes|stop asking|enough)\b"
-    r"|구현\s*계획|질문\s*그만|충분|진행|승인",
+    r"\b(implementation plan|proceed|go ahead|stop asking|enough)\b"
+    r"|구현\s*계획|질문\s*그만|충분",
     re.IGNORECASE,
 )
 PENDING_STATUS_RE = re.compile(r"^(pending|awaiting|awaiting_user|대기|답변\s*대기)$", re.IGNORECASE)
@@ -617,8 +617,15 @@ def validate_stage(context: ValidationContext, stage: Stage, errors: list[str], 
         artifact_fingerprint = None
 
     if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
-        validate_definition_store(stage_dir, artifact_path, artifact_text, artifact_fingerprint, bool(pending_messages), errors)
-        validate_question_scope_transition_review(stage_dir, artifact_path, artifact_text, artifact_fingerprint, errors)
+        store_question_rows = validate_definition_store(stage_dir, artifact_path, artifact_text, artifact_fingerprint, bool(pending_messages), errors)
+        validate_question_scope_transition_review(
+            stage_dir,
+            artifact_path,
+            artifact_text,
+            artifact_fingerprint,
+            errors,
+            active_rows=store_question_rows if store_question_rows else None,
+        )
     if stage.phase == "definition" and artifact_text is not None and artifact_fingerprint is not None:
         validate_transition_risk_gate(stage_dir, artifact_text, artifact_fingerprint, errors, bool(pending_messages))
     if stage.phase != "definition":
@@ -1162,7 +1169,7 @@ def validate_definition_store(
     definition_fingerprint: str,
     has_pending_clarifications: bool,
     errors: list[str],
-) -> None:
+) -> list[dict[str, str]] | None:
     store_dir = stage_dir / "definition-store"
     if not store_dir.exists():
         if has_pending_clarifications:
@@ -1170,10 +1177,10 @@ def validate_definition_store(
                 f"`{display_path(store_dir)}` is required while definition has active Pending Clarifications; "
                 "create the definition-store hot path before processing the next user answer"
             )
-        return
+        return None
     if not store_dir.is_dir():
         errors.append(f"`{display_path(store_dir)}` must be a directory")
-        return
+        return None
 
     working_set_path = store_dir / "working-set.json"
     decision_ledger_path = store_dir / "decision-ledger.jsonl"
@@ -1185,12 +1192,17 @@ def validate_definition_store(
     sync_state = read_store_json(sync_state_path, errors)
     ledger_rows = read_decision_ledger(decision_ledger_path, errors)
     if working_set is None or trace_index is None or sync_state is None:
-        return
+        return None
 
     store_question_rows = validate_store_active_pending_questions(working_set, working_set_path, errors)
     store_question_ids = {row.get("ID", "").strip().upper() for row in store_question_rows if row.get("ID", "").strip()}
     active_pending_ids = {row.get("ID", "").strip().upper() for row in active_pending_rows(definition_text) if row.get("ID", "").strip()}
     store_pending_ids = uppercase_json_ids(PENDING_ID_RE, json_list(working_set, "active_pending_ids", "activePendingIds"))
+    if store_pending_ids and not store_question_ids:
+        errors.append(
+            f"`{display_path(working_set_path)}` active_pending_questions is required when active_pending_ids are present; "
+            "repair the definition-store canonical pending batch"
+        )
     if store_question_ids:
         if store_pending_ids and store_pending_ids != store_question_ids:
             errors.append(
@@ -1226,6 +1238,11 @@ def validate_definition_store(
     current_gate = json_string(sync_state, "current_gate", "currentGate", "gate") or json_string(working_set, "current_gate", "currentGate", "gate")
     if current_gate and current_gate not in STORE_GATES:
         errors.append(f"`{display_path(sync_state_path)}` current_gate must be one of {', '.join(sorted(STORE_GATES))}")
+    if not store_question_rows and current_gate not in STORE_SYNC_GATES:
+        errors.append(
+            f"`{display_path(working_set_path)}` must keep active pending questions until "
+            "`sync-state.current_gate` moves to a recognized sync gate"
+        )
 
     snapshot_fingerprint = json_string(sync_state, "definition_fingerprint", "definitionFingerprint", "snapshot_fingerprint", "snapshotFingerprint")
     expected_fingerprint = f"sha256:{definition_fingerprint}"
@@ -1236,38 +1253,56 @@ def validate_definition_store(
 
     validate_definition_store_gate_artifacts(store_dir, current_gate, expected_fingerprint, errors)
 
+    valid_decision_risks: dict[str, str] = {}
     for row in ledger_rows:
         decision_id = json_string(row, "decision_id", "decisionId", "id").upper()
         pending_id = json_string(row, "source_pending_id", "sourcePendingId", "pending_id", "pendingId").upper()
         affected_ids = uppercase_json_ids(DEFINITION_STORE_AFFECTED_ID_RE, json_list(row, "affected_ids", "affectedIds", "affected"))
         risk_level = json_string(row, "risk_level", "riskLevel")
+        row_valid = True
         if not fullmatch_id(DEC_ID_RE, decision_id):
             errors.append(f"`{display_path(decision_ledger_path)}` decision row must include `DEC-*` decision_id")
             continue
         if not fullmatch_id(PENDING_ID_RE, pending_id):
             errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` must include `PENDING-*` source_pending_id")
+            row_valid = False
         if not affected_ids:
             errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` must include non-empty affected_ids")
+            row_valid = False
         if risk_level not in RISK_LEVELS:
             errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` risk_level must be one of {', '.join(sorted(RISK_LEVELS))}")
+            row_valid = False
 
         trace_affected = trace_entries.get((pending_id, decision_id), set())
         if not trace_affected:
             errors.append(f"`{display_path(trace_index_path)}` must include trace for `{pending_id}` -> `{decision_id}`")
+            row_valid = False
         for affected_id in sorted(affected_ids - trace_affected):
             errors.append(f"`{display_path(decision_ledger_path)}` decision `{decision_id}` affected ID `{affected_id}` must appear in trace-index")
+            row_valid = False
 
         sync_entry = sync_entries.get(decision_id)
         if not isinstance(sync_entry, dict):
             errors.append(f"`{display_path(sync_state_path)}` decision_sync must include `{decision_id}`")
+            row_valid = False
             continue
         sync_status = json_string(sync_entry, "status")
         if sync_status not in SYNC_STATUSES:
             errors.append(f"`{display_path(sync_state_path)}` decision `{decision_id}` status must be one of {', '.join(sorted(SYNC_STATUSES))}")
+            row_valid = False
         if risk_level == "medium" and not has_pending_clarifications and sync_status not in TARGETED_SYNC_STATUSES:
             errors.append(f"`{display_path(sync_state_path)}` medium-risk decision `{decision_id}` requires targeted sync before review or approval")
         if risk_level == "high" and sync_status not in FULL_SYNC_STATUSES:
             errors.append(f"`{display_path(sync_state_path)}` high-risk decision `{decision_id}` requires full consistency sync before continuing")
+        if row_valid:
+            valid_decision_risks[decision_id] = risk_level
+
+    if current_gate == TARGETED_SYNC_GATE and "medium" not in set(valid_decision_risks.values()):
+        errors.append(f"`{display_path(sync_state_path)}` targeted-sync-required requires a valid medium-risk store decision")
+    if current_gate == FULL_CONSISTENCY_GATE and "high" not in set(valid_decision_risks.values()):
+        errors.append(f"`{display_path(sync_state_path)}` full-consistency-required requires a valid high-risk store decision")
+
+    return store_question_rows
 
 
 def required_question_scope_transitions(rows: list[dict[str, str]]) -> list[tuple[str, str]]:
@@ -1294,9 +1329,11 @@ def validate_question_scope_transition_review(
     definition_text: str,
     definition_fingerprint: str,
     errors: list[str],
+    *,
+    active_rows: list[dict[str, str]] | None = None,
 ) -> None:
-    active_rows = active_pending_rows(definition_text)
-    required_transitions = required_question_scope_transitions(active_rows)
+    rows_for_transition = active_rows if active_rows is not None else active_pending_rows(definition_text)
+    required_transitions = required_question_scope_transitions(rows_for_transition)
     if not required_transitions:
         return
 

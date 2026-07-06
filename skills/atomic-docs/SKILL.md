@@ -16,6 +16,7 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 - In `submodule` mode, ask the user to confirm the documentation submodule root even when `.gitmodules` contains exactly one candidate.
 - In `repository` mode, let the user select a repository-local managed docs root without requiring `.gitmodules`.
 - Persist the confirmed storage mode and root in target-project config at `.stageflow/atomic-docs.json`.
+- In user-facing summaries, approval requests, first-step bootstrap messages, and change plans, explain storage and write scope in plain user terms before showing raw config keys, option labels, or file paths. Do not present first setup as only `storage mode: repository`, `docs root: docs`, or `작성/갱신: ...`; for Korean interactions, say things like "별도 submodule 없이 현재 repository 안에 문서를 저장합니다", "문서는 `docs` 폴더에 저장합니다", and "문서 작성 기준 초안" before the internal identifiers.
 - Keep docs output inside the configured managed docs root by default.
 - Do not create a real submodule, remote repository, repository-local docs directory, generated docs set, or migration unless the user separately asks for that operation.
 - Treat source files as the default evidence for docs refresh, not Stageflow request artifacts.

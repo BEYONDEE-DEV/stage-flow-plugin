@@ -33,6 +33,17 @@ If a domain candidate or category grouping looks broad instead of being a durabl
 
 ## Atomization Criteria File-First Flow
 
+Explain this flow to users as a first setup step before real atom document writing. In Korean interactions, call it `첫 설정 단계` or `처음 준비 단계`. The first step prepares the document storage location and the draft writing criteria; it does not create the full atom set, service logic inventory, graph edges, or source baseline. Show create/update targets as natural-language descriptions first and file paths second, such as `atomic docs 설정 파일` followed by `.stageflow/atomic-docs.json` and `문서 작성 기준 초안` followed by `<doc-root>/project/atomization-criteria.md`.
+
+Do not summarize this first step only as raw key-value lines such as `storage mode`, `docs root`, or `작성/갱신`. After this first step passes criteria-review, tell the user that they should inspect the 작성 기준 초안 and approve or request changes before actual atom document writing begins.
+
+For Korean first-setup responses, use this shape instead of a raw config summary:
+
+- atomic docs를 처음 준비하는 단계입니다.
+- 별도 submodule 없이 현재 repository 안의 `<doc-root>` 폴더에 문서를 저장합니다. (`storage_mode: repository`, `docs_root: <doc-root>`)
+- 이번에는 `atomic docs 설정 파일` `.stageflow/atomic-docs.json`과 `문서 작성 기준 초안` `<doc-root>/project/atomization-criteria.md`만 만들거나 갱신합니다.
+- 이 초안을 확인하고 승인하면 실제 atom 문서 작성을 시작할 수 있습니다.
+
 When atomization criteria are needed, do not keep reviewed atomization perspectives only in chat or only in the change plan. For Korean managed docs, record this as `검토된 Atom화 관점`. After the docs root is confirmed, make the first atomic-docs write action a limited draft creation or update of `<doc-root>/project/atomization-criteria.md` as the criteria proposal.
 
 If the current user request explicitly asks to start, redo, regenerate, or recreate atomic docs and confirms both the storage mode and managed docs root, treat the request itself as accepting the bootstrap write scope. In that case, do not stop at an approval request: create or update only `.stageflow/atomic-docs.json` when needed and `<doc-root>/project/atomization-criteria.md` as a draft criteria proposal in the same turn, then run the Criteria Structure Review Gate and stop for user review only after criteria-review PASS.

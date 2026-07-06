@@ -15,6 +15,17 @@ This reference defines how the `atomic-docs` skill discovers, confirms, and pers
 - Do not infer `submodule` mode merely because `.gitmodules` exists.
 - Do not infer `repository` mode merely because a `docs/` directory exists.
 
+## User-Facing Storage Terms
+
+When explaining docs-root setup to a user, describe what will happen before naming internal config values:
+
+- `repository` means `현재 프로젝트 안의 폴더에 문서를 저장`.
+- `submodule` means `별도 문서 저장소/submodule에 문서를 저장`.
+- `docs_root` and managed docs root mean `문서 저장 위치`.
+- `.stageflow/atomic-docs.json` is the `atomic docs 설정 파일`.
+
+For a first setup where the user chose repository storage and `docs`, explain the scope as: atomic docs를 처음 설정하는 단계이며, 실제 atom 문서를 쓰기 전에 문서 저장 위치와 문서 작성 기준 초안만 준비한다. Then identify the concrete paths: the config file is `.stageflow/atomic-docs.json`, and the draft criteria file is `<doc-root>/project/atomization-criteria.md`.
+
 ## Configuration File
 
 Persist the confirmed root and storage mode in target-project config at `.stageflow/atomic-docs.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.

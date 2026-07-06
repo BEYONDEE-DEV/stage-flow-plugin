@@ -53,6 +53,30 @@ AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
     re.IGNORECASE,
 )
+USER_STOP_SIGNAL_RE = re.compile(
+    r"\b(implementation plan|proceed|go ahead|stop asking|enough)\b"
+    r"|구현\s*계획|질문\s*그만|충분",
+    re.IGNORECASE,
+)
+ANSWER_SELECTION_RE = re.compile(
+    r"(^|\s)(?:option|옵션|선택지)?\s*[1-9]\d*\s*(?:번|번으로|으로|로)?(?=\s|$|[.,。!！])|"
+    r"\boption\s*[1-9]\d*\b|선택지\s*[1-9]\d*",
+    re.IGNORECASE,
+)
+FOLLOW_UP_PROMPT_RE = re.compile(
+    r"\?|뭐|무엇|무슨|어느|왜|차이|뜻|의미|설명|기준|어떻게|"
+    r"\b(what|why|which|how|difference|mean|explain)\b",
+    re.IGNORECASE,
+)
+DUPLICATE_CHALLENGE_RE = re.compile(
+    r"같은\s*질문|중복|반복|또\s*물|다시\s*질문|파생|이미\s*(?:정해|답변|반영|결정)|정해진|"
+    r"\b(duplicate|same question|repeated|asked already|already\s+(?:answered|decided|covered|handled|resolved)|derived)\b",
+    re.IGNORECASE,
+)
+OPTION_LABEL_IN_TEXT_RE = re.compile(r"^\s*(Option\s*[1-9]\d*|선택지\s*[1-9]\d*|[A-Z])\s*:", re.IGNORECASE)
+PENDING_ID_RE = re.compile(r"^PENDING-\d+$", re.IGNORECASE)
+DECISION_ID_RE = re.compile(r"^DEC-\d+$", re.IGNORECASE)
+DEFINITION_STORE_AFFECTED_ID_RE = re.compile(r"^(?:DEC|REQ|SP|DFLOW|INTENT)-\d+$", re.IGNORECASE)
 PREFLIGHT_MARKER_PREFIX = "Stageflow preflight:"
 WRITE_TOOL_TOKENS = (
     "edit",
@@ -420,6 +444,172 @@ def store_question_options_text(value: Any) -> str:
     return ""
 
 
+def normalize_display_text(value: str) -> str:
+    value = re.sub(r"[`*_]+", "", value)
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def split_store_option_items(text: str) -> list[str]:
+    return [item.strip() for item in re.split(r"(?:<br\s*/?>|[;\n|])", text, flags=re.IGNORECASE) if item.strip()]
+
+
+def option_item_body(item: str) -> str:
+    return OPTION_LABEL_IN_TEXT_RE.sub("", item, count=1).strip()
+
+
+def is_stop_signal_option_item(item: str) -> bool:
+    if not OPTION_LABEL_IN_TEXT_RE.match(item):
+        return False
+    body = option_item_body(item)
+    normalized = re.sub(r"[\s.。!！]+", " ", body.lower()).strip()
+    if normalized in {
+        "proceed",
+        "go ahead",
+        "approve",
+        "approved",
+        "yes",
+        "stop asking",
+        "enough",
+        "질문 그만",
+        "충분",
+        "충분해",
+        "진행",
+        "승인",
+    }:
+        return True
+    references_implementation_plan = "implementation plan" in normalized or ("구현" in normalized and "계획" in normalized)
+    moves_to_next_stage = any(token in normalized for token in ("넘어", "진행", "시작", "proceed", "go ahead", "move"))
+    return references_implementation_plan and moves_to_next_stage
+
+
+def store_labeled_option_items(text: str) -> list[str]:
+    return [
+        item
+        for item in split_store_option_items(text)
+        if OPTION_LABEL_IN_TEXT_RE.match(item) and option_item_body(item) and not is_stop_signal_option_item(item)
+    ]
+
+
+def uppercase_store_ids(pattern: re.Pattern[str], values: Any) -> set[str]:
+    if not isinstance(values, list):
+        return set()
+    ids: set[str] = set()
+    for value in values:
+        text = str(value).strip().upper()
+        if pattern.fullmatch(text):
+            ids.add(text)
+    return ids
+
+
+def decision_id(value: dict[str, Any]) -> str:
+    return json_string(value, "decision_id", "decisionId", "id").upper()
+
+
+def decision_source_pending_id(value: dict[str, Any]) -> str:
+    return json_string(value, "source_pending_id", "sourcePendingId", "pending_id", "pendingId").upper()
+
+
+def decision_affected_ids(value: dict[str, Any]) -> set[str]:
+    return uppercase_store_ids(DEFINITION_STORE_AFFECTED_ID_RE, json_list(value, "affected_ids", "affectedIds", "affected"))
+
+
+def trace_decision_entries(trace_index: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
+    entries: dict[tuple[str, str], set[str]] = {}
+    for raw in json_list(trace_index, "traces", "Traces"):
+        if not isinstance(raw, dict):
+            continue
+        pending_id = json_string(raw, "pending_id", "pendingId", "source_pending_id", "sourcePendingId").upper()
+        dec_id = json_string(raw, "decision_id", "decisionId", "id").upper()
+        affected_ids = uppercase_store_ids(DEFINITION_STORE_AFFECTED_ID_RE, json_list(raw, "affected_ids", "affectedIds", "affected"))
+        if PENDING_ID_RE.fullmatch(pending_id) and DECISION_ID_RE.fullmatch(dec_id):
+            entries[(pending_id, dec_id)] = affected_ids
+    return entries
+
+
+def read_decision_ledger_rows(store_dir: Path) -> list[dict[str, Any]]:
+    path = store_dir / "decision-ledger.jsonl"
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            rows.append(value)
+    return rows
+
+
+def valid_store_decisions(store_dir: Path, sync_state: dict[str, Any]) -> list[dict[str, Any]]:
+    trace_index = load_json(store_dir / "trace-index.json") or {}
+    trace_entries = trace_decision_entries(trace_index if isinstance(trace_index, dict) else {})
+    sync_entries = sync_state.get("decision_sync")
+    if not isinstance(sync_entries, dict):
+        sync_entries = {}
+
+    decisions: list[dict[str, Any]] = []
+    for row in read_decision_ledger_rows(store_dir):
+        dec_id = decision_id(row)
+        pending_id = decision_source_pending_id(row)
+        affected_ids = decision_affected_ids(row)
+        risk_level = json_string(row, "risk_level", "riskLevel")
+        if not (
+            DECISION_ID_RE.fullmatch(dec_id)
+            and PENDING_ID_RE.fullmatch(pending_id)
+            and affected_ids
+            and risk_level in {"low", "medium", "high"}
+        ):
+            continue
+        trace_affected = trace_entries.get((pending_id, dec_id), set())
+        if not trace_affected or affected_ids - trace_affected:
+            continue
+        sync_entry = sync_entries.get(dec_id)
+        if not isinstance(sync_entry, dict):
+            continue
+        decisions.append(
+            {
+                "decision_id": dec_id,
+                "source_pending_id": pending_id,
+                "affected_ids": sorted(affected_ids),
+                "risk_level": risk_level,
+                "sync_status": json_string(sync_entry, "status"),
+            }
+        )
+    return decisions
+
+
+def decision_ledger_stats(store_dir: Path) -> dict[str, Any]:
+    stats: dict[str, Any] = {"line_count": 0, "last_decision_id": ""}
+    for value in read_decision_ledger_rows(store_dir):
+        dec_id = decision_id(value)
+        if DECISION_ID_RE.fullmatch(dec_id):
+            stats["line_count"] += 1
+            stats["last_decision_id"] = dec_id
+    return stats
+
+
+def sync_state_signature(sync_state: dict[str, Any]) -> list[dict[str, str]]:
+    entries = sync_state.get("decision_sync")
+    if not isinstance(entries, dict):
+        return []
+    signature: list[dict[str, str]] = []
+    for decision_id, value in sorted(entries.items()):
+        if isinstance(value, dict):
+            signature.append(
+                {
+                    "decision_id": str(decision_id).strip().upper(),
+                    "status": json_string(value, "status"),
+                    "risk_level": json_string(value, "risk_level", "riskLevel"),
+                }
+            )
+        else:
+            signature.append({"decision_id": str(decision_id).strip().upper(), "status": str(value), "risk_level": ""})
+    return signature
+
+
 def normalize_store_question(raw: Any) -> dict[str, str] | None:
     if not isinstance(raw, dict):
         return None
@@ -450,17 +640,23 @@ def store_active_questions(working_set: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def fast_path_question_is_valid(row: dict[str, str]) -> bool:
-    options = row.get("Options", "").lower()
+    options = row.get("Options", "")
     return (
         bool(re.fullmatch(r"PENDING-\d+", row.get("ID", ""), re.IGNORECASE))
         and row.get("Question Scope", "") in QUESTION_SCOPES
         and bool(row.get("Question", "").strip())
-        and "option 1:" in options
-        and "option 2:" in options
+        and len(store_labeled_option_items(options)) >= 2
         and bool(row.get("Recommended Option", "").strip())
         and row.get("Transition Option", "").strip().lower() == "n/a"
         and bool(row.get("Why This Matters", "").strip())
     )
+
+
+def fast_path_questions_are_valid(rows: list[dict[str, str]]) -> bool:
+    if not 1 <= len(rows) <= 5:
+        return False
+    scopes = {row.get("Question Scope", "").strip() for row in rows if row.get("Question Scope", "").strip()}
+    return len(scopes) == 1 and all(fast_path_question_is_valid(row) for row in rows)
 
 
 def store_active_ids(working_set: dict[str, Any]) -> set[str]:
@@ -482,6 +678,59 @@ def read_definition_store(request_dir: Path) -> tuple[dict[str, Any], dict[str, 
     return working_set, sync_state, store_dir
 
 
+def definition_store_snapshot(request_dir: Path) -> dict[str, Any]:
+    store = read_definition_store(request_dir)
+    if store is None:
+        return {"exists": False, "current_gate": "", "active_pending_questions": []}
+    working_set, sync_state, store_dir = store
+    questions: list[dict[str, Any]] = []
+    for row in store_active_questions(working_set):
+        option_items = store_labeled_option_items(row.get("Options", ""))
+        questions.append(
+            {
+                "id": row.get("ID", ""),
+                "scope": row.get("Question Scope", ""),
+                "question": row.get("Question", ""),
+                "options": row.get("Options", ""),
+                "option_items": option_items,
+                "option_labels": [normalize_display_text(match.group(0)) for item in option_items for match in OPTION_LABEL_IN_TEXT_RE.finditer(item)],
+                "recommended_option": row.get("Recommended Option", ""),
+                "why_this_matters": row.get("Why This Matters", ""),
+            }
+        )
+    ledger = decision_ledger_stats(store_dir)
+    decisions = valid_store_decisions(store_dir, sync_state)
+    gate = definition_store_gate(request_dir)
+    progress_signature = {
+        "active_pending_ids": sorted(store_active_ids(working_set)),
+        "questions": [
+            {
+                "id": item["id"],
+                "scope": item["scope"],
+                "question": normalize_display_text(item["question"]),
+                "option_items": [normalize_display_text(option) for option in item["option_items"]],
+            }
+            for item in questions
+        ],
+        "current_gate": gate,
+        "ledger_line_count": ledger["line_count"],
+        "last_decision_id": ledger["last_decision_id"],
+        "decisions": decisions,
+        "sync_signature": sync_state_signature(sync_state),
+    }
+    return {
+        "exists": True,
+        "current_gate": gate,
+        "active_pending_ids": sorted(store_active_ids(working_set)),
+        "active_pending_questions": questions,
+        "ledger_line_count": ledger["line_count"],
+        "last_decision_id": ledger["last_decision_id"],
+        "decisions": decisions,
+        "sync_signature": progress_signature["sync_signature"],
+        "progress_signature": progress_signature,
+    }
+
+
 def definition_store_gate(request_dir: Path) -> str:
     store = read_definition_store(request_dir)
     if store is None:
@@ -495,6 +744,131 @@ def definition_store_gate(request_dir: Path) -> str:
     if store_active_ids(working_set):
         return "pending-answer"
     return ""
+
+
+def pending_batch_displayed(snapshot: dict[str, Any], message: str) -> bool:
+    questions = snapshot.get("active_pending_questions")
+    if not isinstance(questions, list) or not questions:
+        return False
+    normalized_message = normalize_display_text(message)
+    if not normalized_message:
+        return False
+    for raw in questions:
+        if not isinstance(raw, dict):
+            return False
+        question_text = normalize_display_text(str(raw.get("question") or ""))
+        if not question_text or question_text not in normalized_message:
+            return False
+        option_items = raw.get("option_items")
+        if not isinstance(option_items, list) or not option_items:
+            return False
+        for item in option_items:
+            normalized_item = normalize_display_text(str(item))
+            if not normalized_item or normalized_item not in normalized_message:
+                return False
+    return True
+
+
+def snapshot_progress_signature(snapshot: Any) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        return {}
+    value = snapshot.get("progress_signature")
+    return value if isinstance(value, dict) else {}
+
+
+def store_progressed(start_snapshot: Any, current_snapshot: dict[str, Any]) -> bool:
+    return snapshot_progress_signature(start_snapshot) != snapshot_progress_signature(current_snapshot)
+
+
+def normalized_option_label_aliases(label: str) -> set[str]:
+    text = normalize_display_text(label.rstrip(":"))
+    aliases = {text}
+    number_match = re.search(r"[1-9]\d*", text)
+    if number_match:
+        number = number_match.group(0)
+        aliases.update({number, f"{number}번", f"option {number}", f"옵션 {number}", f"선택지 {number}"})
+    elif re.fullmatch(r"[a-z]", text):
+        letter = text.lower()
+        aliases.update({letter, f"option {letter}", f"옵션 {letter}", f"선택지 {letter}"})
+    return aliases
+
+
+def pending_option_selection_aliases(snapshot: Any) -> set[str]:
+    if not isinstance(snapshot, dict):
+        return set()
+    aliases: set[str] = set()
+    questions = snapshot.get("active_pending_questions")
+    if not isinstance(questions, list):
+        return aliases
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        labels = question.get("option_labels")
+        if not isinstance(labels, list):
+            continue
+        for label in labels:
+            aliases.update(normalized_option_label_aliases(str(label)))
+    return aliases
+
+
+def prompt_selects_pending_option(prompt: str, snapshot: Any) -> bool:
+    normalized_prompt = normalize_display_text(prompt)
+    if not normalized_prompt:
+        return False
+    aliases = pending_option_selection_aliases(snapshot)
+    for alias in aliases:
+        escaped = re.escape(alias)
+        if re.fullmatch(rf"{escaped}(?:\s*(?:번|로|으로))?", normalized_prompt, re.IGNORECASE):
+            return True
+        if re.fullmatch(rf"(?:option|옵션|선택지)\s+{escaped}(?:\s*(?:번|로|으로))?", normalized_prompt, re.IGNORECASE):
+            return True
+    return bool(ANSWER_SELECTION_RE.search(prompt))
+
+
+def snapshot_decision_ids(snapshot: Any) -> set[str]:
+    if not isinstance(snapshot, dict):
+        return set()
+    decisions = snapshot.get("decisions")
+    if not isinstance(decisions, list):
+        return set()
+    return {str(item.get("decision_id") or "").upper() for item in decisions if isinstance(item, dict)}
+
+
+def valid_new_decision_progress(start_snapshot: Any, current_snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    start_ids = snapshot_decision_ids(start_snapshot)
+    start_pending_ids = set()
+    if isinstance(start_snapshot, dict):
+        value = start_snapshot.get("active_pending_ids")
+        if isinstance(value, list):
+            start_pending_ids = {str(item).strip().upper() for item in value}
+    decisions = current_snapshot.get("decisions")
+    if not isinstance(decisions, list):
+        return []
+    return [
+        item
+        for item in decisions
+        if isinstance(item, dict)
+        and str(item.get("decision_id") or "").upper() not in start_ids
+        and str(item.get("source_pending_id") or "").upper() in start_pending_ids
+    ]
+
+
+def pending_batch_changed(start_snapshot: Any, current_snapshot: dict[str, Any]) -> bool:
+    start_signature = snapshot_progress_signature(start_snapshot).get("questions")
+    current_signature = snapshot_progress_signature(current_snapshot).get("questions")
+    start_ids = snapshot_progress_signature(start_snapshot).get("active_pending_ids")
+    current_ids = snapshot_progress_signature(current_snapshot).get("active_pending_ids")
+    return start_signature != current_signature or start_ids != current_ids
+
+
+def is_answer_like_prompt(prompt: str, snapshot: Any) -> bool:
+    if USER_STOP_SIGNAL_RE.search(prompt):
+        return True
+    if DUPLICATE_CHALLENGE_RE.search(prompt):
+        return True
+    if prompt_selects_pending_option(prompt, snapshot) and not FOLLOW_UP_PROMPT_RE.search(prompt):
+        return True
+    return False
 
 
 def active_request_dir(root: Path, current: dict[str, Any]) -> Path:
@@ -543,13 +917,18 @@ def store_fast_path_result(
     store = read_definition_store(request_dir)
     if store is None:
         return None
-    working_set, sync_state, _ = store
+    working_set, sync_state, store_dir = store
     questions = store_active_questions(working_set)
-    if not questions:
-        return None
 
     gate = definition_store_gate(request_dir) or "pending-answer"
-    if gate not in STORE_GATES or not all(fast_path_question_is_valid(question) for question in questions):
+    if not questions and gate not in STORE_SYNC_GATES:
+        return None
+    if gate not in STORE_GATES or (questions and not fast_path_questions_are_valid(questions)):
+        return None
+    decisions = valid_store_decisions(store_dir, sync_state)
+    if gate == TARGETED_SYNC_GATE and not any(decision.get("risk_level") == "medium" for decision in decisions):
+        return None
+    if gate == FULL_CONSISTENCY_GATE and not any(decision.get("risk_level") == "high" for decision in decisions):
         return None
     if gate == TARGETED_SYNC_GATE:
         status = "TARGETED_SYNC_REQUIRED"
@@ -577,7 +956,8 @@ def store_fast_path_result(
         action = "handle_awaiting_user_clarification"
         instruction = (
             "The current definition has active store-backed pending questions. Interpret the latest user message semantically, "
-            "record the answer in `definition-store/`, set `sync-state.current_gate` by risk, and do not read or write `definition.md` on the store-only path."
+            "record the answer in `definition-store/`, set `sync-state.current_gate` by risk, and do not read or write `definition.md` on the store-only path. "
+            "End by showing every active pending question and every labeled option from the current or next store batch, unless the store advances to a sync gate."
         )
 
     result.update(
@@ -595,7 +975,8 @@ def store_fast_path_result(
                 "output": "definition-store fast path",
                 "source": "definition-store-fast-path",
             },
-            "pending_clarification_output": format_store_pending_output(request_dir, questions),
+            "pending_clarification_output": format_store_pending_output(request_dir, questions) if questions else "",
+            "definition_store_snapshot": definition_store_snapshot(request_dir),
             "preflight_required": True,
             "preflight_marker": marker_for(request_id, phase, "AWAITING_USER"),
         }
@@ -685,6 +1066,7 @@ def to_wire_output(event: str, result: dict[str, Any]) -> dict[str, Any] | None:
 
 def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     prompt = extract_prompt(payload)
+    result["latest_user_prompt"] = prompt
     explicit = is_explicit_workflow(prompt)
     stageflow_dir = root / ".stageflow"
     current = load_json(current_path(root, payload))
@@ -806,7 +1188,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         severity = "info"
         action = "handle_awaiting_user_clarification"
         instruction = (
-            "The current Stageflow stage has an active pending clarification batch with a valid definition-store. Interpret the latest user message semantically against the pending questions: record answers in definition-store, create the next pending batch after the required risk check, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. Do not review, approve, advance, or implement while AWAITING_USER remains active."
+            "The current Stageflow stage has an active pending clarification batch with a valid definition-store. Interpret the latest user message semantically against the pending questions: record answers in definition-store, create the next pending batch after the required risk check, answer follow-ups and restate pending options, or handle an explicit clarification stop signal by running the transition-risk audit. End by showing every active pending question and every labeled option from the current or next store batch unless the store advances to a sync gate. Do not review, approve, advance, or implement while AWAITING_USER remains active."
         )
     else:
         status = "WARNING"
@@ -833,6 +1215,8 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
             "preflight_marker": marker,
         }
     )
+    if phase == "definition" and status in DEFINITION_STORE_FAST_PATH_STATUSES:
+        result["definition_store_snapshot"] = definition_store_snapshot(request_dir)
     set_turn_start_action(result, action, instruction, required=action != "continue_current_stage")
     if validation["status"] == "FAIL":
         result["warnings"].append("current Stageflow stage validation failed")
@@ -857,6 +1241,87 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
 
     write_turn_state(root, payload, result)
     return result
+
+
+def enforce_awaiting_user_stop_continuity(
+    root: Path,
+    payload: dict[str, Any],
+    turn: dict[str, Any],
+    last_message: str,
+    result: dict[str, Any],
+) -> None:
+    request_id = str(turn.get("current_request_id") or "").strip()
+    if not request_id:
+        current = load_json(current_path(root, payload)) or {}
+        request_id = str(current.get("request_id") or "").strip()
+    if not request_id:
+        block_result(result, "AWAITING_USER response could not resolve the current Stageflow request")
+        return
+
+    request_dir = root / ".stageflow" / "requests" / request_id
+    start_snapshot = turn.get("definition_store_snapshot")
+    current_snapshot = definition_store_snapshot(request_dir)
+    result["definition_store_start_snapshot"] = start_snapshot
+    result["definition_store_stop_snapshot"] = current_snapshot
+
+    if not current_snapshot.get("exists"):
+        block_result(result, "AWAITING_USER response requires a valid definition-store")
+        return
+
+    progressed = store_progressed(start_snapshot, current_snapshot)
+    valid_decisions = valid_new_decision_progress(start_snapshot, current_snapshot)
+    answer_like = is_answer_like_prompt(str(turn.get("latest_user_prompt") or ""), start_snapshot)
+    batch_changed = pending_batch_changed(start_snapshot, current_snapshot)
+    displayed = pending_batch_displayed(current_snapshot, last_message)
+    result["definition_store_answer_like_prompt"] = answer_like
+    result["definition_store_progressed"] = progressed
+    result["definition_store_valid_decision_progress"] = bool(valid_decisions)
+    result["definition_store_batch_changed"] = batch_changed
+
+    current_gate = str(current_snapshot.get("current_gate") or "")
+    if current_gate in STORE_SYNC_GATES:
+        if not valid_decisions:
+            block_result(
+                result,
+                "AWAITING_USER sync gate transition requires a valid store decision with ledger, trace, and sync-state evidence",
+            )
+            return
+        result["definition_store_progress"] = "sync-gate"
+        return
+
+    if not current_snapshot.get("active_pending_questions"):
+        block_result(
+            result,
+            "AWAITING_USER response left definition-store without active pending questions or a sync gate",
+        )
+        return
+
+    if answer_like and not valid_decisions:
+        block_result(
+            result,
+            "AWAITING_USER answer-like response must record a valid store decision before restating pending questions",
+        )
+        return
+
+    if answer_like and not batch_changed:
+        block_result(
+            result,
+            "AWAITING_USER answer-like response must advance the active pending batch or move to a sync gate",
+        )
+        return
+
+    if displayed:
+        result["definition_store_progress"] = (
+            "pending-batch-advanced-and-restated"
+            if progressed
+            else "pending-batch-restated"
+        )
+        return
+
+    block_result(
+        result,
+        "AWAITING_USER response must restate every active pending question and its labeled options unless the store advances to a sync gate",
+    )
 
 
 def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -889,6 +1354,8 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") == "AWAITING_USER":
             if AWAITING_USER_COMPLETION_CLAIM_RE.search(last_message):
                 block_result(result, "AWAITING_USER response must not claim completion or next-stage progress before the user answers")
+                return result
+            enforce_awaiting_user_stop_continuity(root, payload, turn, last_message, result)
             return result
 
         if turn.get("status") == "DEFINITION_STORE_REQUIRED":
@@ -1161,7 +1628,7 @@ def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] 
 def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     result["event"] = "pre_tool_use"
     turn = read_turn_state(root, payload)
-    gate = str(turn.get("definition_store_gate") or current_definition_store_gate(root, payload) or "")
+    gate = str(current_definition_store_gate(root, payload) or turn.get("definition_store_gate") or "")
     if gate:
         result["definition_store_gate"] = gate
 
@@ -1242,11 +1709,11 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
                 result["store_only_definition_write"] = True
                 return result
         elif gate == TARGETED_SYNC_GATE:
-            if is_targeted_sync_write(payload) or is_definition_store_data_write(payload):
+            if is_targeted_sync_write(payload):
                 result["targeted_sync_write"] = True
                 return result
         elif gate == FULL_CONSISTENCY_GATE:
-            if is_full_consistency_write(payload) or is_definition_store_data_write(payload):
+            if is_full_consistency_write(payload):
                 result["full_consistency_write"] = True
                 return result
         elif gate == SNAPSHOT_CURRENT_GATE:
@@ -1297,7 +1764,7 @@ def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dic
     turn = read_turn_state(root, payload)
     current, state = active_request(root, payload)
     request_id = str((current or {}).get("request_id") or turn.get("current_request_id") or "").strip()
-    gate = str(turn.get("definition_store_gate") or current_definition_store_gate(root, payload) or "")
+    gate = str(current_definition_store_gate(root, payload) or turn.get("definition_store_gate") or "")
     result.update(
         {
             "status": "SUBAGENT_OBSERVED",
