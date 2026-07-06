@@ -13,6 +13,7 @@
 - [Domain Boundary Quality Gate](#domain-boundary-quality-gate)
 - [Core Business Term Coverage Gate](#core-business-term-coverage-gate)
 - [Service Logic Natural-Language Coverage](#service-logic-natural-language-coverage)
+- [Implementation Reconstruction Coverage](#implementation-reconstruction-coverage)
 - [Source Fact Fidelity Gate](#source-fact-fidelity-gate)
 - [Atomic Docs Goal Boundary](#atomic-docs-goal-boundary)
 - [Atom Line ID Policy](#atom-line-id-policy)
@@ -187,6 +188,7 @@ The criteria document records:
 - source evidence requirements for each atom candidate
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
 - one shared writer/reviewer quality standard that future docs operations must use both for drafting and reviewing atom files
+- service logic coverage requirements and shared writer/reviewer quality criteria that include implementation reconstruction coverage, applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons, and blockers that prevent docs-only implementation
 - shared atom identity rules, including mandatory frontmatter `atom_key` for new atoms, AID values in the form `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key` as the target atom's `atom_key`, and graph `target_path` as a mutable locator
 - subagent role mapping that explains how writer subagents produce artifacts for the shared standard and how reviewer subagents verify that same standard
 
@@ -209,7 +211,7 @@ Do not approve a domain solely from a code folder name, endpoint, controller, se
 
 Criteria source evidence does not need to describe every service logic branch at atom-level depth. However, source identifiers alone are not valid domain-boundary evidence. If a candidate has only source paths, endpoint names, class names, or method names without observed behavior summary and boundary rationale, criteria-review must fail it as identifier-only evidence.
 
-The criteria document must not maintain separate writer-only and reviewer-only quality rules. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map use, atom candidate map use, atomization perspectives, service logic inventory, natural-language implementation coverage, source evidence, inferred/confirmed basis, frontmatter `atom_key`, AID assignment with `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key`/`target_path` rules, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
+The criteria document must not maintain separate writer-only and reviewer-only quality rules. The sections `서비스 로직 커버리지 요구사항` and `작성/리뷰 공통 품질 기준` must make implementation reconstruction coverage an explicit shared standard before user approval. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map use, atom candidate map use, atomization perspectives, service logic inventory, natural-language implementation coverage, implementation reconstruction coverage, applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons, source evidence, inferred/confirmed basis, frontmatter `atom_key`, AID assignment with `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key`/`target_path` rules, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
 
 The section `서브에이전트 역할 분담` may describe workflow roles only:
 
@@ -221,7 +223,7 @@ Every writer obligation must be reviewable by the same shared criterion, and eve
 
 Do not accept a criteria document that only lists perspective names or domain names. Do not accept one-line perspective summaries. A criteria-review subagent must fail the draft when any perspective is missing one of the required Korean subfields, when a required subfield is empty or placeholder-only, when a Korean managed criteria draft uses English visible labels for criteria sections or fields, when writer and reviewer rules appear as divergent role-specific checklists instead of one shared quality standard, or when a perspective with no current source evidence fails to record a concrete `해당 없음 사유` or `미해결 질문` entry.
 
-Criteria-review must also fail when full discovery candidates, approved domain/category boundaries, current accepted write scope, and behavior-level atom candidates are mixed together; when durable domain approval status is used to encode operation-local write scope; when a leaf behavior candidate appears directly in the domain/category boundary map without durable boundary rationale; when a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`; when category structure hides a broad grouping; when domain-boundary evidence is only source identifiers without observed behavior summary and boundary rationale; or when the shared quality criteria omit frontmatter `atom_key`, AID, graph `target_key`, or graph `target_path` rules.
+Criteria-review must also fail when full discovery candidates, approved domain/category boundaries, current accepted write scope, and behavior-level atom candidates are mixed together; when durable domain approval status is used to encode operation-local write scope; when a leaf behavior candidate appears directly in the domain/category boundary map without durable boundary rationale; when a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`; when category structure hides a broad grouping; when domain-boundary evidence is only source identifiers without observed behavior summary and boundary rationale; when the shared quality criteria omit frontmatter `atom_key`, AID, graph `target_key`, or graph `target_path` rules; or when `서비스 로직 커버리지 요구사항` or `작성/리뷰 공통 품질 기준` omits implementation reconstruction coverage, applicable or not-applicable frontend/UI coverage, backend/API/service/job/integration coverage, or blockers that prevent docs-only implementation.
 
 Before a criteria document is marked approved, remove one-off operation logs such as plugin cache paths, reset/delete notes, reviewer agent names, and transient "currently none" or `현재 없음` status notes unless they are active approval blockers. Approved criteria should contain durable criteria, approved or unresolved boundary information, and active blockers, not the draft execution diary.
 
@@ -372,6 +374,16 @@ For each meaningful service logic item, the docs must record:
 Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
 
 Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
+
+## Implementation Reconstruction Coverage
+
+Atomic docs must satisfy a source-to-docs-to-code implementation reconstruction standard for the accepted scope. A competent implementer should be able to implement the same functional behavior from the docs without rereading source. This does not require pixel-perfect visual design, exact CSS values, component internal structure, or library choice unless source or user requirements make them behavior-relevant. It does require basic design/state presentation, screen structure, and visual feedback guidance when they affect product behavior or the style the user asked to preserve.
+
+For frontend/UI source, document app shell behavior, routing, route/hash/query handling, selected entity and persistence, permission/access/no-data guards, preload/fallback behavior, form field matrix, collection editor behavior, validation/refusal/defaulting, payload transforms, save/delete scopes, confirmation modals, readiness blocker order, detail routes, empty/loading/error states, and basic design/state presentation enough to implement the required style.
+
+For backend/API/service/job/integration source, document API contract, request/response payload, authorization/authentication, validation/guard behavior, domain policy, transaction or idempotency behavior, persistence mutation/read model, DB schema/DTO fields that affect behavior, async job/event behavior, external integration behavior, and error/retry/recovery semantics.
+
+A docs set is not implementation-reconstruction-ready when these behaviors are only endpoint identifiers, screen identifiers, source identifiers, method-call sequences, source convention notes, one-line inventory, or unresolved `confirmation_needed` without next action.
 
 ## Source Fact Fidelity Gate
 

@@ -16,7 +16,9 @@ The baseline records the last source-code commit hash used for a confirmed docs 
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
-Baseline metadata may be updated only for the judgment-ready scope that passed post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
+Baseline metadata may be updated only for the judgment-ready scope that is also implementation-reconstruction-ready and passed post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
+
+In operation summaries, call a scope a judgment-ready and implementation-reconstruction-ready scope only when the existing post-write review explicitly verifies both judgment readiness and implementation reconstruction readiness.
 
 ## Full Refresh
 
@@ -35,7 +37,7 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 11. Stop graph expansion when related atom files no longer create modification candidates.
 12. Present a domain-grouped change plan before writing domain atom docs.
 13. Write confirmed updates only after the change plan is accepted.
-14. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete, post-write review passes, and the updated scope is judgment-ready.
+14. Update the docs-root source commit baseline metadata only after confirmed docs writes for the accepted operation are complete, post-write review passes, and the updated scope is judgment-ready and implementation-reconstruction-ready.
 
 ## Targeted Docs Operation
 
@@ -56,6 +58,7 @@ A change plan should group by domain and list:
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
 - service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
+- implementation reconstruction readiness for the accepted scope, including frontend/UI coverage, backend/API/service coverage, and unresolved `confirmation_needed` blockers that prevent docs-only implementation
 - AID assignments for new or changed atom meaning lines, and explicit AID migrations when existing IDs cannot be preserved
 - affected atom files
 - affected atom sections
@@ -71,7 +74,7 @@ A change plan should group by domain and list:
 - `Planned Changes` reconciliation candidates
 - `Gaps`, bug candidates, uncertain mappings, rename/merge proposals, and implemented-plan candidates
 - graph path corrections, `target_key`/`target_path` consistency, or target-key conflicts
-- source-baseline metadata updates and docs-root config writes, including whether the update is limited to a judgment-ready partial scope or a project-wide judgment-ready baseline
+- source-baseline metadata updates and docs-root config writes, including whether the update is limited to a judgment-ready partial scope or a project-wide judgment-ready baseline, and whether that scope is implementation-reconstruction-ready
 - unresolved boundary questions that must be accepted before writing confirmed structure
 
 The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or managed docs root structure before that acceptance.
@@ -82,4 +85,4 @@ The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `
 
 If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
 
-Docs may only judge source behavior against service logic that is actually recorded in natural language. Source behavior absent from the docs is not implicitly correct; record it as a coverage gap, `confirmation_needed`, or `docs_stale` depending on the baseline and evidence.
+Docs may only judge source behavior against service logic that is actually recorded in natural language. Source behavior absent from the docs is not implicitly correct; record it as a coverage gap, `confirmation_needed`, or `docs_stale` depending on the baseline and evidence. If missing frontend/UI or backend/API/service details would force an implementer to reread source or make arbitrary behavior choices, do not call the scope implementation-reconstruction-ready; record the missing details and next action instead.

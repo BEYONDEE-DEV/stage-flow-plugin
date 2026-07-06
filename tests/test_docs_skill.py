@@ -631,6 +631,70 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("method-call sequence", text)
         self.assertIn("service logic coverage gaps", text)
 
+    def test_atomic_docs_requires_source_to_docs_to_code_reconstruction_readiness(self) -> None:
+        skill = read(DOCS_SKILL)
+        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        criteria = read(DOCS_REFS / "criteria-flow.md")
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        inventory = read(DOCS_REFS / "project-documents-and-inventory.md")
+        baseline = read(DOCS_REFS / "source-baseline-and-change-plan.md")
+
+        self.assertIn("source-to-docs-to-code implementation reconstruction standard", skill)
+        self.assertIn("same functional behavior can be implemented from the docs", skill)
+        self.assertIn("implementation-reconstruction-ready", skill)
+
+        self.assertIn("Implementation Reconstruction Coverage", contract)
+        self.assertIn("same functional behavior from the docs", contract)
+        self.assertIn("pixel-perfect visual design", contract)
+        for frontend_detail in [
+            "app shell behavior",
+            "route/hash/query handling",
+            "selected entity and persistence",
+            "form field matrix",
+            "collection editor behavior",
+            "readiness blocker order",
+            "detail routes",
+            "basic design/state presentation",
+        ]:
+            self.assertIn(frontend_detail, contract)
+        for backend_detail in [
+            "API contract",
+            "request/response payload",
+            "authorization/authentication",
+            "transaction or idempotency behavior",
+            "persistence mutation/read model",
+            "async job/event behavior",
+            "error/retry/recovery semantics",
+        ]:
+            self.assertIn(backend_detail, contract)
+        self.assertIn("one-line inventory", contract)
+        self.assertIn("unresolved `confirmation_needed`", contract)
+        self.assertIn("must make implementation reconstruction coverage an explicit shared standard before user approval", contract)
+        self.assertIn("applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons", contract)
+        self.assertIn("omits implementation reconstruction coverage, applicable or not-applicable frontend/UI coverage, backend/API/service/job/integration coverage", contract)
+
+        self.assertIn("implementation reconstruction coverage", criteria)
+        self.assertIn("The `서비스 로직 커버리지 요구사항` and `작성/리뷰 공통 품질 기준` sections must carry the implementation reconstruction standard", criteria)
+        self.assertIn("applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons", criteria)
+        self.assertIn("treats shallow source-observed inventory as enough for docs-only implementation", criteria)
+
+        self.assertIn("implementation reconstruction coverage map", generation)
+        self.assertIn("fail shallow source-observed inventory", generation)
+        self.assertIn("Frontend/UI blockers include missing app shell, routing, selected entity, forms, collection editors, detail routes, empty/error states, or basic design/state presentation", generation)
+        self.assertIn("Backend/API/service/job/integration blockers include missing API contracts", generation)
+        self.assertIn("source-observed inventory rather than implementation-reconstruction-ready docs", generation)
+
+        self.assertIn("reconstruction-critical fields", inventory)
+        self.assertIn("entry/screen/route or API/job entry", inventory)
+        self.assertIn("UI basic design/state presentation", inventory)
+        self.assertIn("backend service/DB/DTO behavior", inventory)
+
+        self.assertIn("judgment-ready and implementation-reconstruction-ready scope", baseline)
+        self.assertIn("implementation reconstruction readiness for the accepted scope", baseline)
+        self.assertIn("frontend/UI coverage, backend/API/service coverage", baseline)
+        self.assertIn("existing post-write review explicitly verifies both judgment readiness and implementation reconstruction readiness", baseline)
+        self.assertIn("do not call the scope implementation-reconstruction-ready", baseline)
+
     def test_atomic_document_contract_requires_source_fact_fidelity(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Source Fact Fidelity Gate", text)
