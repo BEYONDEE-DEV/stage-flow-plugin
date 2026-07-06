@@ -19,10 +19,10 @@ PHASE_TO_VALIDATION = {
     "completed": "all",
 }
 EXPLICIT_WORKFLOW_RE = re.compile(
-    r"\b(?:use|run|start|resume|continue|check|create)\s+(?:the\s+)?(?:stage\s*-?\s*flow|stageflow|workflow)\b|"
-    r"\b(?:stage\s*-?\s*flow|stageflow|workflow)\s+(?:status|request|current|resume|start|create|continue|plan|run|preflight)\b|"
+    r"\b(?:use|run|start|resume|continue|check|create)\s+(?:the\s+)?(?:stage\s*-?\s*flow|stageflow)(?:\s+workflow)?\b|"
+    r"\b(?:stage\s*-?\s*flow|stageflow)(?:\s+workflow)?\s+(?:status|request|current|resume|start|create|continue|plan|run|preflight|implement)\b|"
     r"\.stageflow\s+(?:status|request|current|workflow|preflight)\b|"
-    r"\uc6cc\ud06c\ud50c\ub85c\uc6b0\s*(?:\uc0c1\ud0dc|\uc2dc\uc791|\uc9c4\ud589|\uc7ac\uac1c|\uc694\uccad)",
+    r"(?:\uc2a4\ud14c\uc774\uc9c0\s*\ud50c\ub85c\uc6b0|stageflow)\s*(?:\uc6cc\ud06c\ud50c\ub85c\uc6b0\s*)?(?:\uc0c1\ud0dc|\uc2dc\uc791|\uc9c4\ud589|\uc7ac\uac1c|\uc694\uccad)",
     re.IGNORECASE,
 )
 IMPLEMENTATION_TOKENS = (

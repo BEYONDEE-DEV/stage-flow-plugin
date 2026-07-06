@@ -785,7 +785,7 @@ Approved.
 
     def test_explicit_workflow_without_current_requires_request(self) -> None:
         with temp_project() as root:
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "REQUEST_REQUIRED")
             self.assertEqual(result["turn_start_action"], "create_request")
             self.assertTrue(result["request_creation_required"])
@@ -807,7 +807,7 @@ Approved.
             nested = root / "events-api" / "src" / "main"
             nested.mkdir(parents=True)
 
-            payload = {"session_id": "session-1", "prompt": "workflow status"}
+            payload = {"session_id": "session-1", "prompt": "stageflow status"}
             proc = subprocess.run(
                 [sys.executable, str(HOOK_CHECK), "--event", "user_prompt_submit", "--root", str(nested)],
                 input=json.dumps(payload),
@@ -825,7 +825,7 @@ Approved.
 
     def test_stop_blocks_request_creation_without_definition_store(self) -> None:
         with temp_project() as root:
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             request_dir = root / ".stageflow" / "requests" / REQUEST_ID
             (root / ".stageflow" / "sessions" / "session-1").mkdir(parents=True)
             request_dir.mkdir(parents=True)
@@ -853,7 +853,7 @@ Approved.
 
     def test_stop_blocks_request_creation_with_invalid_definition_store(self) -> None:
         with temp_project() as root:
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.create_project(root, "definition")
             store_dir = root / ".stageflow" / "requests" / REQUEST_ID / "01-definition" / "definition-store"
             store_dir.mkdir()
@@ -868,7 +868,7 @@ Approved.
 
     def test_request_creation_allows_stageflow_apply_patch_artifacts(self) -> None:
         with temp_project() as root:
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             result = self.run_hook(
                 root,
                 "pre_tool_use",
@@ -896,9 +896,24 @@ Approved.
             self.assertEqual(result["turn_start_action"], "none")
             self.assertEqual(result["_stdout"], "")
 
+    def test_bare_workflow_prompt_without_current_prepasses(self) -> None:
+        with temp_project() as root:
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["turn_start_action"], "none")
+            self.assertEqual(result["_stdout"], "")
+
+    def test_simple_workflow_prompt_without_current_prepasses(self) -> None:
+        with temp_project() as root:
+            prompt = "[$simple-workflow-plugin:simple-workflow] 스킬을 이용하여 atomic-docs 스킬 개선"
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": prompt})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["turn_start_action"], "none")
+            self.assertEqual(result["_stdout"], "")
+
     def test_plain_prompt_clears_stale_request_required_state(self) -> None:
         with temp_project() as root:
-            required = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            required = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(required["status"], "REQUEST_REQUIRED")
             prepass = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "commit and review linux compatibility"})
             self.assertEqual(prepass["status"], "PREPASS")
@@ -911,14 +926,14 @@ Approved.
             current_dir = root / ".stageflow" / "sessions" / "session-1"
             current_dir.mkdir(parents=True)
             (current_dir / "current.json").write_text(json.dumps({"request_id": "missing-request", "phase": "definition"}, indent=2), encoding="utf-8")
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "INVALID_CURRENT")
             self.assertEqual(result["turn_start_action"], "repair_current_pointer")
 
     def test_active_definition_request_emits_preflight_marker(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "OK")
             self.assertEqual(result["phase"], "definition")
             self.assertEqual(result["turn_start_action"], "continue_current_stage")
@@ -941,14 +956,14 @@ Approved.
             current = root / ".stageflow" / "sessions" / "session-1" / "current.json"
             state.write_text(json.dumps({"request_id": REQUEST_ID, "phase": "service-plan"}, indent=2), encoding="utf-8")
             current.write_text(json.dumps({"request_id": REQUEST_ID, "phase": "service-plan"}, indent=2), encoding="utf-8")
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "INVALID_CURRENT")
             self.assertEqual(result["turn_start_action"], "repair_current_state")
 
     def test_completed_current_requires_new_request(self) -> None:
         with temp_project() as root:
             self.create_project(root, "completed")
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "COMPLETED_CURRENT")
             self.assertEqual(result["turn_start_action"], "start_new_request")
 
@@ -975,7 +990,7 @@ Approved.
             self.create_project(root, "implementation")
             approval = root / ".stageflow" / "requests" / REQUEST_ID / "02-implementation-plan" / "approval.md"
             approval.write_text(approval.read_text(encoding="utf-8").replace("Approved.", "Not approved."), encoding="utf-8")
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow implement"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow implement"})
             self.assertEqual(result["status"], "IMPLEMENTATION_BLOCKED")
             self.assertEqual(result["turn_start_action"], "repair_implementation_plan_gate")
             self.assertEqual(result["implementation_entry_gate"]["status"], "FAIL")
@@ -983,7 +998,7 @@ Approved.
     def test_stop_allows_response_without_preflight_marker(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "status answered"}, expected_returncode=0)
             self.assertEqual(result["status"], "PREPASS")
             self.assertEqual(result["_wire_output"], {})
@@ -991,7 +1006,7 @@ Approved.
     def test_stop_completion_like_response_blocks_with_safe_public_reason(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "completed"}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
             self.assertEqual(
@@ -1035,7 +1050,7 @@ Approved.
     def test_completion_like_stop_runs_all_validation(self) -> None:
         with temp_project() as root:
             self.create_project(root, "completed")
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\ncompleted"})
             self.assertEqual(result["_wire_output"], {})
@@ -1060,7 +1075,7 @@ Approved.
                 active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
                 current_scope="큰방향",
             )
-            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "AWAITING_USER")
             self.assertEqual(result["turn_start_action"], "handle_awaiting_user_clarification")
             self.assertNotIn("awaiting_user_prompt_kind", result)
@@ -1539,7 +1554,7 @@ Approved.
                     current_scope=questions[0]["scope"],
                     active_pending_questions=questions,
                 )
-                result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+                result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
                 self.assertEqual(result["status"], "WARNING")
                 self.assertEqual(result["validation"]["status"], "FAIL")
                 self.assertIn(expected, result["validation"]["output"])
@@ -1686,7 +1701,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(prompt_result["status"], "FULL_CONSISTENCY_REQUIRED")
 
             result = self.run_hook(
@@ -1701,7 +1716,7 @@ Approved.
             self.assertEqual(result["status"], "PREPASS")
             self.assertEqual(result["_wire_output"], {})
 
-            next_prompt = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            next_prompt = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(next_prompt["status"], "FULL_CONSISTENCY_REQUIRED")
             self.assertEqual(next_prompt["turn_start_action"], "run_full_consistency_subagent")
 
@@ -1716,7 +1731,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             result = self.run_hook(
                 root,
@@ -1741,7 +1756,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             result = self.run_hook(
                 root,
@@ -1766,7 +1781,7 @@ Approved.
                 current_gate="targeted-sync-required",
             )
             self.append_store_decision(root, risk_level="medium", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             result = self.run_hook(
                 root,
@@ -1791,7 +1806,7 @@ Approved.
                 current_gate="targeted-sync-required",
             )
             self.append_store_decision(root, risk_level="medium", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             for message in (
                 "I will write the implementation plan next.",
@@ -1823,7 +1838,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             result = self.run_hook(
                 root,
@@ -1845,7 +1860,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             for message in (
                 "The gate is not sync-complete yet.",
@@ -1873,7 +1888,7 @@ Approved.
                 current_gate="full-consistency-required",
             )
             self.append_store_decision(root, risk_level="high", sync_status="pending")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
 
             for message in (
                 "sync-complete",
@@ -1903,7 +1918,7 @@ Approved.
                 fingerprint="0" * 64,
                 current_gate="snapshot-current",
             )
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(prompt_result["status"], "SNAPSHOT_CURRENT_REQUIRED")
 
             result = self.run_hook(
@@ -1934,7 +1949,7 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "definition")
             self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
@@ -2188,7 +2203,7 @@ Approved.
                 active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
                 current_scope="큰방향",
             )
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": marker + "\n대기 중입니다."}, expected_returncode=0)
             self.assertEqual(result["status"], "BLOCKED")
@@ -2209,7 +2224,7 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "definition")
             self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="세부확인")
-            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             last_message = (
                 "모의거래 결과 확정 단위는 무엇인가요?\n"
                 "Option 1: 하루 장이 끝날 때마다 일별 결과를 확정한다\n"
@@ -2241,7 +2256,7 @@ Approved.
                 active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
                 current_scope="큰방향",
             )
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
@@ -2270,7 +2285,7 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "definition")
             self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
@@ -2296,7 +2311,7 @@ Approved.
             )
             self.refresh_stage_fingerprint(root, "definition")
             self.write_definition_store(root, active_pending_ids=["PENDING-001"], current_scope="큰방향")
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
@@ -2397,7 +2412,7 @@ Approved.
             stop_result = self.run_hook(root, "stop", {"session_id": "session-1", "last_assistant_message": "답변을 store에 기록했고 영향 범위 동기화가 필요합니다."}, expected_returncode=0)
             self.assertEqual(stop_result["status"], "PREPASS")
 
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(prompt_result["status"], "TARGETED_SYNC_REQUIRED")
             self.assertEqual(prompt_result["turn_start_action"], "run_targeted_sync_subagent")
 
@@ -2421,7 +2436,7 @@ Approved.
                 active_pending_ids=["PENDING-001", "PENDING-002", "PENDING-003", "PENDING-004", "PENDING-005"],
                 current_scope="큰방향",
             )
-            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             marker = str(prompt_result["preflight_marker"])
             last_message = (
                 marker
