@@ -21,6 +21,7 @@ Review only these inputs:
 - Conditional transition risk goal: `01-definition/transition-risk-goal.md` after a user stop signal
 - Conditional transition risk artifact: `01-definition/transition-risk.md` after a user stop signal
 - Writing and review rule file: `references/stages/01-definition/definition-writing-and-review-rules.md`
+- Focused definition rule files as needed for the shard: `references/stages/01-definition/definition-behavior-rules.md`, `references/stages/01-definition/definition-clarification-rules.md`, `references/stages/01-definition/definition-artifact-template.md`, and `references/stages/01-definition/definition-transition-risk-rules.md`
 - Previous approval and review records only when needed to confirm approved scope
 
 Do not review unrelated files. Do not implement changes. Do not treat implementation work as approved during this stage. Do not ask the user questions. Self-review never satisfies this gate.
@@ -29,6 +30,7 @@ Do not review unrelated files. Do not implement changes. Do not treat implementa
 
 - Use one bounded shard scope such as intent/clarification/transition-risk, behavior/policy/approved-flow model, boundary/failure coverage, or intent-fidelity/language/template-filler. Do not review every definition concern in one subagent when those scopes can be split.
 - Read `## Writing And Review Rule Table` from the writing and review rule file.
+- Read the focused definition rule file that matches this shard before judging that subject. For final-definition review coverage, the review set must collectively cover all focused definition rule files.
 - Evaluate every Rule ID in that table.
 - Read `references/language-policy.md` and determine the selected artifact language from explicit user language, dominant existing artifact language, or current conversation language.
 - Mark `FAIL` when non-fixed prose, questions, option descriptions, recommendation reasons, review evidence, or completion summaries are written in the wrong language for the artifact. Fixed headings, table columns, schema keys, code identifiers, paths, commands, `PASS`/`FAIL`, and validator-required status/control values may remain unchanged.
@@ -77,6 +79,7 @@ Shard Scope: intent and clarification coverage
 
 - `01-definition/definition.md` and transition-risk files when assigned
 - Matching writing and review rule file for this shard.
+- Focused definition rule files assigned to this shard.
 
 ## Findings
 

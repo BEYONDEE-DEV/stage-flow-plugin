@@ -819,6 +819,13 @@ Approved.
 
     def test_stage_role_and_review_guidance_is_documented(self) -> None:
         definition_rules = (REFERENCE_ROOT / "stages" / "01-definition" / "definition-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
+        definition_fanout = [
+            (REFERENCE_ROOT / "stages" / "01-definition" / "definition-behavior-rules.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "stages" / "01-definition" / "definition-clarification-rules.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "stages" / "01-definition" / "definition-artifact-template.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "stages" / "01-definition" / "definition-transition-risk-rules.md").read_text(encoding="utf-8-sig"),
+        ]
+        definition_docs = "\n".join([definition_rules, *definition_fanout])
         definition_prompt = (REFERENCE_ROOT / "stages" / "01-definition" / "definition-review-agent-prompt.md").read_text(encoding="utf-8-sig")
         intent_fidelity = (REFERENCE_ROOT / "intent-fidelity.md").read_text(encoding="utf-8-sig")
         for phrase in (
@@ -854,7 +861,7 @@ Approved.
             "architecture",
             "acceptance outcome",
         ):
-            self.assertIn(phrase, definition_rules)
+            self.assertIn(phrase, definition_docs)
         for phrase in (
             "Definition Review Agent Prompt",
             "normal behavior model",
@@ -869,23 +876,30 @@ Approved.
 
         skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
         artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
+        artifact_fanout = [
+            (REFERENCE_ROOT / "artifacts" / "request-structure.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "artifacts" / "definition-store.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "artifacts" / "definition-gates.md").read_text(encoding="utf-8-sig"),
+            (REFERENCE_ROOT / "artifacts" / "stage-review-approval.md").read_text(encoding="utf-8-sig"),
+        ]
+        artifact_docs = "\n".join([artifact_text, *artifact_fanout])
         implementation_plan_rules = (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         implementation_rules = (REFERENCE_ROOT / "stages" / "03-implementation" / "implementation-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
         for text, phrase in (
             (skill_text, "the only allowed definition goal is the transition-risk audit"),
             (skill_text, "goal-achievement decision readiness audit"),
             (skill_text, "implementation-plan coverage or constraints"),
-            (artifact_text, "uncovered` means a goal-critical decision is missing from definition"),
-            (artifact_text, "the audit found no material decision gap"),
-            (artifact_text, "at least two labeled resolution options"),
-            (artifact_text, "Prior Answer Check"),
-            (artifact_text, "Already answered and reflected decisions are not risk cases"),
+            (artifact_docs, "uncovered` means a goal-critical decision is missing from definition"),
+            (artifact_docs, "the audit found no material decision gap"),
+            (artifact_docs, "at least two labeled resolution options"),
+            (artifact_docs, "Prior Answer Check"),
+            (artifact_docs, "Already answered and reflected decisions are not risk cases"),
             (skill_text, "already answered/reflected user decisions are not risk cases"),
             (skill_text, "Question Scope"),
             (skill_text, "exact localized `Question Scope` label"),
-            (definition_rules, "큰방향"),
-            (definition_rules, "주요결정"),
-            (definition_rules, "세부확인"),
+            (definition_docs, "큰방향"),
+            (definition_docs, "주요결정"),
+            (definition_docs, "세부확인"),
             (skill_text, "question-backlog.md"),
             (skill_text, "Implementation Feedback And Redefinition"),
             (skill_text, "Use selective rework instead of blanket invalidation"),
@@ -901,8 +915,8 @@ Approved.
             (intent_fidelity, "Intent fidelity is semantic, not lexical"),
             (intent_fidelity, "not a keyword list"),
             (skill_text, "references/language-policy.md"),
-            (artifact_text, "references/language-policy.md"),
-            (definition_rules, "For a Korean workflow, new definition prose should default to Korean"),
+            (artifact_docs, "references/language-policy.md"),
+            (definition_docs, "For a Korean workflow, new definition prose should default to Korean"),
             (definition_prompt, "Read `references/language-policy.md`"),
             (implementation_plan_rules, "new implementation-plan prose should default to Korean"),
             (implementation_rules, "new implementation prose should default to Korean"),
@@ -921,27 +935,54 @@ Approved.
         ):
             self.assertIn(phrase, text)
 
-        user_facing_docs = "\n".join((skill_text, artifact_text, definition_rules, definition_prompt))
+        user_facing_docs = "\n".join((skill_text, artifact_docs, definition_docs, definition_prompt))
         self.assertNotIn("Question Depth", user_facing_docs)
         self.assertNotIn("`broad`", user_facing_docs)
         self.assertNotIn("`mid`", user_facing_docs)
         self.assertNotIn("`detail`", user_facing_docs)
 
+    def test_stageflow_doc_fanout_is_documented(self) -> None:
+        skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
+        artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
+        definition_rules = (REFERENCE_ROOT / "stages" / "01-definition" / "definition-writing-and-review-rules.md").read_text(encoding="utf-8-sig")
+        expected_refs = (
+            "references/artifacts/request-structure.md",
+            "references/artifacts/definition-store.md",
+            "references/artifacts/definition-gates.md",
+            "references/artifacts/stage-review-approval.md",
+            "references/stages/01-definition/definition-behavior-rules.md",
+            "references/stages/01-definition/definition-clarification-rules.md",
+            "references/stages/01-definition/definition-artifact-template.md",
+            "references/stages/01-definition/definition-transition-risk-rules.md",
+        )
+        for relative in expected_refs:
+            with self.subTest(relative=relative):
+                self.assertTrue((ROOT / "skills" / "stageflow" / relative).exists())
+                self.assertIn(relative, "\n".join((skill_text, artifact_text, definition_rules)))
+        self.assertIn("focused reference files preserve the detailed rules", definition_rules)
+        self.assertIn("focused artifact details live in `references/artifacts/`", artifact_text)
+
     def test_review_folder_contract_is_documented(self) -> None:
         skill_text = (ROOT / "skills" / "stageflow" / "SKILL.md").read_text(encoding="utf-8-sig")
         artifact_text = (ROOT / "skills" / "stageflow" / "references" / "artifact-format.md").read_text(encoding="utf-8-sig")
+        artifact_docs = "\n".join(
+            [
+                artifact_text,
+                (REFERENCE_ROOT / "artifacts" / "stage-review-approval.md").read_text(encoding="utf-8-sig"),
+            ]
+        )
         prompts = [
             (REFERENCE_ROOT / "stages" / "01-definition" / "definition-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
             (REFERENCE_ROOT / "stages" / "02-implementation-plan" / "implementation-plan-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
             (REFERENCE_ROOT / "stages" / "03-implementation" / "implementation-review-agent-prompt.md").read_text(encoding="utf-8-sig"),
         ]
-        for text in (skill_text, artifact_text):
+        for text in (skill_text, artifact_docs):
             self.assertIn("review/final.md", text)
             self.assertIn("review/subagents", text)
             self.assertIn("bounded", text)
             self.assertIn("main agent", text)
-        self.assertIn("Subagent Review Shards", artifact_text)
-        self.assertIn("legacy `review.md` does not satisfy", artifact_text)
+        self.assertIn("Subagent Review Shards", artifact_docs)
+        self.assertIn("legacy `review.md` does not satisfy", artifact_docs)
         for prompt in prompts:
             self.assertIn("review/subagents/<cycle>-<slice>.md", prompt)
             self.assertIn("Do not write `review/final.md`", prompt)

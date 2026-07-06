@@ -9,27 +9,27 @@ Use Stageflow to keep substantial Codex work grounded in durable request artifac
 
 ## Core Contract
 
-Every request always moves through three stage folders:
+Every request moves through three fixed stage folders:
 
 1. `01-definition`: definition -> subagent review -> user approval
-2. `02-implementation-plan`: implementation plan -> subagent review -> user approval
-3. `03-implementation`: implementation evidence -> completion audit subagent review -> fix/review cycle until PASS -> user approval/completion
+2. `02-implementation-plan`: implementation plan -> goal handoff -> subagent review -> user approval
+3. `03-implementation`: implementation evidence -> goal handoff -> completion audit subagent review -> fix/review cycle until PASS -> user approval/completion
 
-Definition contains these required files, plus a conditional transition-risk pair after the user stops clarification:
+Definition required files:
 
 ```text
 .stageflow/requests/<request-id>/01-definition/
   definition.md
-  definition-store/        (required indexed hot-path store during clarification)
-  transition-risk-goal.md  (required after user stop signal before definition approval)
-  transition-risk.md       (required after user stop signal before definition approval)
-  question-scope-transition-review.md  (required before lower-scope pending questions)
+  definition-store/
+  question-scope-transition-review.md
+  transition-risk-goal.md
+  transition-risk.md
   review/final.md
   review/subagents/001-full-bounded-review.md
   approval.md
 ```
 
-Implementation-plan and implementation contain these required files:
+Implementation-plan and implementation required files:
 
 ```text
 .stageflow/requests/<request-id>/<stage-folder>/
@@ -40,130 +40,79 @@ Implementation-plan and implementation contain these required files:
   approval.md
 ```
 
-For `02-implementation-plan`, a separate `flow-completeness` subagent shard is also required before approval:
+`02-implementation-plan` also requires `review/subagents/002-flow-completeness-review.md`. Stage artifact names are `01-definition/definition.md`, `02-implementation-plan/implementation-plan.md`, and `03-implementation/implementation.md`.
 
-```text
-.stageflow/requests/<request-id>/02-implementation-plan/review/subagents/002-flow-completeness-review.md
-```
-
-Stage artifact names are:
-
-- `01-definition/definition.md`
-- `02-implementation-plan/implementation-plan.md`
-- `03-implementation/implementation.md`
-
-Do not use the removed root-level gates as required artifacts: `context.md`, `source-requirements.md`, root `plan.md`, root `review.md`, root `approval.md`, root `goal.md`, `implementation-log.md`, `plan-compliance-review.md`, `code-review.md`, or `completion-summary.md`. Do not use the retired four-stage folders `01-requirements`, `02-service-plan`, `03-implementation-plan`, or `04-implementation` for new requests.
+Do not use the removed root-level gates as required artifacts: `context.md`, `source-requirements.md`, root `plan.md`, root `review.md`, root `approval.md`, root `goal.md`, `implementation-log.md`, `plan-compliance-review.md`, `code-review.md`, or `completion-summary.md`. Do not use retired four-stage folders for new requests.
 
 ## Non-Negotiable Rules
 
 - Inspect the project before asking definition questions.
-- Keep every request in its own `.stageflow/requests/<request-id>/` folder.
-- Use the session current pointer at `.stageflow/sessions/<session-id>/current.json` as the active request authority.
-- Do not use `create_goal` or require `goal.md` for normal `definition` clarification; after a user stop signal, the only allowed definition goal is the transition-risk audit recorded in `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`.
-- Run `implementation-plan` and `implementation` as goals before writing or revising those stage artifacts.
-- Record the goal receipt in those later stage `goal.md` files: stage, artifact path, artifact fingerprint, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and goal status.
-- When a definition turn presents active clarifications, keep the live batch of 1-5 questions in `definition-store/working-set.json.active_pending_questions`, return the full batch to the user, and stop; `definition.md` is only the synced approval-ready snapshot.
-- Review each stage artifact with a subagent. Self-review is allowed only as a private preliminary check and never satisfies the review gate.
-- Record review synthesis in the same stage's `review/final.md`, and record each bounded subagent shard in `review/subagents/<cycle>-<slice>.md`. The main agent owns conflict resolution, complete Rule ID checklist coverage, latest verdict, blocking issues, and final verdict in `review/final.md`.
-- Do not advance to the next stage until the current stage has a passing subagent review and explicit user approval in `approval.md`.
+- Keep every request in `.stageflow/requests/<request-id>/`, and use `.stageflow/sessions/<session-id>/current.json` as the active request authority.
+- Do not use `create_goal` or `goal.md` for normal definition clarification. After a user stop signal, the only allowed definition goal is the transition-risk audit recorded in `transition-risk-goal.md` and `transition-risk.md`; it is a goal-achievement decision readiness audit.
+- Run `implementation-plan` and `implementation` as goals before writing or revising those later-stage artifacts, and record goal receipt in their `goal.md`.
+- Review each stage artifact with a subagent. The main agent writes `review/final.md`; self-review never satisfies the review gate.
+- Do not advance until the current stage has a passing subagent review and explicit user approval in `approval.md`.
 - Do not implement code until `02-implementation-plan` has goal, artifact, subagent review, and approval.
-- During `implementation`, the review subagent must audit `## Work Item Completion Evidence` against every approved implementation-plan work item and `## Flow Completion Evidence` against every approved complete flow before final user approval. If any work item or complete flow is incomplete, unverifiable, out of scope, insufficiently validated, or hidden as a deviation, do not ask for user approval; revise the implementation and `03-implementation/implementation.md`, then rerun the subagent review cycle until the latest review verdict is PASS.
-- Write user-facing questions, approvals, status updates, and artifact body text in the user's language. Keep validator-required headings exact.
-- Apply `references/language-policy.md` for all Stageflow artifact prose, pending clarification options, review evidence, and completion summaries: keep fixed headings/table columns unchanged, but write natural-language content in the user-selected or inferred artifact language.
-- When presenting definition questions to the user, lead with the currently known context so the user understands why the question is being asked. Each visible question must name the decision needed, show all labeled options, state the recommended option, explain why the answer matters in user-facing terms, and say which definition area the answer will update.
-- If validation fails, fix artifacts or ask the user for the missing decision. Do not bypass the validator.
-- During `definition`, assume only definition-level ambiguity remains to clarify until the user explicitly stops the question loop. Treat purpose and intent as first-class definition content, separate from outcomes: if purpose is not confirmed, keep a purpose-focused top-direction (`Question Scope`) question active before moving deeper; defer implementation-plan-only decisions such as modules, files, architecture, test commands, validation strategy, work items, and implementation order.
-- New Stageflow requests must create `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json` before the first pending clarification batch is shown. Existing active definition requests that lack the store must create it before processing the next user answer.
-- After every user answer in `definition`, record a valid store decision, classify answer risk, set `sync-state.current_gate`, and stop at the gate required by that risk. Low-risk answers stay store-only; medium-risk answers require targeted sync; high-risk, scope-transition, stop-signal, review, or approval paths require full consistency or snapshot sync. If no sync gate is needed, the same response must show the full next active pending batch with every labeled option.
-- Treat `definition.md` as the approval-ready snapshot, not the per-answer hot path. During active clarification, `working-set.json.active_pending_questions` is the canonical visible pending batch and `sync-state.current_gate` controls what may touch `definition.md`. Write `definition.md` only at `snapshot-current`, review/approval preparation, or explicit legacy repair after the store is valid.
-- Never close `definition` because the agent judges the request `clear enough`, complete, or has no more questions. Only the user can end the question loop with an explicit stop signal listed in the definition writing rules, such as `proceed` or `go ahead`. That stop signal opens the transition-risk gate; it does not by itself approve definition or authorize implementation planning. Transition-risk is a goal-achievement decision readiness audit: ask whether a decision must be settled in definition for the user goal to succeed, then record only decisions that are missing, conflicting, or ambiguous. Already-decided requirements, boundaries, policies, and already answered/reflected user decisions are not risk cases and must be carried into implementation-plan coverage or constraints instead. Before writing any transition-risk row, compare the candidate against `Clarification History`, `Resolved Decisions`, requirements, acceptance criteria, policy rules, and boundaries.
-- Treat implementation-plan transition stop signals as user stop signals, not as options inside pending clarification questions or `Transition Option` cells. Use the exact stop-signal examples from the definition writing rules.
-- Every pending clarification question shown to the user must include at least two explicit labeled options such as `Option 1:`, `선택지 1:`, or `A:`; higher-numbered or later-lettered options are allowed and must be shown when present. Never ask with only one recommendation or an unlabeled suggestion.
-- Classify each pending question by `Question Scope` using the exact labels from the definition writing rules. Start with top-direction batches, keep asking top-direction questions while top-direction ambiguities remain, and move to major-decision or detail-check questions only when clarification history or resolved decisions show the previous question scope has been sufficiently covered.
-- Before moving from `큰방향` pending questions to `주요결정`, or from `주요결정` pending questions to `세부확인`, run a question scope transition review subagent. Record the PASS result in `01-definition/question-scope-transition-review.md` with the current `definition.md` fingerprint before showing the lower-scope pending batch. If the subagent finds remaining higher-scope questions, keep asking that higher scope instead of moving deeper.
-- During `AWAITING_USER`, answer follow-ups and restate the full active batch, or record valid store decision progress and either show the next full batch or set the required sync gate. Treat duplicate/derived pending questions as store decisions. Helper subagents may prepare bounded next-turn inputs such as `01-definition/question-backlog.md` only after `SubagentStart` registers their role; the main agent must promote, revise, or discard helper output.
+- During `implementation`, audit every approved implementation-plan work item and complete flow before final user approval.
+- Write user-facing questions, approvals, status updates, and artifact prose in the user's language. Apply `references/language-policy.md` while keeping validator-required headings, columns, identifiers, status values, paths, and commands exact.
+- During definition, defer implementation-plan-only decisions such as modules, files, architecture, test commands, validation strategy, work items, and implementation order unless the answer changes approved service meaning.
+- During active definition clarification, `definition-store/working-set.json.active_pending_questions` is the canonical live pending batch and `definition.md` is only the approval-ready snapshot.
+- New Stageflow requests must create `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json` before the first pending clarification batch is shown.
+- During `AWAITING_USER`, answer follow-ups and restate the full active batch, or record valid store decision progress and either show the next full batch or set the required sync gate.
+- Treat duplicate/derived pending questions as store decisions. Remember: already answered/reflected user decisions are not risk cases; carry them into implementation-plan coverage or constraints.
+- Classify pending questions by `Question Scope` using the exact localized `Question Scope` label from the definition rules: `큰방향`, `주요결정`, or `세부확인`.
+- Before moving to a lower-scope pending batch, run a question scope transition review subagent and record PASS in `question-scope-transition-review.md`.
+- Helper subagents may prepare bounded next-turn inputs such as `01-definition/question-backlog.md` only after `SubagentStart` registers their role; the main agent must promote, revise, or discard helper output.
+- If validation fails, repair artifacts or ask the user for the missing decision. Do not bypass the validator.
 
-## Definition Hot Path Store
+## Definition Hot Path
 
-Use `01-definition/definition-store/` as the default clarification hot path. It is required for new requests and for any existing definition that has active `Pending Clarifications`; this prevents rewriting all of `definition.md` after every answer in long-running clarification loops.
+Read `references/artifacts/definition-store.md` and `references/stages/01-definition/definition-clarification-rules.md` before handling active clarification.
 
-- `working-set.json`: current active pending IDs, `active_pending_questions`, current scope, latest answer summary, next question candidate IDs, and current risk level.
-- `decision-ledger.jsonl`: append-only user-answer decisions with `DEC-*`, source `PENDING-*`, affected IDs, and `risk_level`.
-- `trace-index.json`: graph from `PENDING-*` to `DEC-*` to affected `REQ-*`, `SP-*`, `DFLOW-*`, `DEC-*`, or `INTENT-*` IDs.
-- `sync-state.json`: current `definition.md` snapshot fingerprint, `current_gate`, and each decision's sync status.
+The fast path uses only `definition-store/` for low-risk answers. Store progress means a valid `DEC-*` ledger row, turn-start `source_pending_id`, affected IDs, matching `trace-index.json`, and matching `sync-state.decision_sync`. If no sync gate is active, the active pending batch must change and the response must show every question and every labeled option.
 
-Initial store files for a new pending batch use these defaults:
+Risk gates:
 
-- `working-set.json`: active pending IDs, `active_pending_questions`, current scope, `latest_answer: null`, `next_question_candidate_ids: []`, and `risk_level: "low"`.
-- `decision-ledger.jsonl`: empty file until a user answer is recorded.
-- `trace-index.json`: `{"traces":[]}`.
-- `sync-state.json`: current `definition.md` fingerprint, `current_gate: "pending-answer"`, and `decision_sync: {}`.
-
-Helper subagents may prepare `impact-candidates.json` and `targeted-sync-plan.json` under `definition-store/`; the main agent must evaluate those candidates before promoting their effects into the durable store or snapshot.
-
-Duplicate or derived pending questions are still decisions. Retire them through the store decision shape in `references/artifact-format.md` and the definition writing rules before replacing the active batch.
-
-Risk levels control sync cost:
-
-- `low`: copy, labels, or minor acceptance details; record in the store, keep `current_gate` on `pending-answer`/`store-only`, and do not read or write full `definition.md`.
-- `medium`: policy, service-level data responsibility, exposed data, failure/recovery, or regression semantics; set `current_gate: "targeted-sync-required"` and register a targeted-sync subagent before affected snapshot work.
-- `high`: reverses a prior decision, changes ownership, scope, auth/payment/privacy/security, or integration responsibility; set `current_gate: "full-consistency-required"` and register a full-consistency subagent before continuing to lower-scope questions or approval.
-
-Set `current_gate: "snapshot-current"` only when the store is ready to update `definition.md`. Full consistency is required before question scope transitions, after user stop signals, before definition review/approval, and immediately after high-risk answers.
-
-## Definition Question Scope Criteria
-
-Use answer impact to classify pending clarification questions, then write the exact localized `Question Scope` label from `references/stages/01-definition/definition-writing-and-review-rules.md`.
-
-- Top-direction: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries.
-- Major-decision: the answer stays inside the approved top-direction scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility.
-- Detail-check: the answer stays inside an approved behavior or policy direction and refines acceptance outcome, copy/text, fallback behavior, error handling, recovery semantics, or regression boundary; implementation-plan-only test commands and validation strategy are deferred.
-
-When showing scope labels to the user, briefly explain their practical meaning in the user's language instead of relying on the internal label alone.
+- `low`: store-only answer/follow-up; do not read or write full `definition.md`.
+- `medium`: set `current_gate: "targeted-sync-required"` and use a registered targeted-sync subagent.
+- `high`, scope-transition, stop-signal, review, or approval path: set `current_gate: "full-consistency-required"` or `snapshot-current` as required before touching the snapshot.
 
 ## Implementation Feedback And Redefinition
 
-When the user gives feedback after implementation has started or after implementation evidence is presented, classify the feedback before changing artifacts or claiming completion:
+Use selective rework instead of blanket invalidation.
 
-- If the implementation result is wrong but the approved definition and implementation plan are still correct, stay in `implementation` and revise the implementation evidence, validation, and review as needed.
-- If the implementation plan is wrong but the approved definition is still correct, return to `implementation-plan`, revise only the affected work items, coverage, risks, and validation strategy, then rerun the implementation-plan review and approval gate.
-- If the approved definition itself is wrong, return to `definition` and revise the affected requirements, policy rules, acceptance criteria, resolved decisions, or boundaries. Preserve existing `implementation-plan` and `implementation` artifacts as reference material; do not automatically discard them.
-- If the feedback is a separate new request rather than a correction to the active request, start a new `.stageflow/requests/<request-id>/` folder instead of mutating the current request.
+- If implementation is wrong but definition and implementation plan are correct, stay in `implementation` and rerun evidence/review as needed.
+- If the implementation plan is wrong but the definition is correct, return to `implementation-plan` and revise only affected work items, coverage, risks, and validation strategy.
+- If the approved definition is wrong, return to `definition`, revise affected requirements, policy rules, acceptance criteria, boundaries, or data responsibilities, then judge downstream impact.
+- If the feedback is a separate new request, start a new `.stageflow/requests/<request-id>/` folder.
 
-Use selective rework instead of blanket invalidation. Keep downstream artifacts when they still match the revised definition, partially revise them when only some work items are affected, rewrite them when policy, requirements, acceptance criteria, or data responsibility changes make the old plan incorrect, and record any implementation rollback or correction in `03-implementation/implementation.md` under `## Plan Compliance And Deviations`.
-
+Detailed redefinition, behavior, flow, and intent rules live in `references/stages/01-definition/definition-behavior-rules.md`.
 
 ## Turn Start Routine
 
 At the start of every turn using this skill:
 
-1. Read the latest `UserPromptSubmit` hook result first when it exists under `.stageflow/hook-state/sessions/<session-id>/main/current-turn.json`; fall back to `.stageflow/hook-state/current-turn.json` only when scoped state is unavailable.
-2. Process the hook result by `status` and `turn_start_action` before any substantive answer:
-   - `PREPASS` / `none`: treat the turn as outside Stageflow unless the skill was explicitly invoked.
-   - `REQUEST_REQUIRED` / `create_request`: inspect the project, create a new request folder including `01-definition/definition-store/`, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json` before answering the workflow request.
-   - `DEFINITION_STORE_REQUIRED` / `create_definition_store`: create the required `01-definition/definition-store/` files and rerun current-stage validation before processing the user answer.
-   - `INVALID_CURRENT` / `repair_current_pointer` or `repair_current_state`: repair or replace the session current pointer and matching `state.json` before continuing.
-   - `COMPLETED_CURRENT` / `start_new_request`: this appears only for explicit Stageflow status/resume/start prompts against a completed request. Create or select a non-completed request before doing new workflow work. Non-Stageflow turns with a completed current pointer are `PREPASS`.
-   - `WARNING` / `repair_current_stage`: repair the current stage artifacts and rerun validation before advancing or asking for approval.
-   - `AWAITING_USER`: treat the hook as structural notice that `definition-store/working-set.json` has an active pending clarification batch. Do not rely on hook-side natural-language intent classification. Read the latest user message against `active_pending_questions` and decide semantically:
-     - If the message answers the batch, including compact forms such as `1번은 2번, 2번은 3번, 3번은 넘김`, record the answers in `definition-store/`, classify answer risk, set `sync-state.current_gate`, compare helper candidates against answer impact, create the next pending batch when allowed, show the full current or next batch with every labeled option unless a sync gate is now active, and stop.
-     - If the message asks a follow-up or asks what an option means, answer the follow-up, restate every still-pending question with all labeled options, and stop.
-     - If the message points out a duplicate or already-derived question, record the retire decision in the store, then show the next full pending batch or set the required sync gate; do not end with only an explanation.
-     - If the message explicitly stops clarification, such as `질문 그만` or `구현 계획으로 넘어가기`, record the stop signal, create the transition-risk audit goal, write `01-definition/transition-risk-goal.md` and `01-definition/transition-risk.md`, ask the user to confirm generated risk cases, and only then proceed to definition review/approval. No definition `goal.md` is required.
-   - `TARGETED_SYNC_REQUIRED` / `run_targeted_sync_subagent`: register a targeted-sync subagent and write only targeted sync artifacts under `definition-store/` until the gate is satisfied.
-   - `FULL_CONSISTENCY_REQUIRED` / `run_full_consistency_subagent`: register a full-consistency subagent and require a PASS `full-consistency-report.json` before continuing.
-   - `SNAPSHOT_CURRENT_REQUIRED` / `sync_definition_snapshot`: sync `definition.md` from the store and update the store fingerprint before review/approval.
-   - `IMPLEMENTATION_BLOCKED` / `repair_implementation_plan_gate`: do not implement; return to the implementation-plan stage until its goal, artifact, subagent review, and approval gates pass.
-   - `OK` / `continue_current_stage`: continue only from the validated current stage.
-3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all three stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
-4. Read `.stageflow/index.json`, `.stageflow/sessions/<session-id>/current.json`, the selected request's `state.json`, and the current stage files.
+1. Read the latest `UserPromptSubmit` hook result under `.stageflow/hook-state/sessions/<session-id>/main/current-turn.json`; fall back to `.stageflow/hook-state/current-turn.json` only when scoped state is unavailable.
+2. Process `status` and `turn_start_action` before any substantive answer:
+   - `PREPASS` / `none`: outside Stageflow unless explicitly invoked.
+   - `REQUEST_REQUIRED` / `create_request`: inspect the project, create request scaffolding including `01-definition/definition-store/`, and write the session current pointer.
+   - `DEFINITION_STORE_REQUIRED` / `create_definition_store`: create required store files and rerun current-stage validation before processing the user answer.
+   - `INVALID_CURRENT` / repair action: repair or replace current pointer/state before continuing.
+   - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before new workflow work.
+   - `WARNING` / `repair_current_stage`: repair artifacts and rerun validation before advancing or asking for approval.
+   - `AWAITING_USER`: read `active_pending_questions`, decide semantically whether the user answered, asked a follow-up, challenged duplication, or stopped clarification, then update `definition-store/` or restate the full active batch and stop.
+   - `TARGETED_SYNC_REQUIRED`: register a targeted-sync subagent and write only targeted sync artifacts until the gate is satisfied.
+   - `FULL_CONSISTENCY_REQUIRED`: register a full-consistency subagent and require a PASS `full-consistency-report.json`.
+   - `SNAPSHOT_CURRENT_REQUIRED`: sync `definition.md` from the store and update the store fingerprint.
+   - `IMPLEMENTATION_BLOCKED`: return to implementation-plan until its gates pass.
+   - `OK`: continue only from the validated current stage.
+3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
+4. Read `.stageflow/index.json`, session current pointer, request `state.json`, and current stage files.
 5. Decide whether the latest user message continues the current request or starts a separate request.
 6. Run the validator for the current stage when artifacts exist.
-7. Continue only from the validated current stage. If the hook returns `AWAITING_USER`, do not treat the stage as broken; handle the user message by semantic comparison with the pending batch as described above, then stop at the appropriate clarification boundary.
+7. Continue only from the validated current stage.
 
-Treat `turn_start_instruction` in the hook result as mandatory structural guidance. If it conflicts with memory or chat context, trust the hook state and durable artifacts for workflow safety, but do not treat hook state as the authority for natural-language user intent.
-
-Do not quote raw hook `additionalContext`, `preflight_marker`, `turn_start_instruction`, Stop hook feedback, or `.stageflow/hook-state` JSON in user-visible responses. These are internal workflow signals that may still appear in Codex CLI. Show only the user-facing decision, question, artifact result, or next action in natural language.
+Treat hook `turn_start_instruction` as mandatory structural guidance. Do not quote raw hook JSON, `additionalContext`, Stop hook feedback, or hook-state content in user-visible responses.
 
 Use request IDs in this form:
 
@@ -175,38 +124,39 @@ Allowed request phases are `definition`, `implementation-plan`, `implementation`
 
 ## Stage Instruction Files
 
-Before authoring or revising a stage artifact, read the matching writing and review rule file:
+Before authoring or revising any Stageflow artifact or user-facing workflow message, read `references/language-policy.md`.
 
-- Definition: `references/stages/01-definition/definition-writing-and-review-rules.md`
-- Implementation plan: `references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md`
-- Implementation: `references/stages/03-implementation/implementation-writing-and-review-rules.md`
+Before definition work, read `references/stages/01-definition/definition-writing-and-review-rules.md`, then load the focused file for the task:
 
-Read `references/language-policy.md` before authoring or revising any Stageflow artifact or user-facing workflow message so prose uses the selected user/artifact language while validator-required headings, table columns, status values, identifiers, paths, and commands remain unchanged.
+- `references/stages/01-definition/definition-clarification-rules.md` for active pending questions, store hot path, question scope, backlog, and follow-up/answer handling.
+- `references/stages/01-definition/definition-behavior-rules.md` for purpose, intent, normal behavior, scope narrowing, approved flow inventory, and redefinition.
+- `references/stages/01-definition/definition-artifact-template.md` for the full `definition.md` starter format.
+- `references/stages/01-definition/definition-transition-risk-rules.md` after a user stop signal.
 
-Read `references/intent-fidelity.md` when definition or implementation planning could reinterpret user wording, especially for UX flow, screen, route, state, data, API, or persistence behavior.
+Before implementation-plan work, read `references/stages/02-implementation-plan/implementation-plan-writing-and-review-rules.md`. Before implementation work, read `references/stages/03-implementation/implementation-writing-and-review-rules.md`.
 
-Before running a stage review subagent, read and use the matching review agent prompt file:
+Read `references/intent-fidelity.md` when definition or planning could reinterpret user wording, especially for UX flow, screen, route, state, data, API, or persistence behavior.
+
+Before review subagents, read the matching prompt:
 
 - Definition: `references/stages/01-definition/definition-review-agent-prompt.md`
 - Implementation plan: `references/stages/02-implementation-plan/implementation-plan-review-agent-prompt.md`
 - Implementation: `references/stages/03-implementation/implementation-review-agent-prompt.md`
 
-Keep only the core workflow in this `SKILL.md`; stage-specific writing rules, review checks, and review prompts live in those reference files.
+For common artifact shapes, read `references/artifact-format.md`, then its focused `references/artifacts/` files as routed.
 
 ## Review And Approval
 
 For every stage:
 
 1. Compute the SHA-256 fingerprint of the current stage artifact.
-2. Split non-trivial review work into bounded shard scopes. Prefer parallel subagents when there are independent rule clusters, domains, changed areas, or implementation work items. A small/simple stage may use one `review/subagents/001-full-bounded-review.md` shard.
-   - `02-implementation-plan` is the exception: it must always include a separate `flow-completeness` shard that evaluates every `IP-FLOW-*` rule.
-3. Run subagent reviews using the matching stage review agent prompt. Each subagent writes only its assigned shard under `review/subagents/<cycle>-<slice>.md`, with explicit inputs, shard scope, verdict, and blocking issues.
-4. The main agent writes `review/final.md`. It must list every shard in `## Subagent Review Shards`, resolve shard conflicts or missing coverage, record `Subagent review.`, the exact `Reviewed Artifact Fingerprint: sha256:<hex>`, and a complete `## Writing And Review Rule Checklist` using every Rule ID from the matching stage rule file.
-5. If any shard or final synthesis finds blocking issues, revise the stage artifact and repeat the shard review cycle. During `implementation`, blocking issues include any approved implementation-plan work item that is incomplete, unverifiable, out of scope, insufficiently validated, or not mapped to implementation evidence.
-6. Ask the user for explicit approval only after `review/final.md` passes validation.
-7. Record `Stage approved: yes`, `Approved By`, `Approved At`, and the user's explicit approval text in `approval.md`.
+2. Split non-trivial review work into bounded subagent shards; `02-implementation-plan` always includes a separate `flow-completeness` shard.
+3. The main agent writes `review/final.md` with `Subagent review.`, exact reviewed artifact fingerprint, listed shard files, complete Rule ID checklist, latest verdict, blocking issues, and final verdict.
+4. If any shard or final synthesis finds blocking issues, revise the artifact and rerun review. During implementation, incomplete or unverifiable approved work items or complete flows are blocking issues.
+5. Ask for explicit user approval only after `review/final.md` passes validation.
+6. Record `Stage approved: yes`, `Approved By`, `Approved At`, and the explicit approval text in `approval.md`.
 
-Approval text must contain clear positive intent such as `approve`, `approved`, `go ahead`, `proceed`, `yes`, or equivalent approval wording in the user's language. Silence or vague acknowledgement is not approval.
+Approval text must contain clear positive intent such as `approve`, `approved`, `go ahead`, `proceed`, `yes`, or equivalent wording in the user's language.
 
 ## Validator
 
@@ -219,28 +169,15 @@ python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <targ
 python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --root <target-project-root> --current --session-id <session-id> --phase all
 ```
 
-Use `--print-template` to get exact starter files:
-
-```bash
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template stage-tree
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template goal  # implementation-plan/implementation only
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template definition
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation-plan
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template implementation
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template review
-python <plugin-root>/skills/stageflow/scripts/validate_stageflow.py --print-template approval
-```
-
-The validator is an auditor. Treat failures as the next action to repair.
+Use `--print-template` for exact starter files. The validator is an auditor; treat failures as the next repair action.
 
 ## Hooks
 
 Plugin hooks are read-only for durable workflow artifacts except for runtime records under `.stageflow/hook-state/`. They may block premature tool use.
 
-- `UserPromptSubmit` records structural status, `turn_start_action`, pending clarification context, and gate guidance under `.stageflow/hook-state/` and hook `additionalContext`.
+- `UserPromptSubmit` records structural status, `turn_start_action`, pending clarification context, and gate guidance.
 - `PreToolUse` enforces the current gate, including store-only clarification paths that must not read or write `01-definition/definition.md`.
-- `Stop` blocks unsafe completion or advancement claims and enforces `AWAITING_USER` continuity with lightweight store checks: answer-like prompts require valid decision progress, while follow-up prompts may restate every active pending question and every labeled option from the current store batch.
-- During `AWAITING_USER`, the skill must read `active_pending_questions`, revise `definition-store/`, set the next gate, and avoid `definition.md` on store-only paths; follow-up and low-risk answer turns must restate all active pending choices unless they transition to a sync gate.
-- Subagent hooks register bounded helper roles for question backlog, scope transition review, targeted sync, full consistency, and store helper files.
+- `Stop` blocks unsafe completion or advancement claims and enforces `AWAITING_USER` continuity with lightweight store checks.
+- `SubagentStart` registers bounded helper roles for question backlog, scope transition review, targeted sync, full consistency, and store helper files.
 
-See `references/artifact-format.md` for request-level and common artifact shapes, the matching stage writing and review rule file for stage artifact format, the matching stage review agent prompt for subagent review instructions, and `references/hooks.md` for hook behavior.
+See `references/hooks.md` for hook behavior.

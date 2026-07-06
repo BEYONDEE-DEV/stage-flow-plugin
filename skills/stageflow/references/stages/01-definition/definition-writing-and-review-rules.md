@@ -1,20 +1,13 @@
 # Definition Writing And Review Rules
 
+This file is the definition-stage router and Rule ID checklist source. Read it before authoring or reviewing `01-definition/definition.md`, then load the focused reference files below for the part of the stage you are touching. The focused reference files preserve the detailed rules that used to live in this one large file.
+
 ## Contents
 
 - [Stage Artifact](#stage-artifact)
+- [Focused Rule Files](#focused-rule-files)
 - [Stage Responsibility](#stage-responsibility)
-- [Request Type Profiles](#request-type-profiles)
-- [Clarification Loop](#clarification-loop)
-- [User-Facing Question Presentation](#user-facing-question-presentation)
-- [Scope Narrowing Evidence](#scope-narrowing-evidence)
-- [Flow Extraction Checklist](#flow-extraction-checklist)
-- [Approved Flow Inventory](#approved-flow-inventory)
 - [Stage Artifact Format](#stage-artifact-format)
-- [Definition Store Hot Path](#definition-store-hot-path)
-- [Optional Question Backlog](#optional-question-backlog)
-- [Question Scope Transition Review](#question-scope-transition-review)
-- [Definition Transition Risk Gate](#definition-transition-risk-gate)
 - [Required Artifact Sections](#required-artifact-sections)
 - [Writing And Review Rule Table](#writing-and-review-rule-table)
 - [Verification Meaning](#verification-meaning)
@@ -23,320 +16,82 @@
 
 Target: `01-definition/definition.md`
 
+## Focused Rule Files
+
+Read these files by need, and read all of them before final definition review:
+
+- `definition-behavior-rules.md`: stage responsibility, request type profiles, late feedback and redefinition, normal behavior transformation, intent fidelity, scope narrowing evidence, flow extraction, approved flow inventory, and `references/language-policy.md` requirements.
+- `definition-clarification-rules.md`: clarification loop, implementation-plan-only deferral, user-facing question presentation, open question rules, `definition-store/working-set.json.active_pending_questions`, duplicate/derived retire decisions, `Question Scope` progression, question backlog, and scope transition review.
+- `definition-artifact-template.md`: exact starter `definition.md` shape, required headings, table columns, and Korean-ready starter prose.
+- `definition-transition-risk-rules.md`: stop-signal transition-risk goal exception, goal-achievement decision readiness audit, `Prior Answer Check`, accepted dispositions, and labeled risk resolution options.
+
+Also read `references/language-policy.md` before writing or revising definition prose, and read `references/intent-fidelity.md` when user wording could be narrowed into unapproved UX, route, screen, state, data, API, or persistence behavior.
+
 ## Stage Responsibility
 
-The definition stage combines requirements and service behavior into one approved artifact. It captures the user's goal, purpose and intent, current problems, outcomes, constraints, decisions, requirements, acceptance criteria, normal behavior model, policy rules, boundaries, regression prevention, and failure recovery before implementation planning begins.
+Definition captures the user's goal, purpose and intent, current problems, outcomes, constraints, decisions, requirements, acceptance criteria, normal behavior model, policy rules, boundaries, regression prevention, failure recovery, and approved `DFLOW-*` inventory before implementation planning. It may record user-supplied or discovered technical constraints, but it must not assign code edits, TypeScript interfaces, file changes, or implementation work.
 
-The definition also owns the approved flow inventory. It must turn the user's development intent into `DFLOW-*` rows so implementation planning does not have to rediscover or guess major user, system, policy, integration, empty-state, failure, and boundary flows from prose.
-
-The definition may include technical constraints when supplied by the user or discovered through project inspection, but it must not assign code edits, TypeScript interfaces, file changes, or implementation work.
+Detailed behavior, intent, and flow rules live in `definition-behavior-rules.md`.
 
 ## Request Type Profiles
 
-Record request shape as profile tags, not as a single exclusive type. Use `Primary` and optional `Secondary` values such as `feature`, `bugfix`, `feature-adjustment`, `refactor`, `docs`, or `tooling`.
-
-- Feature-heavy requests emphasize desired outcomes, success criteria, normal behavior, user flow, and service policies.
-- Bugfix-heavy requests emphasize current problems, expected-versus-actual behavior, corrected normal behavior, regression prevention, and validation needs.
-- Mixed requests must include both desired outcomes and current problems, then connect them through requirements and service policy rules.
-
-## Clarification Loop
-
-After project inspection, assume only definition-level ambiguities remain until the user explicitly stops clarification. Before adding any pending question, classify whether the answer belongs to definition or implementation-plan. Ask breadth-first: start with 큰방향 questions, keep asking 큰방향 questions while 큰방향 ambiguities remain, and move to 주요결정 or 세부확인 questions only when `## Clarification History` or `## Resolved Decisions` records that the previous question scope has been sufficiently covered or that the user agreed to move deeper. Before moving from `큰방향` to `주요결정`, or from `주요결정` to `세부확인`, run a question scope transition review subagent and record PASS in `01-definition/question-scope-transition-review.md`. Purpose is mandatory 큰방향 coverage: if `## Purpose And Intent` is `unknown` or `inferred`, the active pending batch must include at least one purpose-focused 큰방향 question before asking only 주요결정/세부확인 questions.
-
-## Implementation-Plan Deferral Gate
-
-Definition questions must ask only for decisions that can change service meaning: user-visible behavior or outcome, acceptance outcome, product/service policy, domain boundary, user/system flow, data or integration responsibility at the service level, security/privacy/auth/payment responsibility, failure/recovery semantics, regression boundary, purpose, intent, or explicit user constraint.
-
-Defer implementation-plan-only questions instead of asking them in definition. Do not ask the user in definition to choose files, modules, components, functions, classes, hooks, scripts, architecture, libraries, packages, schema/type/interface shape, storage/query implementation, control/data-flow implementation, test commands, validation strategy, work item split, or implementation order unless the answer would change the approved user-visible or service-level meaning. Carry safe technical defaults forward as implementation-plan assumptions, risks, work items, or validation needs.
-
-If a technical uncertainty reveals a missing product/service decision, rewrite it as a concrete definition-level question. For example, ask whether a failure should be visible to the user or retried silently; do not ask which module should implement retry. Ask what success signal the user will accept; do not ask which test command should prove it.
-
-Question scope is based on answer impact:
-
-- `큰방향`: the answer can change request identity, purpose/intent, top-level scope, target user/system surface, desired outcomes, current problem framing, or explicit boundaries. It can revise at the 큰방향 level `User Goal`, `Purpose And Intent`, `Request Profile`, `Desired Outcomes`, `Current Problems`, `Requirements`, or `Boundaries`.
-- `주요결정`: the answer stays inside the approved 큰방향 scope but can change major behavior areas, user/system flow, state model, policy groups, integration responsibility, or data responsibility. It can revise `Normal Behavior Model`, `User Flow`, `State And Policy Model`, `Policy Rules`, or `Integration Flow And Data Responsibilities`.
-- `세부확인`: the answer stays inside an approved behavior or policy direction and refines acceptance outcome, copy/text, fallback behavior, error handling, recovery semantics, or regression boundary. It can revise `Acceptance Criteria`, specific `Policy Rules`, `Failure And Recovery Behavior`, or `Regression Prevention`; it must not ask for implementation-plan-only test commands or validation strategy.
-
-After every user answer, record the answer into `01-definition/definition-store/`. If an existing active definition request lacks `definition-store/`, create the required store files before processing the answer. Low-risk answer turns stay store-only: update `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json` without reading or writing the full `definition.md`. If the answer can change broad scope, major policy/data responsibility, failure/recovery behavior, integration responsibility, or any already approved meaning, set the appropriate `sync-state.current_gate` and use the registered subagent gate before snapshotting. Then create or maintain the next concrete clarification batch with 1-5 active questions in `definition-store/working-set.json.active_pending_questions`. The active batch must use one `Question Scope` at a time; do not mix higher-scope and lower-scope rows in the same pending batch. If no sync gate is active, the user-facing response must show the full current or next active batch with every labeled option before stopping. The agent must not close definition by judging the request or behavior model `clear enough`, `충분함`, or complete on its own authority. The loop ends only when the user explicitly gives a stop signal such as `구현 계획으로 넘어가기`, `질문 그만`, `충분해`, `stop asking`, `enough`, `proceed`, or `go ahead`; `yes`, `approve`, `approved`, and `승인` are approval expressions, not clarification stop signals.
-
-Before creating a new pending question, check whether the candidate is already answered or safely derivable from store evidence. In store-only turns, use `decision-ledger.jsonl`, `trace-index.json`, `working-set.json` summaries, and any snapshot-time decision index instead of reading `definition.md`. If `definition.md` sections are needed to decide whether a candidate is duplicate or derived, set `sync-state.current_gate` to `targeted-sync-required` or `full-consistency-required` and handle that gate on the next turn. A duplicate or derived pending question must be retired through a normal store decision: add a new `DEC-*`, `source_pending_id`, affected existing `DEC/REQ/SP/DFLOW/INTENT-*` IDs, trace entry, risk level, and `decision_sync` status, then show the next active batch or leave the required sync gate.
-
-Record unanswered active questions canonically in `definition-store/working-set.json.active_pending_questions`. `## Pending Clarifications` in `definition.md` is the synced snapshot for review/approval or the legacy repair source when no store exists. Before a user stop signal exists, the live store batch or synced snapshot must contain 1-5 active question rows. Each active row must include `Question Scope` (`큰방향`, `주요결정`, or `세부확인`), at least two explicit labeled proposal options such as `Option 1:`, `선택지 1:`, or `A:`, a recommended option, user-facing context for why the question is being asked, why the answer matters, the definition area the answer will update, and Status `pending` or `awaiting`. `Transition Option` remains in the table for schema compatibility, but pending rows must write `N/A`; do not place a stop signal there. `Why This Matters` must not be generic; it should say whether the answer changes scope, purpose, behavior, user flow, service-level data responsibility, acceptance outcome, policy, failure recovery, or regression boundary, and what wrong implementation-plan assumption it prevents. `Option 3:` and higher are allowed. `구현 계획으로 넘어가기` is not a proposal option and must not be included inside the `Options` cell or `Transition Option`; it is only a user-authored stop signal recorded in `## Clarification History` under `User Transition Signal`. Do not write a pending question with only one recommendation, an unlabeled suggestion, unexplained internal terminology, prose-only guidance, or an implementation-plan-only decision. After presenting a pending clarification batch, stop and wait for the user. Do not create or complete a Codex goal for definition, run review, approval, next-stage work, or mark the goal blocked merely because the user has not answered yet.
-
-If the user asks a follow-up about a pending option, the main response answers that follow-up first, then restates every still-pending question with its explicit labeled options and stops again. If the follow-up reveals that the pending question is repetitive, already decided, or derivable, record that retire decision in the store and continue to the next valid pending batch instead of ending with only an explanation. During this wait, a question-generation subagent may run in parallel to prepare optional `01-definition/question-backlog.md` candidates, limited to future candidate questions. When the user answers, judge answer impact against the backlog: reuse unaffected candidates as the next pending batch, revise partially affected candidates, or regenerate the backlog when the answer invalidates it.
-
-
-## User-Facing Question Presentation
-
-When returning a pending clarification batch to the user, render the table rows as understandable decisions rather than raw artifact maintenance. Use this order by default: current context, decision needed, labeled options, recommended option, why the answer matters, and where the answer will be reflected. If showing `큰방향`, `주요결정`, or `세부확인`, include a short plain-language explanation of the label in the user's language.
-
-Each question should make the tradeoff visible. For example, say that a scope answer will update `## Boundaries` and prevent the implementation plan from including adjacent behavior, or that an acceptance outcome answer will update `## Acceptance Criteria` and prevent the plan from assuming the wrong success signal. Do not ask context-free questions such as "Which validation boundary should definition capture?" unless the preceding sentence explains the current request context and why that boundary changes user-visible acceptance rather than test strategy.
-
-## Blocking Question Criteria
-
-Mark an open question as blocking when its answer can change screen flow, authentication, authorization, payment, security, privacy, API responsibility, integration responsibility, service-level data responsibility, copied-project parity, scope, rollout boundary, acceptance outcome, service policy, failure recovery, or regression prevention. Do not mark implementation-plan-only questions as definition blockers; defer them to implementation-plan unless they reveal a missing service-level decision.
-
-Questions outside those criteria may be non-blocking only when the recommended option is safe to carry forward and the impact of deferring the decision is documented.
-
-## Open Question Writing Rules
-
-Each open question must be written as a decision request, not a vague concern. It must include the decision needed, context or conflict, recommended option, alternatives, impact, blocking status, and resolution target. The resolution target names where the answer will be reflected, such as `REQ-002`, `SP-001`, `Boundary`, `Acceptance Criteria`, or `Failure And Recovery Behavior`.
-
-## Open Question Resolution Rules
-
-When the user answers an open question, add a `Resolved Decisions` row with the question ID, answer source, decision, and reflected artifact area. Also update the target requirement, policy rule, constraint, boundary, or acceptance criteria. If a row is updated from the answer, its source must include `User answer to Q-###` or `User answer to CLAR-###`.
-
-## Late Feedback And Redefinition
-
-If implementation feedback shows that the approved definition is wrong, return to the definition stage and update only the affected definition content. Record the correction in `## Resolved Decisions`, update the affected `## Requirements`, `## Policy Rules`, `## Acceptance Criteria`, boundaries, or data responsibilities, and preserve later-stage artifacts as reference material until their impact is judged.
-
-Do not automatically invalidate the implementation plan or implementation record. First decide whether each downstream work item still matches the revised definition, needs a partial update, needs a full rewrite, or belongs in a new request. Definition revisions must make that decision possible by clearly identifying which requirements or policy rules changed.
-
-
-## Normal Behavior Transformation
-
-The definition must transform requirements into behavior, not repeat requirement rows under a new heading. It should read like the service's approved operating model: what users do, what the system accepts or rejects, what state changes, what policies apply, what happens on failure, and what must not regress.
-
-For bugfix or mixed requests, every material `Current Problems` row must appear as a corrected normal behavior, a regression prevention condition, or both. If the definition cannot explain how the problem is resolved, the stage is not ready.
-
-## Intent Fidelity Guard
-
-Read `references/intent-fidelity.md` when user wording could be narrowed into UX, route, screen, state, data, API, or persistence behavior. Definition must preserve user meaning in `## Intent Fidelity` before expanding it into requirements, acceptance criteria, user flow, policy rules, failure recovery, or boundaries.
-
-## Scope Narrowing Evidence
-
-Scope narrowing is any definition move that takes a broader user goal or service behavior and records a smaller included behavior set, an excluded adjacent behavior, a read-only/manual/future boundary, or an implementation-plan constraint that would prevent a plausible interpretation from being implemented. This is a semantic comparison, not a literal keyword rule: do not decompose a phrase only because a specific word appears.
-
-When definition narrows scope, `## Boundaries` must cite an ID-bearing source from `## Requirements`, `## Policy Rules`, `## Resolved Decisions`, or `## Intent Fidelity`, or the narrowing must be recorded directly in one of those source tables. Acceptable evidence includes a user answer, a discovered system constraint reflected through a definition source, an approved requirement, or an approved policy rule. If the source is not settled, keep an active `## Pending Clarifications` row or generate a transition-risk case before approval.
-
-Do not use a broad technical or operational assumption as the only reason to exclude behavior. For example, a statement that initial data is manually registered does not by itself prove that all future lifecycle management is out of scope; the definition must show whether that exclusion was user-approved, constrained by the current system, or still pending.
-
-## Flow Extraction Checklist
-
-Build `## Approved Flow Inventory` by scanning every approved definition section that can imply a user, system, policy, integration, boundary, failure, or empty-state flow. Extract `DFLOW-*` candidates from:
-
-- `## Desired Outcomes`: each distinct success signal that needs a trigger and observable completion.
-- `## Current Problems`: each corrected problem flow and regression prevention path.
-- `## User Flow`: each actor-visible or consumer-visible path.
-- `## Policy Rules`: each `SP-*` trigger, response, state/data responsibility, and failure/recovery behavior.
-- `## Integration Flow And Data Responsibilities`: each producer/consumer handoff or external boundary.
-- `## Boundaries`: each explicit out-of-scope or external-boundary behavior that implementation planning might otherwise implement or ignore.
-- `## Failure And Recovery Behavior`: each validation failure, empty state, permission failure, recovery, or no-op path that changes completion semantics.
-
-Every concrete `REQ-*` and `SP-*` row must be included in at least one `Approved Flow Inventory.Source IDs` cell. If an already approved `REQ-*` or `SP-*` clearly implies a missing `DFLOW-*`, repair the definition artifact by adding or revising the flow inventory row. Do not turn that omission into a transition-risk question unless the underlying requirement or policy itself is missing, conflicting, or ambiguous.
-
-## Approved Flow Inventory
-
-Record each major approved flow once as `DFLOW-*`. A flow candidate exists when a distinct trigger or entry has its own actor/consumer, target outcome, state/data responsibility, failure/empty behavior, integration responsibility, or boundary status. Include out-of-scope and external-boundary flows when they are important enough that implementation planning might otherwise accidentally implement, ignore, or reinterpret them.
-
-Use `Boundary Status` values exactly: `in-scope`, `out-of-scope-by-definition`, or `external-boundary-by-definition`. Do not use implementation-plan terms such as files, modules, work items, commands, or architecture in this table.
-
-The inventory is a definition artifact, not review commentary. Missing `DFLOW-*` rows that can be derived from approved `REQ-*` or `SP-*` content are artifact repair work: add the flow row, source it, and rerun review. Transition-risk is only for unresolved goal-critical decisions, not for flow inventory bookkeeping that the approved definition already supports.
-
-## Language Policy
-
-Read `references/language-policy.md` before writing or revising the definition artifact. Keep required headings, table columns, status values, IDs, paths, commands, and `Option 1:` style labels unchanged, but write artifact prose, pending clarification questions, option descriptions, recommendation reasons, review evidence, and user-facing summaries in the selected user/artifact language.
-
-For a Korean workflow, new definition prose should default to Korean. English starter filler such as `Describe...`, `No pending clarification.`, `No completed clarification yet.`, `One concrete requirement.`, or option descriptions that remain in English is not review-ready content unless the selected artifact language is English.
+Record request shape as profile tags, not as a single exclusive type. Use `Primary` and optional `Secondary` values such as `feature`, `bugfix`, `feature-adjustment`, `refactor`, `docs`, or `tooling`. Detailed profile guidance lives in `definition-behavior-rules.md`.
 
 ## Stage Artifact Format
+
+Use `definition-artifact-template.md` for the full starter template and exact required table columns. This compact skeleton remains here because the validator checks the fixed stage rule file for required headings.
 
 ```md
 # Definition
 
 ## User Goal
 
-사용자의 목표를 사용자가 말한 언어로 요약한다.
-
 ## Purpose And Intent
-
-| Purpose | User Value | Business/Product Value | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| 아직 목적은 사용자 확인이 필요하다. | 사용자에게 이 결과가 왜 필요한지 확인한다. | 구현 계획 전에 제품 또는 workflow 가치를 확인한다. | user request needs clarification | unknown |
 
 ## Request Profile
 
-Primary: feature
-Secondary: none
-
 ## Desired Outcomes
-
-| ID | Outcome | Source | Success Signal |
-| --- | --- | --- | --- |
-| OUT-001 | 요청한 결과가 화면, 산출물, 검증 절차 중 하나로 확인된다. | 사용자 요청. | 리뷰어가 결과 충족 여부를 확인할 수 있다. |
 
 ## Current Problems
 
-| ID | Problem | Expected Behavior | Actual Behavior | Evidence Or Reproduction | Impact |
-| --- | --- | --- | --- | --- | --- |
-| PROB-001 | 현재 확인된 문제 없음. | N/A | N/A | N/A | N/A |
-
 ## Problem-To-Requirement Mapping
-
-| Problem ID | Requirement ID | Resolution |
-| --- | --- | --- |
-| PROB-001 | REQ-001 | 요구사항이 해당 문제를 해결하거나 재발을 막는다. |
 
 ## User-Specified Constraints
 
-- 사용자가 명시한 제약을 기록하거나 `명시된 제약 없음`을 쓴다.
-
 ## Discovered Constraints
-
-- 프로젝트 확인 중 발견한 제약을 기록하거나 `발견된 제약 없음`을 쓴다.
 
 ## Pending Clarifications
 
-| ID | Question Scope | Question | Options | Recommended Option | Transition Option | Why This Matters | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| PENDING-001 | 큰방향 | 현재 목적은 아직 확인되지 않았습니다. 이 변경이 우선 달성해야 할 목적은 무엇인가요? | Option 1: 사용자가 제기한 즉시 workflow 문제를 해결한다; Option 2: 후속 변경에 대비한 재사용 가능한 제품 유연성을 만든다 | Option 1 | N/A | 이 답변은 `Purpose And Intent`와 `Desired Outcomes`에 반영되어 이후 범위와 검증 기준의 기준점이 됩니다. | pending |
-| PENDING-002 | 큰방향 | 현재 요청 범위가 핵심 변경에만 머물지, 인접 동작까지 포함할지 열려 있습니다. 상위 범위는 어디까지로 잡을까요? | Option 1: 직접 요청된 동작으로 범위를 좁힌다; Option 2: 나중에 영향을 받을 인접 동작까지 포함한다 | Option 1 | N/A | 이 답변은 `Requirements`와 `Boundaries`에 반영되어 구현 계획이 불필요한 인접 동작까지 포함하지 않도록 합니다. | pending |
-| PENDING-003 | 큰방향 | 현재 영향 대상이 사용자 화면/경험인지 내부 workflow인지 아직 확정되지 않았습니다. 주된 적용 표면은 무엇인가요? | Option 1: 사용자-facing 동작; Option 2: 내부 workflow 동작; Option 3: 둘 다 | Option 1 | N/A | 이 답변은 `User Flow`, `Normal Behavior Model`, `Policy Rules`에 반영되어 이후 동작 질문의 기준을 정합니다. | pending |
-
 ## Clarification History
-
-| Round ID | Questions Asked | User Response | Implementation Plan Option Offered | User Transition Signal | Reflected In |
-| --- | --- | --- | --- | --- | --- |
-| CLAR-000 | 완료된 clarification이 아직 없다. | N/A | no | N/A | N/A |
 
 ## Open Questions
 
-| ID | Decision Needed | Context Or Conflict | Recommended Option | Alternatives | Impact | Blocking | Resolution Target |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Q-001 | 열린 질문 없음. | N/A | N/A | N/A | N/A | no | N/A |
-
 ## Resolved Decisions
-
-| ID | Source Question ID | Answer Source | Decision | Reflected In |
-| --- | --- | --- | --- | --- |
-| DEC-001 | N/A | N/A | 확정된 결정 없음. | N/A |
 
 ## Intent Fidelity
 
-| ID | User Wording | Normalized Requirement | Allowed Interpretations | Disallowed Interpretations | Linked Requirement/Policy |
-| --- | --- | --- | --- | --- | --- |
-| INTENT-001 | 사용자의 원문 또는 의미를 보존한 요약. | 사용자 표현에서 요구사항 의미를 보존한다. | 사용자 답변이나 resolved decision이 명시적으로 뒷받침한 해석. | 승인되지 않은 더 좁거나 넓거나 기술적인 해석. | REQ-001, SP-001 |
-
 ## Requirements
-
-| ID | Type | Source | Requirement Detail | Boundary Or Exclusion | Linked Outcomes Or Problems |
-| --- | --- | --- | --- | --- | --- |
-| REQ-001 | feature | 사용자 요청. | 검증 가능한 요구사항 한 가지를 기록한다. | 제외되는 동작을 명시한다. | OUT-001 |
 
 ## Acceptance Criteria
 
-- `REQ-001`은 연결된 outcome 또는 problem resolution을 검증할 수 있을 때 충족된다.
-
 ## Normal Behavior Model
-
-수정되거나 원하는 서비스 동작을 구조화된 모델로 설명한다.
 
 ## User Flow
 
-사용자 또는 시스템이 무엇을 하고, 보고, 받는지 순서대로 설명한다.
-
 ## State And Policy Model
-
-상태, 전이, 권한, 검증 규칙, 제품 정책을 설명한다.
 
 ## Approved Flow Inventory
 
-| Definition Flow ID | Source IDs | Trigger Or Entry | Actor Or Consumer | Target Outcome | State/Data Responsibility | Failure Or Empty Behavior | Boundary Status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| DFLOW-001 | REQ-001, SP-001, INTENT-001 | 승인된 flow를 시작하는 사용자 또는 시스템 진입점. | 사용자, 관리자, 시스템 consumer 중 해당 주체. | 사용자가 보거나 시스템 consumer가 확인하는 완료 결과. | 생성, 수정, 조회, 캐시 갱신, no-op, 외부 책임 등 service-level 책임. | 검증 실패, 빈 상태, 권한 실패, 외부 consumer 책임 등 flow별 실패/빈 상태. | in-scope |
-
 ## Policy Rules
-
-| Rule ID | Trigger Or Condition | Policy | User/System Response | State/Data Responsibility | Failure/Recovery Behavior | Source Requirement IDs |
-| --- | --- | --- | --- | --- | --- | --- |
-| SP-001 | 관련 조건이 발생한다. | 서비스는 승인된 동작을 따른다. | 사용자 또는 시스템은 계획된 응답을 받는다. | 상태 또는 데이터 책임을 설명한다. | 복구 동작을 설명한다. | REQ-001 |
 
 ## Integration Flow And Data Responsibilities
 
-동작 이해에 필요한 경우에만 서비스 수준 통합 순서와 데이터 책임을 설명한다.
-
 ## Boundaries
-
-포함 범위와 제외 범위의 동작을 설명한다.
 
 ## Regression Prevention
 
-bugfix 또는 mixed 요청에서 회귀하면 안 되는 동작을 설명한다.
-
 ## Failure And Recovery Behavior
-
-오류, 빈 상태, 권한, 검증 실패, 복구 동작을 설명한다.
 ```
-
-## Definition Store Hot Path
-
-`01-definition/definition-store/` is required for new Stageflow requests and for any active definition with `Pending Clarifications`. Use it as the default hot path so the agent does not rewrite the full `definition.md` after every answer. `definition-store/working-set.json.active_pending_questions` is the live pending-question source during active clarification. `definition.md` remains the approval-ready snapshot, and `## Pending Clarifications` there is synced from the store or used only as a legacy repair source when the store is missing.
-
-Required files when the store exists:
-
-- `working-set.json`: records `active_pending_ids`, canonical `active_pending_questions`, `current_scope`, latest answer summary, next question candidates, and `risk_level`.
-- `decision-ledger.jsonl`: append-only JSON lines; each row records `decision_id`, `source_pending_id`, `decision`, `affected_ids`, and `risk_level`.
-- `trace-index.json`: records trace entries from `PENDING-*` to `DEC-*` and affected `REQ-*`, `SP-*`, `DFLOW-*`, `DEC-*`, or `INTENT-*` IDs.
-- `sync-state.json`: records current `definition.md` snapshot fingerprint, `current_gate`, and `decision_sync` status for each decision.
-
-Initial store files for a new pending clarification batch:
-
-- `working-set.json`: active pending IDs, `active_pending_questions`, current scope, `latest_answer: null`, `next_question_candidate_ids: []`, and `risk_level: "low"`.
-- `decision-ledger.jsonl`: empty file until a user answer is recorded.
-- `trace-index.json`: `{"traces":[]}`.
-- `sync-state.json`: current `definition.md` fingerprint, `current_gate: "pending-answer"`, and `decision_sync: {}`.
-
-Helper subagents may write only files allowed by their registered role and the current gate. `targeted-sync-required` allows a targeted-sync subagent to write `targeted-sync-plan.json`; `full-consistency-required` allows a full-consistency subagent to write PASS/FAIL evidence in `full-consistency-report.json`. The main agent owns risk classification, durable ledger entries, trace updates, snapshot sync, and the next visible pending batch.
-
-Store progress is mandatory during `AWAITING_USER`. If the latest user prompt looks like an answer, an option selection, a duplicate challenge, or a clarification stop signal, the turn must record a valid new `DEC-*` in `decision-ledger.jsonl` with a turn-start `source_pending_id`, affected IDs, matching `trace-index.json`, and matching `sync-state.decision_sync`. If no sync gate is active, the active pending batch must also change before the response stops; simply restating the same batch is not progress. A turn may instead move to `targeted-sync-required`, `full-consistency-required`, or `snapshot-current`, but that gate transition still requires the valid decision evidence. If the latest user prompt is a follow-up, the store may remain unchanged only when the response restates every active pending question and every labeled option from the current store batch. A store with no active pending questions and no recognized sync gate is invalid, even if older clarification history contains a stop-like phrase.
-
-Risk levels:
-
-- `low`: copy, label, or minor acceptance detail. Record in the store, keep `current_gate` on `pending-answer`/`store-only`, and do not read or write full `definition.md`.
-- `medium`: service policy, service-level data responsibility, exposed data, failure/recovery, or regression semantics. Set `current_gate: "targeted-sync-required"` and require a targeted-sync subagent before affected snapshot work.
-- `high`: reverses a prior decision, changes ownership/scope, or changes auth, payment, privacy, security, or integration responsibility. Set `current_gate: "full-consistency-required"` and require full consistency before continuing to lower-scope questions, review, or approval.
-
-Set `current_gate: "snapshot-current"` only when store decisions are ready to be reflected into `definition.md`. Snapshot sync is required before definition review or approval can rely on `definition.md`. Full consistency is required before `큰방향 -> 주요결정`, before `주요결정 -> 세부확인`, after user stop signals, before definition review/approval, and immediately after high-risk answers.
-
-## Optional Question Backlog
-
-`01-definition/question-backlog.md` is an optional helper artifact prepared by a question-generation subagent in parallel while the main agent waits for the user. It is not a review or approval gate and does not replace `Pending Clarifications`. It should record candidate question ID, question scope, question text, at least two labeled options, affected definition areas, and invalidation triggers. After the user answers, the main agent judges impact and only then promotes unaffected candidates, revises affected candidates, or regenerates the backlog.
-
-
-## Question Scope Transition Review
-
-`01-definition/question-scope-transition-review.md` is a helper artifact written by a question scope transition review subagent before the main agent shows lower-scope pending questions. It is required when the active `Pending Clarifications` batch contains `주요결정` or `세부확인` rows.
-
-The subagent reviews only definition-stage evidence: current `01-definition/definition.md`, `## Clarification History`, `## Resolved Decisions`, `## Purpose And Intent`, `## Requirements`, `## Boundaries`, current `## Pending Clarifications`, and optional `01-definition/question-backlog.md`. It asks whether higher-scope questions are truly exhausted before the next lower scope is shown.
-
-Required file format:
-
-```md
-# Question Scope Transition Review
-
-## Transition Checks
-
-| Transition | Definition Artifact Fingerprint | Evidence Reviewed | Remaining Higher-Scope Questions | Reviewer | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| 큰방향 -> 주요결정 | sha256:<definition-fingerprint> | Clarification History, Resolved Decisions, Purpose And Intent, Requirements, Boundaries, Pending Clarifications, question-backlog.md if present. | 남은 큰방향 질문 없음: 근거를 한 문장으로 기록한다. | question scope transition review subagent | PASS |
-| 주요결정 -> 세부확인 | sha256:<definition-fingerprint> | Clarification History, Resolved Decisions, Normal Behavior Model, User Flow, State And Policy Model, Policy Rules, Pending Clarifications, question-backlog.md if present. | 남은 주요결정 질문 없음: 근거를 한 문장으로 기록한다. | question scope transition review subagent | PASS |
-```
-
-If the review finds any remaining higher-scope decision, write `FAIL` and keep the next active pending batch at that higher scope. Do not present lower-scope questions while the required transition row is missing, stale against the current definition fingerprint, or not `PASS`.
-
-
-## Definition Transition Risk Gate
-
-When the user gives a stop signal such as `구현 계획으로 넘어가기`, definition does not go straight to review or approval. First run the narrow transition-risk goal exception and record `01-definition/transition-risk-goal.md` plus `01-definition/transition-risk.md`. This goal is a goal-achievement decision readiness audit: it checks whether any decision required for the user goal to succeed is still missing, conflicting, or ambiguous before implementation planning. It is not an implementation-plan goal and must not create `01-definition/goal.md`.
-
-`transition-risk-goal.md` must record `Stage: definition`, `Purpose: transition-risk`, `Artifact Path: 01-definition/transition-risk.md`, the current `Definition Artifact Fingerprint`, `Tool: create_goal`, `Invocation recorded: yes`, `Goal created: yes`, and `Goal status: completed`.
-
-`transition-risk.md` must include `## Risk Generation Basis`, `## Generated Risk Cases`, `## Suggested Definition Updates`, `## User Confirmation`, and `## Final Disposition`. The risk table must have `ID`, `Category`, `Risk Case`, `Affected Definition Area`, `Definition Coverage`, `Prior Answer Check`, `Suggested Handling`, `User Confirmation`, and `Disposition`. `Definition Coverage` must be `uncovered`, `conflicting`, `ambiguous`, or `not-applicable`: `uncovered` means a goal-critical decision is missing from definition, `conflicting` means goal-critical decisions conflict inside definition, `ambiguous` means a goal-critical decision can be interpreted multiple ways, and `not-applicable` means the audit found no material decision gap; only the explicit `No material transition risks found` row may use `not-applicable`. `Prior Answer Check` must be `not-answered`, `answered-not-reflected`, `answered-conflicting`, or `not-applicable`: use it to prove the candidate was compared against `Clarification History`, `Resolved Decisions`, `Requirements`, `Acceptance Criteria`, `Policy Rules`, and `Boundaries` before it became a risk row. `not-applicable` is only for the explicit no-material-risk row. If the user already answered the issue and the definition already reflects it, do not write a risk case; carry that decision into implementation-plan coverage or constraints. If the user answered but the definition failed to reflect it or now conflicts with it, use `answered-not-reflected` or `answered-conflicting` and resolve it with `apply-to-definition` or `ask-follow-up`. Allowed categories are `scope`, `acceptance`, `policy-data`, `failure-recovery`, `regression`, `integration`, `user-flow`, `security-privacy`, and `implementation-readiness`. Allowed dispositions are `apply-to-definition`, `ask-follow-up`, `out-of-scope`, `accepted-risk`, `duplicate`, and `not-applicable`.
-
-Generated risk cases are not automatically requirements, and they are not a place to restate decisions that are already answered by the user and settled in `definition.md`. For each candidate, ask two questions: `이 목표를 달성하려면 이 결정이 definition 단계에서 이미 정해져 있어야 하는가?` and `그 결정이 현재 definition에 없거나, 충돌하거나, 애매한가?` A risk case must expose a required decision the definition does not currently settle, a required decision that conflicts with another definition decision, or a required decision that is ambiguous enough to let implementation planning choose the wrong path. Already-decided requirements, boundaries, policy rules, and already answered/reflected user answers must move to implementation-plan coverage or constraints instead. If an approved requirement or policy only lacks its derived `DFLOW-*` inventory row, repair `## Approved Flow Inventory` instead of asking the user to reconfirm the same decision.
-
-When a material risk case is presented to the user, write it in the same user-answerable form as clarification questions: explain the risk in plain language, name the affected definition area, explain why it can block the goal, and put at least two labeled resolution options in `Suggested Handling` such as `Option 1:` and `Option 2:`. Do not use a single recommendation, an unlabeled sentence, or implementation-only TODOs as the handling. If the user confirms `apply-to-definition`, reflect the update in `## Requirements`, `## Acceptance Criteria`, `## Policy Rules`, `## Boundaries`, `## Failure And Recovery Behavior`, or `## Regression Prevention`. If a case needs more input, use `ask-follow-up` and restore active `Pending Clarifications`. If the user explicitly accepts a true residual risk, use `accepted-risk`; do not use `accepted-risk` to mean “already confirmed”.
-
 
 ## Required Artifact Sections
 
