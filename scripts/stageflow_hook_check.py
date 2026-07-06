@@ -53,6 +53,47 @@ AWAITING_USER_COMPLETION_CLAIM_RE = re.compile(
     r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)",
     re.IGNORECASE,
 )
+SYNC_GATE_COMPLETION_CLAIM_RE = re.compile(
+    r"\b(?:sync(?:ed)?|snapshot|gate|full-consistency|targeted-sync)[-\s]+"
+    r"(?:complete|completed|done|passed)\b|"
+    r"(?:동기화|스냅샷|게이트|전체\s*일관성|부분\s*동기화)(?:이|가|을|를)?\s*(?:완료|통과)",
+    re.IGNORECASE,
+)
+SYNC_GATE_ADVANCE_OR_APPROVAL_CLAIM_RE = re.compile(
+    r"\b(?:proceed(?:ing)?|advance|advancing|move|moving|continue|continuing)\s+"
+    r"(?:to|into|with)\s+(?:the\s+)?(?:next\s+stage|implementation\s+plan|implementation|plan)\b|"
+    r"\b(?:i\s+will|we\s+will|i['’]ll|we['’]ll|let['’]?s)?\s*"
+    r"(?:write|start(?:ing)?|begin(?:ning)?|create|prepare|draft)\s+"
+    r"(?:the\s+)?implementation\s+plan\b|"
+    r"\bimplementation(?:\s+plan)?\s+(?:can|will|may|should|is\s+going\s+to)?\s*"
+    r"(?:start|begin|proceed)\s*(?:now|next)?\b|"
+    r"\b(?:next\s+stage|implementation\s+plan)\s+"
+    r"(?:is\s+)?(?:ready|approved|started|starting|complete|completed|proceeding|moving)\b|"
+    r"\bapproval\s+(?:granted|complete|completed|done)\b|"
+    r"\bdefinition\s+(?:approved|approval|is approved)\b|"
+    r"다음\s*단계(?:로)?\s*(?:진행|이동)|서비스\s*계획(?:을)?\s*(?:작성|진행|시작)|"
+    r"구현\s*계획(?:을)?\s*(?:작성|진행|시작)|"
+    r"정의(?:\s*단계)?(?:가|를|은|는)?\s*(?:승인|approved)",
+    re.IGNORECASE,
+)
+SYNC_GATE_NEGATED_COMPLETION_STATUS_RE = re.compile(
+    r"\b(?:not|not\s+yet|still|remains?|remain|isn['’]?t|is\s+not|are\s+not|has\s+not|have\s+not)\s+"
+    r"(?:\w+\s+){0,3}?(?:complete|completed|done|passed|approved|synced)\b|"
+    r"\b(?:not|not\s+yet|isn['’]?t|is\s+not|are\s+not)\s+"
+    r"(?:sync|snapshot|gate|full-consistency|targeted-sync)[-\s]+(?:complete|completed|done|passed)\b|"
+    r"\b(?:sync|snapshot|gate|full-consistency|targeted-sync)[-\s]+(?:complete|completed|done|passed)\s+"
+    r"(?:gate|status|state)?\s*(?:is\s+|remains?\s+|still\s+)?"
+    r"(?:pending|incomplete|open|not\s+complete|not\s+done)\b|"
+    r"\b(?:sync|snapshot|gate|full-consistency|targeted-sync)[-\s]+(?:complete|completed|done|passed)\s+"
+    r"(?:is\s+)?(?:still\s+)?(?:pending|incomplete|not\s+complete|not\s+done)\b|"
+    r"\bincomplete\b|"
+    r"(?:미완료|완료\s*(?:전|대기|필요)|완료(?:되|하)지\s*않|아직\s*완료)",
+    re.IGNORECASE,
+)
+SYNC_GATE_COMPLETION_WORD_RE = re.compile(
+    r"(?<!-)\b(?:complete|completed|done|passed|approved|synced)\b|(?:완료|통과|승인)",
+    re.IGNORECASE,
+)
 USER_STOP_SIGNAL_RE = re.compile(
     r"\b(implementation plan|proceed|go ahead|stop asking|enough)\b"
     r"|구현\s*계획|질문\s*그만|충분",
@@ -164,6 +205,13 @@ def looks_like_implementation(prompt: str) -> bool:
 def looks_like_completion(text: str) -> bool:
     lowered = text.lower()
     return any(token in lowered for token in COMPLETION_TOKENS)
+
+
+def looks_like_gate_completion_or_advance_claim(text: str) -> bool:
+    if SYNC_GATE_ADVANCE_OR_APPROVAL_CLAIM_RE.search(text):
+        return True
+    stripped = SYNC_GATE_NEGATED_COMPLETION_STATUS_RE.sub("", text)
+    return bool(SYNC_GATE_COMPLETION_CLAIM_RE.search(stripped) or SYNC_GATE_COMPLETION_WORD_RE.search(stripped))
 
 
 def subagent_text(payload: dict[str, Any]) -> str:
@@ -1374,8 +1422,14 @@ def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> 
         if turn.get("status") in {"TARGETED_SYNC_REQUIRED", "FULL_CONSISTENCY_REQUIRED", "SNAPSHOT_CURRENT_REQUIRED"}:
             validation = run_validator(root, "definition", payload)
             result["definition_store_gate_validation"] = validation
-            if validation["status"] == "FAIL":
-                block_result(result, "definition-store gate artifacts are incomplete or invalid")
+            if validation["status"] != "PASS":
+                result["definition_store_gate_incomplete"] = True
+                if looks_like_gate_completion_or_advance_claim(last_message):
+                    block_result(result, "definition-store gate artifacts are incomplete or invalid")
+                    return result
+                result["warnings"].append(
+                    "definition-store gate remains incomplete; the next Stageflow turn must continue the required gate action"
+                )
                 return result
 
         if looks_like_completion(last_message):

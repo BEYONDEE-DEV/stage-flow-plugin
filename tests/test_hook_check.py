@@ -1675,6 +1675,249 @@ Approved.
             )
             self.assertEqual(allowed["_wire_output"], {})
 
+    def test_full_consistency_gate_stop_allows_status_response_without_completion_claim(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(prompt_result["status"], "FULL_CONSISTENCY_REQUIRED")
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {
+                    "session_id": "session-1",
+                    "last_assistant_message": "현재 full-consistency gate가 열려 있어서 full-consistency-report.json 작성이 필요합니다.",
+                },
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["_wire_output"], {})
+
+            next_prompt = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(next_prompt["status"], "FULL_CONSISTENCY_REQUIRED")
+            self.assertEqual(next_prompt["turn_start_action"], "run_full_consistency_subagent")
+
+    def test_full_consistency_gate_stop_blocks_completion_claim_when_gate_incomplete(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "전체 일관성 검토 완료. 다음 단계로 진행합니다."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+
+    def test_sync_gate_stop_blocks_english_advance_claim_when_gate_incomplete(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "Proceeding to the next stage now."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+
+    def test_sync_gate_stop_blocks_english_approval_claim_when_gate_incomplete(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="targeted-sync-required",
+            )
+            self.append_store_decision(root, risk_level="medium", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "Approval granted. Moving to the implementation plan."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+
+    def test_sync_gate_stop_blocks_english_implementation_plan_start_claim(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="targeted-sync-required",
+            )
+            self.append_store_decision(root, risk_level="medium", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            for message in (
+                "I will write the implementation plan next.",
+                "Starting the implementation plan now.",
+                "Begin the implementation plan.",
+                "Implementation can start now.",
+            ):
+                with self.subTest(message=message):
+                    result = self.run_hook(
+                        root,
+                        "stop",
+                        {"session_id": "session-1", "last_assistant_message": message},
+                        expected_returncode=0,
+                    )
+                    self.assertEqual(result["status"], "BLOCKED")
+                    self.assertEqual(
+                        result["_wire_output"]["reason"],
+                        "Stageflow cannot advance yet because the current workflow gate is not complete.",
+                    )
+
+    def test_sync_gate_stop_allows_incomplete_status_wording(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "The gate remains incomplete; the next turn must write the report."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertEqual(result["_wire_output"], {})
+
+    def test_sync_gate_stop_allows_sync_complete_pending_status_wording(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            for message in (
+                "The gate is not sync-complete yet.",
+                "Sync-complete is still pending.",
+                "The sync-complete gate remains pending.",
+            ):
+                with self.subTest(message=message):
+                    result = self.run_hook(
+                        root,
+                        "stop",
+                        {"session_id": "session-1", "last_assistant_message": message},
+                        expected_returncode=0,
+                    )
+                    self.assertEqual(result["status"], "PREPASS")
+                    self.assertEqual(result["_wire_output"], {})
+
+    def test_sync_gate_stop_blocks_positive_sync_complete_compound_claim(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                current_gate="full-consistency-required",
+            )
+            self.append_store_decision(root, risk_level="high", sync_status="pending")
+            self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+
+            for message in (
+                "sync-complete",
+                "The gate is sync-complete.",
+            ):
+                with self.subTest(message=message):
+                    result = self.run_hook(
+                        root,
+                        "stop",
+                        {"session_id": "session-1", "last_assistant_message": message},
+                        expected_returncode=0,
+                    )
+                    self.assertEqual(result["status"], "BLOCKED")
+                    self.assertEqual(
+                        result["_wire_output"]["reason"],
+                        "Stageflow cannot advance yet because the current workflow gate is not complete.",
+                    )
+
+    def test_snapshot_current_gate_stop_blocks_advance_claim_when_snapshot_incomplete(self) -> None:
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            self.write_pending_definition(root)
+            self.write_definition_store(
+                root,
+                active_pending_ids=["PENDING-001"],
+                current_scope="큰방향",
+                fingerprint="0" * 64,
+                current_gate="snapshot-current",
+            )
+            prompt_result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "workflow status"})
+            self.assertEqual(prompt_result["status"], "SNAPSHOT_CURRENT_REQUIRED")
+
+            result = self.run_hook(
+                root,
+                "stop",
+                {"session_id": "session-1", "last_assistant_message": "Snapshot complete. Continue to the implementation plan."},
+                expected_returncode=0,
+            )
+            self.assertEqual(result["status"], "BLOCKED")
+            self.assertEqual(
+                result["_wire_output"]["reason"],
+                "Stageflow cannot advance yet because the current workflow gate is not complete.",
+            )
+
     def test_awaiting_user_follow_up_allows_full_restatement_with_scope_label(self) -> None:
         with temp_project() as root:
             self.create_project(root, "definition")
