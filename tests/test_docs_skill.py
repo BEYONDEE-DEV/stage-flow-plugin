@@ -904,6 +904,46 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("It fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied", text)
         self.assertIn("rerun review", text)
 
+    def test_criteria_handoff_requires_decision_ready_summary_and_user_actions(self) -> None:
+        skill = read(DOCS_SKILL)
+        refresh = read(DOCS_REFS / "refresh-flow.md")
+
+        for required in [
+            "decision-ready summary before asking for criteria approval",
+            "do not ask with only the criteria document path and an approval request",
+            "문서 작성 기준에서 정한 핵심 원칙",
+            "도메인/범위 후보",
+            "실제 atom 후보 또는 분리 후보",
+            "아직 불확실한 점과 승인 차단 항목",
+            "지금 승인하면 허용되는 것과 아직 허용되지 않는 것",
+        ]:
+            self.assertIn(required, skill)
+
+        self.assertIn("Do not ask for criteria approval with only the criteria document path and a generic approval request", refresh)
+        self.assertIn("The approval-request summary must be decision-ready", refresh)
+        for required in [
+            "문서 작성 기준에서 정한 핵심 원칙",
+            "도메인/범위 후보",
+            "실제 atom 후보 또는 분리 후보",
+            "아직 불확실한 점과 승인 차단 항목",
+            "지금 승인하면 허용되는 것과 아직 허용되지 않는 것",
+        ]:
+            self.assertIn(required, refresh)
+
+        self.assertIn("문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다", skill)
+        self.assertIn("문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다", refresh)
+        for next_action in [
+            "전체 문서 작성 시작",
+            "특정 도메인만 작성",
+            "특정 기능/흐름만 작성",
+            "기준을 더 수정",
+        ]:
+            self.assertIn(next_action, skill)
+            self.assertIn(next_action, refresh)
+        self.assertIn("Do not present `Goal Gate` as the primary next action", skill)
+        self.assertIn("Do not present `Goal Gate` as the primary next action", refresh)
+        self.assertIn("Mention the Codex Goal only as an internal requirement or brief note", refresh)
+
     def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
         text = read(DOCS_REFS / "refresh-flow.md")
         self.assertIn("Atomic Docs Goal Gate", text)

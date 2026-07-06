@@ -54,7 +54,17 @@ The draft should first record criteria already stated in the user conversation a
 
 After the draft exists, use code exploration to enrich the criteria document itself, not just the change plan. Source exploration should first create a source feature inventory from project-native feature/root language such as package roots, existing docs terms, API surfaces, and user vocabulary. Then add or revise `도메인 분할 기준`, `후보/승인 도메인 맵`, `Atom 후보 맵`, `검토된 Atom화 관점`, and `작성/리뷰 공통 품질 기준` entries for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, and failure/recovery. The criteria document must keep durable domain/category boundaries, behavior-level atom candidates, the full discovery candidate map, and the current accepted write scope separate so broad or unapproved findings do not look like accepted domain structure. The current accepted write scope is operation-local and must not be encoded in durable domain approval status. Use project-native feature/root names as the default domain candidate language; record capability/common promotion proposals separately with user/source trace or promotion evidence. Leaf workflows, policies, states, or service behaviors belong in `Atom 후보 맵` or concrete split proposals, not directly in `후보/승인 도메인 맵`. For each perspective in Korean managed docs, record `Atom 후보 기준`, `소스 근거로만 둘 기준`, `해당 없음 사유`, `분리/병합 기준`, `소스 근거 요구사항`, and `미해결 질문` in the criteria document. Use `서브에이전트 역할 분담` only to explain how writer subagents produce artifacts for the shared criteria and reviewer subagents verify the same criteria.
 
-Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate below. After criteria-review PASS, tell the user the criteria document path, summarize the actual written content, and ask the user to inspect the file and approve it or request changes. The summary should cover the docs root and scope, domain partitioning criteria, project-native feature candidates, capability/common promotion proposals, candidate or approved domain/category boundary map, atom candidate map, atomization perspectives, shared writer/reviewer quality criteria, service logic coverage requirements, judgment policy usage, and open blockers as separate items. Do not treat the summary as a substitute for the file. The user reviews, adds, removes, revises, and approves the criteria through the criteria document only after that gate passes. Until the criteria document is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria document from draft/pending state to approved state and remove transient draft-operation logs before starting domain atom work.
+Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate below. After criteria-review PASS, tell the user the criteria document path, summarize the actual written content, and ask the user to inspect the file and approve it or request changes. Do not ask for criteria approval with only the criteria document path and a generic approval request.
+
+The approval-request summary must be decision-ready and cover these items as separate, concise bullets:
+
+- `문서 작성 기준에서 정한 핵심 원칙`
+- `도메인/범위 후보`
+- `실제 atom 후보 또는 분리 후보`
+- `아직 불확실한 점과 승인 차단 항목`
+- `지금 승인하면 허용되는 것과 아직 허용되지 않는 것`
+
+The summary should also cover the docs root and scope, domain partitioning criteria, project-native feature candidates, capability/common promotion proposals, candidate or approved domain/category boundary map, atom candidate map, atomization perspectives, shared writer/reviewer quality criteria, service logic coverage requirements, judgment policy usage, and open blockers as separate items. Do not treat the summary as a substitute for the file. The user reviews, adds, removes, revises, and approves the criteria through the criteria document only after that gate passes. Until the criteria document is approved, it is a draft review artifact and must not be used as the required input for domain writer subagents, review subagents, or confirmed atom writing. After approval, update the criteria document from draft/pending state to approved state and remove transient draft-operation logs before starting domain atom work.
 
 Expected project domains found during exploration are candidates only when they are narrow durable boundary candidates with observed behavior and boundary rationale. Do not treat candidate names as confirmed domain structure before criteria approval. Broad discoveries are not candidates; they must be recorded as `rejected` broad groupings or converted into concrete split proposals.
 
@@ -102,6 +112,13 @@ When criteria-review PASS is reached, respond to the user with:
 - a clear request for the user to inspect the file content and either approve it, say there is no issue, or request corrections
 
 Do not proceed to criteria approval state update, Codex Goal creation, service logic inventory, domain writer/reviewer subagents, project/common/domain atom writing, graph writing, or source-baseline update until the user confirms the criteria content has no issue or explicitly approves it.
+
+When the user approves the criteria, respond in user-action terms:
+
+- First say `문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다`.
+- Explain that the next choice is the docs writing scope, not an internal gate.
+- Offer user-enterable next actions: `전체 문서 작성 시작`, `특정 도메인만 작성`, `특정 기능/흐름만 작성`, and `기준을 더 수정`.
+- Do not present `Goal Gate` as the primary next action. Mention the Codex Goal only as an internal requirement or brief note after the user chooses a write scope.
 
 ## Atomic Docs Goal Gate
 
