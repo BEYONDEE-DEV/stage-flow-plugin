@@ -30,7 +30,7 @@ For a first setup where the user chose repository storage and `docs`, explain th
 
 Persist the confirmed root and storage mode in target-project config at `.stageflow/atomic-docs.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
 
-If the current user request explicitly selects a storage mode, selects a managed docs root, and asks to start, redo, regenerate, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/atomic-docs.json`. That bootstrap acceptance does not authorize any other docs writes except the paired draft criteria document allowed by `refresh-flow.md`.
+If the current user request explicitly selects a storage mode, selects a managed docs root, and asks to start, redo, regenerate, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/atomic-docs.json`. That bootstrap acceptance does not authorize any other docs writes except the paired draft criteria document allowed by `criteria-flow.md`.
 
 Required fields:
 

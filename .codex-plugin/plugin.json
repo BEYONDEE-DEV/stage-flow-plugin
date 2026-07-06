@@ -1,6 +1,6 @@
 {
   "name": "stageflow",
-  "version": "0.1.19+codex.20260703093002",
+  "version": "0.1.19+codex.20260706021729",
   "description": "Standardize Stageflow planning flows with durable request artifacts and validation gates.",
   "author": {
     "name": "Local developer"

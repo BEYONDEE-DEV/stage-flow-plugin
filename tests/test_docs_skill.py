@@ -12,6 +12,10 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def read_refs(*names: str) -> str:
+    return "\n".join(read(DOCS_REFS / name) for name in names)
+
+
 class DocsSkillTests(unittest.TestCase):
     def test_docs_skill_entry_references_required_contracts(self) -> None:
         text = read(DOCS_SKILL)
@@ -22,6 +26,10 @@ class DocsSkillTests(unittest.TestCase):
             "atomic-document-contract.md",
             "language-policy.md",
             "refresh-flow.md",
+            "criteria-flow.md",
+            "docs-generation-flow.md",
+            "project-documents-and-inventory.md",
+            "source-baseline-and-change-plan.md",
             "change-judgment-policy.md",
             "atomic-graph.md",
             "stageflow-integration.md",
@@ -53,6 +61,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("full discovery candidate map, and current accepted write scope", text)
         self.assertIn("Do not encode operation-local write scope in durable domain approval status", text)
         self.assertIn("Broad domains or broad category groupings are never valid", text)
+        self.assertIn("After rejecting a broad source root or category/root surface", text)
+        self.assertIn("promote that aggregate to a concrete domain candidate or concrete split proposal", text)
         self.assertIn("Use hybrid domain naming", text)
         self.assertIn("start from project-native feature/root language", text)
         self.assertIn("AI-renamed abstract labels", text)
@@ -120,7 +130,7 @@ class DocsSkillTests(unittest.TestCase):
         skill = read(DOCS_SKILL)
         language = read(DOCS_REFS / "language-policy.md")
         docs_root = read(DOCS_REFS / "docs-root-and-config.md")
-        refresh = read(DOCS_REFS / "refresh-flow.md")
+        criteria = read(DOCS_REFS / "criteria-flow.md")
 
         self.assertIn("explain storage and write scope in plain user terms before showing raw config keys", skill)
         self.assertIn("Do not present first setup as only `storage mode: repository`, `docs root: docs`, or `작성/갱신: ...`", skill)
@@ -142,14 +152,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("unexplained standalone lines", language)
         self.assertIn("raw config summaries such as `storage mode: repository`, `docs root: docs`, or `작성/갱신: .stageflow/atomic-docs.json`", language)
 
-        for text in [docs_root, refresh]:
+        for text in [docs_root, criteria]:
             self.assertIn("atomic docs 설정 파일", text)
             self.assertIn("문서 작성 기준 초안", text)
         self.assertIn("현재 프로젝트 안의 폴더에 문서를 저장", docs_root)
         self.assertIn("별도 문서 저장소/submodule에 문서를 저장", docs_root)
-        self.assertIn("first setup step before real atom document writing", refresh)
-        self.assertIn("첫 설정 단계", refresh)
-        self.assertIn("Do not summarize this first step only as raw key-value lines", refresh)
+        self.assertIn("first setup step before real atom document writing", criteria)
+        self.assertIn("첫 설정 단계", criteria)
+        self.assertIn("Do not summarize this first step only as raw key-value lines", criteria)
 
     def test_plugin_manifest_exposes_docs_skill_prompts(self) -> None:
         manifest = read(ROOT / ".codex-plugin" / "plugin.json")
@@ -188,7 +198,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("repository-local docs directory", text)
         self.assertIn("accepted the docs-root setup scope and config write", text)
         self.assertIn("explicitly selects a storage mode, selects a managed docs root", text)
-        self.assertIn("paired draft criteria document allowed by `refresh-flow.md`", text)
+        self.assertIn("paired draft criteria document allowed by `criteria-flow.md`", text)
 
     def test_docs_skill_requires_write_approval_for_managed_state(self) -> None:
         text = read(DOCS_SKILL)
@@ -686,6 +696,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("category grouping", text)
         self.assertIn("criteria-review must fail it unless it is recorded as `rejected` broad grouping", text)
         self.assertIn("split proposal based on observed capabilities", text)
+        self.assertIn("does not account for obvious concrete aggregates underneath it", text)
+        self.assertIn("no route/controller/service/policy/persistence/workflow evidence supports a durable lower-level boundary", text)
         self.assertNotIn("Do not use document state names such as", text)
 
     def test_hybrid_domain_naming_policy_prefers_project_native_language(self) -> None:
@@ -714,7 +726,24 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Atom candidates must point their owning domain/category path at an approved or candidate hybrid boundary", text)
         self.assertIn("AI-renamed label that lacks user/source trace or promotion evidence", text)
         self.assertIn("the codebase's own stable feature/root language is still the default naming input", text)
+        self.assertIn("Prefer project/user business language for the promoted aggregate", text)
+        self.assertIn("do not default to technical labels such as `configuration`", text)
 
+    def test_domain_discovery_promotes_concrete_aggregates_under_broad_roots(self) -> None:
+        text = read(DOCS_REFS / "atomic-document-contract.md")
+        self.assertIn("When a broad source root or category/root surface is rejected", text)
+        self.assertIn("still inspect below it for concrete business aggregates", text)
+        for evidence in [
+            "routes",
+            "controllers",
+            "service methods",
+            "policy rules",
+            "persistence side effects",
+            "user-visible workflow steps",
+        ]:
+            self.assertIn(evidence, text)
+        self.assertIn("Promote that aggregate to a concrete domain candidate or concrete split proposal", text)
+        self.assertIn("owned behavior, excluded behavior, adjacent boundary, and unresolved questions", text)
 
     def test_core_business_term_coverage_gate_prevents_parent_term_gaps(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
@@ -748,7 +777,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("change plan or `Gaps`", text)
 
     def test_refresh_flow_contract_uses_source_baseline_and_change_plan(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read_refs(
+            "refresh-flow.md",
+            "source-baseline-and-change-plan.md",
+            "project-documents-and-inventory.md",
+        )
         self.assertIn("one source-code commit hash", text)
         self.assertIn("metadata at the managed docs root", text)
         self.assertIn("git diff <stored-source-hash>..HEAD", text)
@@ -777,7 +810,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 
     def test_refresh_flow_creates_draft_criteria_before_subagents(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read_refs(
+            "criteria-flow.md",
+            "docs-generation-flow.md",
+        )
         self.assertIn("Atomization Criteria File-First Flow", text)
         self.assertIn("검토된 Atom화 관점", text)
         self.assertIn("project/atomization-criteria.md", text)
@@ -797,6 +833,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("use code exploration to enrich the criteria document itself", text)
         self.assertIn("not just the change plan", text)
         self.assertIn("first create a source feature inventory from project-native feature/root language", text)
+        self.assertIn("scan for route/controller/service/policy/persistence/workflow aggregates beneath broad source roots", text)
         self.assertIn("Use project-native feature/root names as the default domain candidate language", text)
         self.assertIn("capability/common promotion proposals separately", text)
         self.assertIn("durable domain/category boundaries, behavior-level atom candidates", text)
@@ -813,7 +850,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Korean managed criteria docs use English visible labels for criteria sections or fields", text)
         self.assertIn("concrete `해당 없음 사유` or `미해결 질문`", text)
         self.assertIn("the criteria draft lacks a source feature inventory before proposing domain names", text)
+        self.assertIn("omits the route/controller/service/policy/persistence/workflow aggregate scan", text)
         self.assertIn("the domain map is missing, source-unsupported", text)
+        self.assertIn("obvious concrete aggregates beneath it are missing from the domain map", text)
         self.assertIn("AI-renamed domain label that replaces project-native feature/root language", text)
         self.assertIn("without user approval, existing docs terminology, or durable promotion evidence", text)
         self.assertIn("feature-root flow is renamed into an abstract capability label", text)
@@ -857,6 +896,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("must not be used as the required input for domain writer subagents", text)
         self.assertIn("candidate names as confirmed domain structure before criteria approval", text)
         self.assertIn("Broad discoveries are not candidates", text)
+        self.assertIn("the criteria draft must still show what happened to the concrete aggregates below it", text)
+        self.assertIn("Do not let `configuration` or another technical bucket name replace user-visible", text)
         self.assertIn("도메인 분할 기준", text)
         self.assertIn("후보/승인 도메인 맵", text)
         self.assertIn("Atom 후보 맵", text)
@@ -906,7 +947,7 @@ class DocsSkillTests(unittest.TestCase):
 
     def test_criteria_handoff_requires_decision_ready_summary_and_user_actions(self) -> None:
         skill = read(DOCS_SKILL)
-        refresh = read(DOCS_REFS / "refresh-flow.md")
+        criteria = read(DOCS_REFS / "criteria-flow.md")
 
         for required in [
             "decision-ready summary before asking for criteria approval",
@@ -919,8 +960,8 @@ class DocsSkillTests(unittest.TestCase):
         ]:
             self.assertIn(required, skill)
 
-        self.assertIn("Do not ask for criteria approval with only the criteria document path and a generic approval request", refresh)
-        self.assertIn("The approval-request summary must be decision-ready", refresh)
+        self.assertIn("Do not ask for criteria approval with only the criteria document path and a generic approval request", criteria)
+        self.assertIn("The approval-request summary must be decision-ready", criteria)
         for required in [
             "문서 작성 기준에서 정한 핵심 원칙",
             "도메인/범위 후보",
@@ -928,10 +969,10 @@ class DocsSkillTests(unittest.TestCase):
             "아직 불확실한 점과 승인 차단 항목",
             "지금 승인하면 허용되는 것과 아직 허용되지 않는 것",
         ]:
-            self.assertIn(required, refresh)
+            self.assertIn(required, criteria)
 
         self.assertIn("문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다", skill)
-        self.assertIn("문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다", refresh)
+        self.assertIn("문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다", criteria)
         for next_action in [
             "전체 문서 작성 시작",
             "특정 도메인만 작성",
@@ -939,13 +980,16 @@ class DocsSkillTests(unittest.TestCase):
             "기준을 더 수정",
         ]:
             self.assertIn(next_action, skill)
-            self.assertIn(next_action, refresh)
+            self.assertIn(next_action, criteria)
         self.assertIn("Do not present `Goal Gate` as the primary next action", skill)
-        self.assertIn("Do not present `Goal Gate` as the primary next action", refresh)
-        self.assertIn("Mention the Codex Goal only as an internal requirement or brief note", refresh)
+        self.assertIn("Do not present `Goal Gate` as the primary next action", criteria)
+        self.assertIn("Mention the Codex Goal only as an internal requirement or brief note", criteria)
 
     def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read_refs(
+            "docs-generation-flow.md",
+            "source-baseline-and-change-plan.md",
+        )
         self.assertIn("Atomic Docs Goal Gate", text)
         self.assertIn("Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal", text)
         self.assertIn("run criteria-review/revision cycles for that criteria draft", text)
@@ -977,7 +1021,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Atomic Docs Goal Gate status", text)
 
     def test_refresh_flow_uses_source_convention_document_as_separate_scope(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read_refs(
+            "docs-generation-flow.md",
+            "project-documents-and-inventory.md",
+            "source-baseline-and-change-plan.md",
+        )
         self.assertIn("Source Convention Document Flow", text)
         self.assertIn("separate write scope for `<doc-root>/project/source-convention.md`", text)
         self.assertIn("not part of the pre-approval criteria bootstrap scope", text)
@@ -994,7 +1042,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("source convention document creation or update at `project/source-convention.md`", text)
 
     def test_refresh_flow_requires_service_logic_inventory_and_atom_mapping(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read(DOCS_REFS / "project-documents-and-inventory.md")
         self.assertIn("Service Logic Inventory", text)
         self.assertIn("behavior-oriented, not method-oriented", text)
         self.assertIn("meaningful runtime behavior rather than by endpoint, controller, service class, method, or file", text)
@@ -1020,7 +1068,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("not sufficient input for domain atom drafting, reviewer PASS, Goal completion, or baseline metadata update", text)
 
     def test_refresh_flow_requires_post_write_consistency_and_source_fact_review(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read(DOCS_REFS / "docs-generation-flow.md")
         self.assertIn("Post-Write Consistency Review Gate", text)
         self.assertIn("after atom files, service logic inventories, graph edges, or partial-scope docs are written", text)
         self.assertIn("before reporting the docs operation as complete", text)
@@ -1046,7 +1094,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not update source-baseline metadata, complete the Codex Goal, or present the docs as judgment-ready", text)
 
     def test_refresh_flow_reviewer_checks_source_fact_assertions_without_overfitting(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read(DOCS_REFS / "docs-generation-flow.md")
         self.assertIn("Do not re-list every source identifier as a substitute for checking facts", text)
         for reviewed_assertion in [
             "validation",
@@ -1069,7 +1117,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertNotIn("catalog-purchase-preview", text)
 
     def test_refresh_flow_requires_criteria_change_plan_entries(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read(DOCS_REFS / "source-baseline-and-change-plan.md")
         self.assertIn("limited first write action for draft criteria creation or update", text)
         self.assertIn("whether the criteria document is draft or approved", text)
         self.assertIn("user-conversation criteria that must be recorded in the criteria document", text)
@@ -1089,7 +1137,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("judgment-ready partial scope or a project-wide judgment-ready baseline", text)
 
     def test_refresh_flow_rejects_generic_or_absence_based_judgment(self) -> None:
-        text = read(DOCS_REFS / "refresh-flow.md")
+        text = read(DOCS_REFS / "source-baseline-and-change-plan.md")
         self.assertIn("Inferred `Intent` or inferred `Rules` alone cannot create confirmed required behavior", text)
         self.assertIn("use `confirmation_needed`", text)
         self.assertIn("Do not write a generic gap", text)
@@ -1118,6 +1166,10 @@ class DocsSkillTests(unittest.TestCase):
             for path in [
                 DOCS_REFS / "atomic-document-contract.md",
                 DOCS_REFS / "refresh-flow.md",
+                DOCS_REFS / "criteria-flow.md",
+                DOCS_REFS / "docs-generation-flow.md",
+                DOCS_REFS / "project-documents-and-inventory.md",
+                DOCS_REFS / "source-baseline-and-change-plan.md",
                 DOCS_REFS / "change-judgment-policy.md",
             ]
         )

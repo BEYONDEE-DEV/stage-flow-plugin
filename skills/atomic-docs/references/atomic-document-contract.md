@@ -280,6 +280,8 @@ Do not confirm a domain solely from a code folder name.
 
 Category and subdomain folders are allowed only as organization inside an approved durable boundary. They must not hide a broad domain, generic bucket, lifecycle status group, or code-layer grouping. If a category label is broad, record it as `rejected` or split it into concrete durable boundary proposals before atom writing.
 
+When a broad source root or category/root surface is rejected, still inspect below it for concrete business aggregates. A concrete aggregate is a source-observed responsibility where routes, controllers, service methods, policy rules, persistence side effects, or user-visible workflow steps repeatedly describe the same capability, operation, lifecycle, or management task and tend to change together. Promote that aggregate to a concrete domain candidate or concrete split proposal with owned behavior, excluded behavior, adjacent boundary, and unresolved questions instead of stopping at the broad rejection.
+
 ## Hybrid Domain Naming Policy
 
 Use a hybrid domain naming model for criteria drafts and domain maps:
@@ -306,6 +308,8 @@ Capability or common promotion requires at least one of these evidence types: cr
 
 Broad source feature roots such as an `admin` root are not automatically approved domains. Treat them as category/root surfaces or split proposals until the criteria records narrower durable boundaries. This preserves the broad-domain FAIL rule while avoiding arbitrary AI renaming.
 
+Prefer project/user business language for the promoted aggregate. If the source behavior is about managing, registering, approving, issuing, settling, or recovering a product-visible thing, do not default to technical labels such as `configuration` only because the methods or DTOs sit in a setup/admin area. Keep technical names as source evidence or optional aliases unless the project or user actually uses them as the domain language.
+
 Atom candidates must point their owning domain/category path at an approved or candidate hybrid boundary. Do not point atom candidates at an AI-renamed label that lacks user/source trace or promotion evidence.
 
 ## Domain Boundary Quality Gate
@@ -326,6 +330,8 @@ Before creating or moving a domain, the domain context or change plan must state
 - why the atom files in the domain tend to change together
 
 Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, criteria-review must fail it unless it is recorded as `rejected` broad grouping or as a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
+
+Criteria-review must also fail a criteria draft that rejects a broad source root but does not account for obvious concrete aggregates underneath it. A rejected broad root needs either concrete aggregate candidates, concrete split proposals, or a recorded explanation that no route/controller/service/policy/persistence/workflow evidence supports a durable lower-level boundary.
 
 ## Core Business Term Coverage Gate
 

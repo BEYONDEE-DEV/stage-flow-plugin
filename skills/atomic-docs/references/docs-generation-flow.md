@@ -1,0 +1,47 @@
+# Docs Generation Flow
+
+## Contents
+
+- [Atomic Docs Goal Gate](#atomic-docs-goal-gate)
+- [Domain Subagent Workflow](#domain-subagent-workflow)
+- [Post-Write Consistency Review Gate](#post-write-consistency-review-gate)
+
+## Atomic Docs Goal Gate
+
+Bootstrap criteria draft creation and the Criteria Structure Review Gate do not require a Codex Goal. The first bootstrap scope may create or update only `.stageflow/atomic-docs.json` and `<doc-root>/project/atomization-criteria.md`, run criteria-review/revision cycles for that criteria draft, then stop for user review after criteria-review PASS.
+
+After the criteria document is approved and the user accepts a docs write scope, call Codex `create_goal` before starting docs generation work. Docs generation work includes project document writing, common or domain atom writing, service logic inventory creation, domain writer or reviewer subagent execution, graph edge writing, and source-baseline metadata updates.
+
+The Goal objective must name the approved criteria document path, docs root, accepted docs write scope, natural-language service logic coverage requirement, writer/reviewer cycle, and completion condition for the accepted docs operation. If an active Codex Goal already covers the same atomic-docs operation, continue inside that Goal instead of creating a duplicate.
+
+If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project documents, common/domain atoms, service logic inventory, domain writer/reviewer subagents, graph edges, and source-baseline metadata untouched.
+
+Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
+
+## Domain Subagent Workflow
+
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce a service logic inventory plus a judgment-labeled domain evidence packet that maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers. The packet must include inspected source files, domain-map coverage, perspectives reviewed, atom candidates with stable `atom_key` values, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates with `target_key`/`target_path` relationships, split/merge proposals, stable AID assignments for each meaning line, and relevant labels from `change-judgment-policy.md`.
+
+For Korean managed docs, writer subagents must draft directly with Korean-first templates, Korean checklist wording, and Korean behavior substructure under fixed schema headings. Do not produce an English skeleton and translate it afterward.
+
+Use independent review subagents to review writer packets or atom drafts against the same approved criteria document, `작성/리뷰 공통 품질 기준`, `change-judgment-policy.md`, the service logic inventory, and the No Example Leakage rule. A review subagent must not invent hidden reviewer-only quality bars. It fails the packet or draft only when a shared criterion or explicit phase gate is not satisfied, including when required perspectives are missing without a not-applicable reason, the domain map is missing or unsupported, category structure hides a broad domain, meaningful source behavior is missing from the inventory, docs do not explain what the service does under relevant conditions, branches, validations, permissions, state transitions, persistence effects, integrations, errors, or recovery paths, an atom is too broad, a split gap is vague or evasive, inferred intent/rules are unmarked, source evidence is missing, source identifiers appear without natural-language behavior, reference example prose appears without user/source trace, judgment labels are absent or unsupported, missing required behavior is confused with out-of-scope behavior, unapproved implementation is confused with implemented-plan candidates, candidate domains are treated as confirmed without approval, Korean docs retain English template residue, translated-English phrasing, English placeholders, or method-call-sequence-only `Current Implementation`, a new atom is missing frontmatter `atom_key`, an `atom_key` is duplicated across the docs set, an `atom_key` changes only because of category move, file rename, or path drift, graph `target_key` does not reference a target atom's `atom_key`, stale `target_path` is not corrected when `target_key` resolves to the same atom, any judgment-relevant meaning line is missing an AID, any AID is duplicated across the docs set, existing AID values are renumbered instead of preserved, judgment-bearing lines or source evidence lines have no AID, change plans or review findings omit related AID values when they can be known, the reviewer cannot explain the implemented behavior from the docs alone, the docs cannot be used as code judgment criteria, or `Current Implementation`, `Planned Changes`, and `Gaps` are collapsed. If review fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft as needed and rerun review.
+
+Reviewer subagents must also keep source convention material out of service logic atoms. If an atom includes non-runtime code style or source structure convention, move it to `project/source-convention.md` through an accepted write scope or report a blocking correction. If a runtime-impacting convention is documented only in the source convention document and missing from the relevant atom's behavior description, fail the draft as incomplete service logic coverage.
+
+During review, do not treat source identifier re-listing as fact checking. Do not re-list every source identifier as a substitute for checking facts. Re-check judgment-relevant lines that assert validation, refusal, defaulting, fallback, exception behavior, read-only behavior, storage effects, or external effects against the actual source path. Reviewer FAIL conditions include source-vs-doc mismatches, confusing declarative annotations with actual controller or service guard behavior, omitting source-observed null or blank handling, omitting optional dependency fallback, omitting default value fallback, and omitting runtime exception possibilities that matter to the documented behavior.
+
+## Post-Write Consistency Review Gate
+
+Run this gate after atom files, service logic inventories, graph edges, or partial-scope docs are written, and before reporting the docs operation as complete or asking the user to rely on the generated docs.
+
+Re-read the criteria document, accepted write scope, written atom files, known review findings, and source evidence touched by the operation. The gate must fail when an approved criteria document still contains pending-approval blockers, stale next-step wording for work that has already happened, completed Goal/inventory/writer/reviewer work described as future work, or obsolete draft-operation logs that are not active blockers.
+
+Partial scope is allowed, but it must be represented as the current accepted write scope, not as durable domain approval status. When only part of the docs set was written, summarize the result as an accepted partial-scope review target. Do not describe it as a complete project-wide code judgment baseline unless the accepted scope, source-baseline metadata, graph state, and relevant atoms actually cover that claim.
+
+The gate must also review project documents. It fails when project documents require or imitate atom-only structure, when `project-goal.md` contains docs-operation metadata instead of service/product goals, when `project-glossary.md` uses one-line-only term definitions, when `project/service-logic-inventory.md` lacks behavior-level fields required for writer/reviewer work, when `project/source-convention.md` records runtime-impacting conventions without related atom_key/AID or coverage-gap linkage, or when project documents directly assert code judgment labels without service logic atom evidence.
+
+Candidate or `needs_confirmation` domain output may remain a provisional review target, but it is not project-wide judgment-ready. Do not update source-baseline metadata for a project-wide baseline until accepted write scope, durable domain approval state, and judgment-ready scope are aligned and the post-write review passes.
+
+The post-write review must also apply the Source Fact Fidelity Gate from `atomic-document-contract.md` to the written or changed atom lines. If an atom says a source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail, that claim must match the inspected source branch or remain a labeled `confirmation_needed` gap with source evidence and next action.
+
+If the gate fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft within the accepted write scope and rerun the relevant reviewer. Do not update source-baseline metadata, complete the Codex Goal, or present the docs as judgment-ready while this gate is failing.
