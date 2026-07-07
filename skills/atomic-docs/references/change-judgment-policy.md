@@ -64,4 +64,6 @@ Use natural-language prose, but each judgment-bearing `Gaps` item or review find
 - the affected behavior
 - the next action for resolving the finding
 
+For Korean managed docs, keep the controlled judgment label unchanged but write the visible field labels and explanation prose in Korean. Use labels such as `판정 라벨`, `관련 atom_key`, `관련 AID`, `소스 근거`, `근거`, `영향받는 동작`, and `다음 조치` when the item is structured. Do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label` as the visible shape of a Korean `Gaps` item or review finding.
+
 Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior, and confirmation-needed uncertainty into a generic gap.

@@ -58,6 +58,8 @@ Writer and reviewer checklists for Korean docs must be written directly in Korea
 
 For Korean managed docs, criteria documents must also use Korean visible section headings and field labels. Do not use English visible labels such as `Purpose`, `Approval Status`, `Managed Docs Root And Scope`, `Atomization Perspectives`, `Atom candidate criteria`, `Source evidence only criteria`, or `Unresolved questions` unless the user explicitly asks for English. Preserve only fixed atom section headings, frontmatter keys, controlled judgment labels, AID tokens, and source identifiers.
 
+For Korean managed docs, judgment-bearing prose under fixed atom sections such as `Planned Changes` and `Gaps` must also use Korean-visible field labels and Korean explanation text. Keep controlled judgment labels such as `confirmation_needed`, `docs_stale`, or `implemented_pending_confirmation` unchanged, but do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label` as the visible prose structure. Use Korean labels or sentence wording such as `판정 라벨`, `영향받는 동작`, `다음 조치`, `근거`, `소스 근거`, and `관련 AID` when a structured shape is useful. A Korean atom may keep the fixed heading `## Gaps`, but the gap item body must not read like an English template with Korean fragments.
+
 ## No Example Leakage
 
 Reference prose that illustrates how the skill works is not managed docs content. Do not copy reference example wording into criteria documents, atom drafts, `Gaps`, review findings, or change plans.

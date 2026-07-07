@@ -110,6 +110,17 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not use English visible labels such as `Purpose`, `Approval Status`", text)
         self.assertIn("Preserve only fixed atom section headings, frontmatter keys, controlled judgment labels, AID tokens, and source identifiers", text)
         self.assertIn("`atom_key` values", text)
+        self.assertIn("judgment-bearing prose under fixed atom sections such as `Planned Changes` and `Gaps` must also use Korean-visible field labels", text)
+        self.assertIn("do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label`", text)
+        for korean_gap_label in [
+            "`판정 라벨`",
+            "`영향받는 동작`",
+            "`다음 조치`",
+            "`근거`",
+            "`소스 근거`",
+            "`관련 AID`",
+        ]:
+            self.assertIn(korean_gap_label, text)
         for korean_subheading in [
             "### 동작 흐름",
             "### 관찰된 판단 규칙",
@@ -720,6 +731,34 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("source evidence, confirmed or inferred basis, affected behavior, next action", text)
         self.assertIn("related stable `atom_key` and AID values", text)
 
+    def test_judgment_items_use_korean_labels_in_korean_docs(self) -> None:
+        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        policy = read(DOCS_REFS / "change-judgment-policy.md")
+        combined = contract + "\n" + policy
+
+        self.assertIn("For Korean managed docs, write judgment-bearing `Gaps`, `Planned Changes`, change plan items, and review findings with Korean-visible field labels", contract)
+        self.assertIn("For Korean managed docs, keep the controlled judgment label unchanged but write the visible field labels and explanation prose in Korean", policy)
+        for korean_label in [
+            "`판정 라벨`",
+            "`관련 atom_key`",
+            "`관련 AID`",
+            "`소스 근거`",
+            "`근거`",
+            "`영향받는 동작`",
+            "`다음 조치`",
+        ]:
+            self.assertIn(korean_label, combined)
+        for english_label in [
+            "`affected behavior`",
+            "`next action`",
+            "`basis`",
+            "`source evidence`",
+            "`judgment label`",
+        ]:
+            self.assertIn(english_label, combined)
+        self.assertIn("Do not use English scaffold labels", contract)
+        self.assertIn("Do not write English scaffold labels", policy)
+
     def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Atomic Docs Goal Boundary", text)
@@ -989,6 +1028,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Korean docs retain English template residue", text)
         self.assertIn("translated-English phrasing", text)
         self.assertIn("English placeholders", text)
+        self.assertIn("English scaffold labels in `Gaps` or review findings", text)
+        self.assertIn("`affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label`", text)
         self.assertIn("method-call-sequence-only `Current Implementation`", text)
         self.assertIn("any judgment-relevant meaning line is missing an AID", text)
         self.assertIn("any AID is duplicated across the docs set", text)

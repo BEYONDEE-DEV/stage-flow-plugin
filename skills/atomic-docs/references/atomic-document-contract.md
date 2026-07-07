@@ -476,6 +476,8 @@ Each judgment-bearing item must include:
 - confirmed or inferred basis from the relevant atom section, boundary, baseline metadata, or user approval
 - next action for resolving the finding
 
+For Korean managed docs, write judgment-bearing `Gaps`, `Planned Changes`, change plan items, and review findings with Korean-visible field labels or Korean sentence wording. Keep the controlled judgment label itself unchanged, but render the surrounding structure as `판정 라벨`, `소스 근거`, `근거`, `영향받는 동작`, `다음 조치`, and `관련 AID` when structured fields are useful. Do not use English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label` inside Korean atom prose.
+
 `matches_confirmed_intent` is allowed only as an explicit review finding after the reviewer inspects source evidence and confirms that no higher-priority judgment label applies. Do not treat the lack of a `Gaps` item as proof that code matches confirmed intent.
 
 Approved project documents may provide context such as non-goals or terminology boundaries, and domain context atoms must preserve excluded behavior and adjacent-domain boundaries clearly enough for `out_of_scope_behavior` review. A service judgment still needs service logic atom content, source evidence, baseline metadata, and a controlled judgment label.
