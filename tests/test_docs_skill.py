@@ -1142,6 +1142,31 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not present `Goal Gate` as the primary next action", criteria)
         self.assertIn("Mention the Codex Goal only as an internal requirement or brief note", criteria)
 
+    def test_domain_subagent_workflow_uses_sequential_writer_reviewer_bundles(self) -> None:
+        skill = read(DOCS_SKILL)
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        combined = skill + "\n" + generation
+
+        for required in [
+            "sequential domain-bundle queue",
+            "exactly one writer subagent and exactly one independent reviewer subagent",
+            "Do not run multiple domain bundles in parallel by default",
+            "rerun the same reviewer cycle until PASS",
+            "Do not start the next domain bundle",
+            "Only a PASSed domain bundle can become input for the next bundle",
+            "reopen the affected earlier bundle",
+            "Rerun any dependent later bundles whose PASS basis changed",
+            "After every accepted domain bundle PASSes, the main agent, not a domain reviewer, runs the Post-Write Consistency Review Gate",
+            "Domain reviewers own their bundle's PASS",
+            "the main post-write gate owns cross-domain connectivity",
+        ]:
+            self.assertIn(required, combined)
+
+        self.assertIn("After criteria approval and Goal handoff, process multi-domain docs generation as a sequential domain-bundle queue", skill)
+        self.assertIn("Run the main post-write gate only after every accepted domain bundle has PASSed", skill)
+        self.assertIn("blocks a domain bundle only when the unresolved decision prevents that bundle from being implementation-reconstruction-ready or judgment-ready", generation)
+        self.assertIn("Other uncertainty may remain as a labeled gap with source evidence and next action", generation)
+
     def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
         text = read_refs(
             "docs-generation-flow.md",
