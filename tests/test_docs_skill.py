@@ -68,12 +68,15 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("project/project-goal.md", text)
         self.assertIn("project/project-glossary.md", text)
         self.assertIn("project/service-logic-inventory.md", text)
+        self.assertIn("explicitly retained `project/service-logic-inventory.md` coverage index", text)
+        self.assertIn("`.stageflow/atomic-docs/`", text)
+        self.assertIn("not a Stageflow workflow request", text)
         self.assertIn("non-atom project documents with separate writing and review rules", text)
         self.assertIn("Legacy `project-goal-atom.md` and `project-glossary-atom.md` are migration candidates", text)
         self.assertIn("durable domain/category boundary map, behavior-level atom candidate map", text)
         self.assertIn("Do not put leaf workflow or behavior candidates directly in the domain map", text)
-        self.assertIn("full discovery candidate map, and current accepted write scope", text)
-        self.assertIn("Do not encode operation-local write scope in durable domain approval status", text)
+        self.assertIn("full discovery candidate map, and accepted-scope rules", text)
+        self.assertIn("Do not encode operation-local write scope, bundle queue, writer/reviewer status, or post-write gate result", text)
         self.assertIn("Broad domains or broad category groupings are never valid", text)
         self.assertIn("After rejecting a broad source root or category/root surface", text)
         self.assertIn("promote that aggregate to a concrete domain candidate or concrete split proposal", text)
@@ -198,6 +201,41 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("첫 설정 단계", criteria)
         self.assertIn("Do not summarize this first step only as raw key-value lines", criteria)
 
+    def test_atomic_docs_separates_operation_state_from_durable_docs(self) -> None:
+        skill = read(DOCS_SKILL)
+        criteria = read_refs("atomization-criteria-contract.md", "criteria-flow.md")
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        inventory = read(DOCS_REFS / "project-documents-and-inventory.md")
+        baseline = read(DOCS_REFS / "source-baseline-and-change-plan.md")
+        stageflow = read(DOCS_REFS / "stageflow-integration.md")
+
+        for state_path in [
+            ".stageflow/atomic-docs/index.json",
+            ".stageflow/atomic-docs/sessions/<session-id>/current.json",
+            ".stageflow/atomic-docs/requests/<request-id>/state.json",
+            ".stageflow/atomic-docs/requests/<request-id>/work-state.json",
+        ]:
+            self.assertIn(state_path, generation)
+        self.assertIn("not the managed docs root", generation)
+        self.assertIn("not a Stageflow workflow request artifact", generation)
+        self.assertIn("not direct code suitability evidence", skill)
+
+        self.assertIn("not in durable criteria or durable domain approval status", criteria)
+        self.assertIn("must not become the live progress ledger for the current run", criteria)
+        self.assertIn("live bundle queue, active domain bundle, writer/reviewer PASS/FAIL log", criteria)
+
+        self.assertIn("operation-local by default", inventory)
+        self.assertIn("Write or retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final coverage index", inventory)
+        self.assertIn("delete or ignore the operation-local inventory", inventory)
+        self.assertIn("Only copy a service logic inventory into `<doc-root>/project/service-logic-inventory.md`", generation)
+
+        self.assertIn("Store the post-write gate result under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`", generation)
+        self.assertIn("Do not write `docs/project/post-write-review.md`", generation)
+        self.assertIn("post-write gate stored under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`", baseline)
+
+        self.assertIn("`.stageflow/atomic-docs/` and `.stageflow/atomic-docs.json` is owned by the atomic-docs skill", stageflow)
+        self.assertIn("must not be used to bypass or satisfy Stageflow gates", stageflow)
+
     def test_plugin_manifest_exposes_docs_skill_prompts(self) -> None:
         manifest = read(ROOT / ".codex-plugin" / "plugin.json")
         self.assertIn('"skills": "./skills/"', manifest)
@@ -272,9 +310,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("proceed only after the user confirms the content has no issue or approves it", text)
         self.assertIn("shared quality standard plus role mapping", text)
         self.assertIn("not divergent role-specific checklists", text)
-        self.assertIn("separate full discovery candidates from the current accepted write scope", text)
-        self.assertIn("keep operation-local scope out of durable domain approval status", text)
-        self.assertIn("separate domain/category boundary decisions, behavior-level atom candidates", text)
+        self.assertIn("separate full discovery candidates from accepted write scope rules", text)
+        self.assertIn("keep operation-local scope out of durable criteria and domain approval status", text)
+        self.assertIn("domain/category boundary decisions, behavior-level atom candidates, accepted-scope rules, and open blockers", text)
         self.assertIn("separate project-native feature candidates, capability/common promotion proposals", text)
         self.assertIn("prefer stable language that project maintainers already recognize", text)
         self.assertIn("keep leaf workflow or behavior candidates out of the domain/category boundary map", text)
@@ -413,8 +451,8 @@ class DocsSkillTests(unittest.TestCase):
             "candidate or approved domain map that records only durable domain or category boundaries",
             "not behavior-level atom candidates",
             "project-native feature/root language as the default starting point",
-            "full discovery candidate map separated from the current accepted write scope",
-            "operation-local current accepted write scope recorded separately from durable domain approval status",
+            "full discovery candidate map separated from accepted-scope rules",
+            "accepted-scope rules that explain how a later write scope is chosen",
             "domain name",
             "승인 상태",
             "소유 동작",
@@ -440,7 +478,8 @@ class DocsSkillTests(unittest.TestCase):
             "`approved` means the user approved that durable boundary as part of the criteria's durable domain map",
             "It does not mean the domain is inside the current operation's accepted write scope",
             "Current accepted write scope is operation-local",
-            "never change a domain's `승인 상태` merely because the current operation includes or excludes that domain",
+            "`.stageflow/atomic-docs/requests/<request-id>/work-state.json`",
+            "must not become the live progress ledger for the current run",
             "`needs_confirmation` means there is source evidence and boundary rationale",
             "`rejected` means a broad, unsupported, excluded, or otherwise invalid grouping",
             "Broad domains and broad category groupings are unconditional criteria-review failures",
@@ -476,7 +515,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("every reviewer FAIL condition must map to the same shared criterion or an explicit phase gate", text)
         self.assertIn("Do not add hidden reviewer-only quality bars or writer-only obligations", text)
         self.assertIn("writer and reviewer rules appear as divergent role-specific checklists", text)
-        self.assertIn("full discovery candidates, approved domain/category boundaries, current accepted write scope, and behavior-level atom candidates are mixed together", text)
+        self.assertIn("full discovery candidates, approved domain/category boundaries, accepted-scope rules, and behavior-level atom candidates are mixed together", text)
         self.assertIn("leaf behavior candidate appears directly in the domain/category boundary map", text)
         self.assertIn("shared quality criteria omit frontmatter `atom_key`, AID, graph `target_key`, or graph `target_path` rules", text)
         self.assertIn("remove one-off operation logs such as plugin cache paths, reset/delete notes, reviewer agent names", text)
@@ -725,11 +764,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("entry/screen/route or API/job entry", inventory)
         self.assertIn("UI basic design/state presentation", inventory)
         self.assertIn("backend service/DB/DTO behavior", inventory)
+        self.assertIn("operation-local by default", inventory)
+        self.assertIn(".stageflow/atomic-docs/requests/<request-id>/inventory.md", inventory)
+        self.assertIn("final coverage index", inventory)
 
         self.assertIn("judgment-ready and implementation-reconstruction-ready scope", baseline)
         self.assertIn("implementation reconstruction readiness for the accepted scope", baseline)
         self.assertIn("frontend/UI coverage, backend/API/service coverage", baseline)
-        self.assertIn("existing post-write review explicitly verifies both judgment readiness and implementation reconstruction readiness", baseline)
+        self.assertIn("post-write gate stored under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`", baseline)
         self.assertIn("do not call the scope implementation-reconstruction-ready", baseline)
 
     def test_atomic_docs_quality_gate_rejects_shallow_and_over_compressed_atoms(self) -> None:
@@ -978,8 +1020,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("must not be used to claim a project-wide judgment-ready baseline", text)
         self.assertIn("core business terms that require glossary or domain atom coverage", text)
         self.assertIn("parent business terms missing or underdefined in the glossary", text)
-        self.assertIn("Build a service logic inventory", text)
-        self.assertIn("service logic inventory items", text)
+        self.assertIn("Build an operation-local service logic inventory", text)
+        self.assertIn("operation-local service logic inventory items", text)
         self.assertIn("accepted change plan defines the only paths and write actions", text)
         self.assertIn("Do not write atom files, graph corrections, source-baseline metadata", text)
 
@@ -1011,8 +1053,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Use project-native feature/root names as the default domain candidate language", text)
         self.assertIn("capability/common promotion proposals separately", text)
         self.assertIn("durable domain/category boundaries, behavior-level atom candidates", text)
-        self.assertIn("full discovery candidate map, and the current accepted write scope separate", text)
-        self.assertIn("current accepted write scope is operation-local", text)
+        self.assertIn("full discovery candidate map, and accepted-scope rules separate", text)
+        self.assertIn("current per-run accepted write scope is operation-local", text)
+        self.assertIn("`.stageflow/atomic-docs/requests/<request-id>/work-state.json`", text)
         self.assertIn("Leaf workflows, policies, states, or service behaviors belong in `Atom 후보 맵`", text)
         self.assertIn("Criteria Structure Review Gate", text)
         self.assertIn("Before asking the user to approve the criteria document, satisfy the Criteria Structure Review Gate", text)
@@ -1031,8 +1074,9 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("without user approval, existing docs terminology, or durable promotion evidence", text)
         self.assertIn("feature-root flow is renamed into an abstract capability label", text)
         self.assertIn("`project-native name`, `source feature root`, `optional capability alias`, `promotion reason`, and `approval state`", text)
-        self.assertIn("full discovery candidates, approved domain/category boundaries, current accepted write scope, and atom candidate map entries are mixed together", text)
+        self.assertIn("full discovery candidates, approved domain/category boundaries, accepted-scope rules, and atom candidate map entries are mixed together", text)
         self.assertIn("durable domain approval status is used to encode operation-local write scope", text)
+        self.assertIn("live bundle queue, active domain bundle, writer/reviewer PASS/FAIL log", text)
         self.assertIn("leaf behavior, workflow, policy, state-transition, endpoint, or service-method candidates are listed directly in the domain/category boundary map", text)
         self.assertIn("a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`", text)
         self.assertIn("broad source feature root is marked as an approved domain instead of a category/root surface or split proposal", text)
@@ -1058,7 +1102,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("tell the user the criteria document path", text)
         self.assertIn("summarize the actual written content", text)
         self.assertIn("ask the user to inspect the file and approve it or request changes", text)
-        self.assertIn("docs root and scope, domain partitioning criteria, project-native feature candidates, capability/common promotion proposals", text)
+        self.assertIn("docs root and accepted-scope rules, domain partitioning criteria, project-native feature candidates, capability/common promotion proposals", text)
         self.assertIn("candidate or approved domain/category boundary map, atom candidate map", text)
         self.assertIn("shared writer/reviewer quality criteria", text)
         self.assertIn("as separate items", text)
@@ -1079,7 +1123,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("only after the criteria document is approved", text)
         self.assertIn("Each writer subagent must read the approved criteria document", text)
         self.assertIn("maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers", text)
-        self.assertIn("service logic inventory plus a judgment-labeled domain evidence packet", text)
+        self.assertIn("operation-local service logic inventory plus a judgment-labeled domain evidence packet", text)
         self.assertIn("judgment-labeled domain evidence packet", text)
         self.assertIn("atom candidates with stable `atom_key` values", text)
         self.assertIn("graph candidates with `target_key`/`target_path` relationships", text)
@@ -1278,14 +1322,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("stale next-step wording for work that has already happened", text)
         self.assertIn("completed Goal/inventory/writer/reviewer work described as future work", text)
         self.assertIn("Partial scope is allowed", text)
-        self.assertIn("current accepted write scope, not as durable domain approval status", text)
+        self.assertIn("atomic-docs operation state as the current accepted write scope, not as durable domain approval status", text)
         self.assertIn("accepted partial-scope review target", text)
         self.assertIn("complete project-wide code judgment baseline", text)
         self.assertIn("The gate must also review project documents", text)
         self.assertIn("project documents require or imitate atom-only structure", text)
         self.assertIn("`project-goal.md` contains docs-operation metadata", text)
         self.assertIn("`project-glossary.md` uses one-line-only term definitions", text)
-        self.assertIn("`project/service-logic-inventory.md` lacks behavior-level fields", text)
+        self.assertIn("retained `project/service-logic-inventory.md` lacks behavior-level fields", text)
         self.assertIn("`project/source-convention.md` records runtime-impacting conventions without related atom_key/AID", text)
         self.assertIn("project documents directly assert code judgment labels without service logic atom evidence", text)
         self.assertIn("Candidate or `needs_confirmation` domain output may remain a provisional review target", text)
@@ -1324,7 +1368,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("user-conversation criteria that must be recorded in the criteria document", text)
         self.assertIn("source exploration results that update the criteria document", text)
         self.assertIn("project document creation, update, or legacy migration actions", text)
-        self.assertIn("`project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md`", text)
+        self.assertIn("`project/project-goal.md`, `project/project-glossary.md`, `project/source-convention.md`, and `project/service-logic-inventory.md` only when the user explicitly retains a final coverage index", text)
+        self.assertIn("atomic-docs operation state updates under `.stageflow/atomic-docs/requests/<request-id>/`", text)
         self.assertIn("judgment labels for review findings", text)
         self.assertIn("matches_confirmed_intent", text)
         self.assertIn("unapproved_implemented_behavior", text)

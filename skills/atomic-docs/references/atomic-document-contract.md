@@ -40,12 +40,12 @@ Default project-level documents:
 <doc-root>/project/atomization-criteria.md
 <doc-root>/project/project-goal.md
 <doc-root>/project/project-glossary.md
-<doc-root>/project/service-logic-inventory.md
 <doc-root>/project/source-convention.md
 ```
 
 - Project-level documents are control, context, criteria, inventory, or source-interpretation documents. They are not service logic atoms and do not use atom frontmatter, AID, graph edges, or required atom sections unless a separate accepted migration explicitly converts them into atom files.
 - Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` files are legacy artifacts. Treat them as migration/update candidates; do not use those paths as defaults for new project goal or glossary work.
+- A service logic inventory is operation-local by default under `.stageflow/atomic-docs/requests/<request-id>/`. Keep `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final coverage index synced to real `atom_key` and AID references.
 
 Default project-level criteria document:
 
@@ -98,8 +98,13 @@ Default project documents are:
 <doc-root>/project/atomization-criteria.md
 <doc-root>/project/project-goal.md
 <doc-root>/project/project-glossary.md
-<doc-root>/project/service-logic-inventory.md
 <doc-root>/project/source-convention.md
+```
+
+An explicitly retained project-level coverage index may also use:
+
+```text
+<doc-root>/project/service-logic-inventory.md
 ```
 
 These files must not follow the `*-atom.md` path contract, must not require frontmatter `atom_key`, must not require AID values, must not use `graph_edges`, and must not require the atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
@@ -110,7 +115,7 @@ Project document writing rules:
 
 - `project-goal.md` records the service or product purpose, target users or callers, success criteria, non-goals, confirmed business direction, and source-unverifiable items as `confirmation_needed`. It must not turn config paths, baseline metadata paths, cache paths, reset notes, deletion notes, reviewer logs, or docs-operation status into the service goal.
 - `project-glossary.md` records each core term with structured fields for meaning, owning domain, actor/system action, source of truth, stored vs computed, related rules/status, aliases, forbidden conflations, and uncertainty. A glossary that only contains one-line term definitions is not enough to support core term coverage.
-- `service-logic-inventory.md` is a writer/reviewer input document, not a service logic atom. Each behavior item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. One-line behavior summaries are not enough for baseline readiness.
+- A service logic inventory is writer/reviewer input, not a service logic atom. Keep it as operation-local state by default. If `<doc-root>/project/service-logic-inventory.md` is explicitly retained as a final coverage index, each behavior item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. One-line behavior summaries are not enough for baseline readiness.
 - `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related service logic atom_key and AID, or to a coverage gap when no atom exists yet. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
 - `atomization-criteria.md` records generation criteria, domain/category boundary semantics, accepted scope semantics, and approval state. It is not direct code suitability evidence.
 
@@ -120,7 +125,7 @@ Project document review rules:
 - Fail when a project document directly claims code is implemented, missing, buggy, matching, or out of scope as if it were a service logic atom.
 - Fail when `project-goal.md` treats docs configuration, baseline paths, plugin cache paths, reset/delete notes, or operation logs as service/product goals.
 - Fail when `project-glossary.md` is only a list of one-line term definitions without the structured fields required above.
-- Fail when `service-logic-inventory.md` is only a one-line summary or lacks behavior-level fields needed by writer/reviewer work; do not write or update baseline metadata while the inventory is in that state.
+- Fail when a retained `service-logic-inventory.md` is only a one-line summary, lacks behavior-level fields needed by writer/reviewer work, or is not synced to real atom_key/AID references; do not write or update baseline metadata while the inventory is in that state.
 - Fail when `source-convention.md` records runtime-impacting behavior without a related atom_key/AID or a coverage gap.
 
 ## Detailed Sibling References

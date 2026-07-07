@@ -17,6 +17,7 @@ This reference defines how the `atomic-docs` skill behaves when invoked during S
 - Source files are the default evidence source for docs refresh.
 - Stageflow artifacts own workflow state, decisions, approvals, and implementation evidence.
 - Stageflow artifacts are not the default docs refresh evidence source.
+- Atomic-docs state under `.stageflow/atomic-docs/` and `.stageflow/atomic-docs.json` is owned by the atomic-docs skill. It follows a Stageflow-like session/request shape for resumability, but it is not a Stageflow workflow request artifact and must not be used to bypass or satisfy Stageflow gates.
 - Managed docs files own durable externalized project knowledge.
 
 ## Requirement Evidence

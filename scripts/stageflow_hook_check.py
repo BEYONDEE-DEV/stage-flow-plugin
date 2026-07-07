@@ -1463,14 +1463,39 @@ def normalize_tool_path(value: str) -> str:
     return value.replace("\\", "/").strip()
 
 
+def is_atomic_docs_state_path(value: str) -> bool:
+    normalized = normalize_tool_path(value).lower()
+    return (
+        normalized == ".stageflow/atomic-docs"
+        or normalized.startswith(".stageflow/atomic-docs/")
+        or normalized == ".stageflow/atomic-docs.json"
+        or normalized.endswith("/.stageflow/atomic-docs")
+        or "/.stageflow/atomic-docs/" in normalized
+        or normalized.endswith("/.stageflow/atomic-docs.json")
+    )
+
+
 def is_stageflow_path(value: str) -> bool:
     normalized = normalize_tool_path(value).lower()
+    if is_atomic_docs_state_path(normalized):
+        return False
     return (
         normalized == ".stageflow"
         or normalized.startswith(".stageflow/")
         or "/.stageflow/" in normalized
         or normalized.endswith("/.stageflow")
     )
+
+
+def stageflow_path_mentions(value: str) -> list[str]:
+    normalized = normalize_tool_path(value)
+    mentions: list[str] = []
+    pattern = re.compile(r"(?:^|[\s\"'`=<>|&;])([^\s\"'`;|&<>]*\.stageflow(?:/[^\s\"'`;|&<>]*)?)")
+    for match in pattern.finditer(normalized):
+        mention = match.group(1).strip("()[]{} ,").rstrip(".,")
+        if mention:
+            mentions.append(mention)
+    return mentions
 
 
 def patch_paths(text: str) -> list[str]:
@@ -1528,8 +1553,11 @@ def is_stageflow_artifact_write(payload: dict[str, Any]) -> bool:
 
     command = str(tool_input.get("command") or "")
     if command and WRITE_COMMAND_RE.search(command):
+        mentions = stageflow_path_mentions(command)
+        if mentions:
+            return any(is_stageflow_path(path) for path in mentions)
         normalized = normalize_tool_path(command).lower()
-        return ".stageflow/" in normalized or "\\.stageflow\\" in command.lower()
+        return ".stageflow/" in normalized
 
     return False
 

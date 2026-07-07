@@ -3,6 +3,7 @@
 ## Contents
 
 - [Atomic Docs Goal Gate](#atomic-docs-goal-gate)
+- [Atomic Docs Operation State](#atomic-docs-operation-state)
 - [Domain Subagent Workflow](#domain-subagent-workflow)
 - [Post-Write Consistency Review Gate](#post-write-consistency-review-gate)
 
@@ -18,9 +19,24 @@ If `create_goal` is unavailable or fails, do not start docs generation. Report t
 
 Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
 
+## Atomic Docs Operation State
+
+After criteria approval and accepted docs write scope, create or resume atomic-docs operation state in a Stageflow-like namespace owned by atomic-docs:
+
+```text
+.stageflow/atomic-docs/index.json
+.stageflow/atomic-docs/sessions/<session-id>/current.json
+.stageflow/atomic-docs/requests/<request-id>/state.json
+.stageflow/atomic-docs/requests/<request-id>/work-state.json
+```
+
+This namespace is not the managed docs root and is not a Stageflow workflow request artifact. It stores the current accepted write scope, domain-bundle queue, active bundle, writer/reviewer PASS or FAIL status, temporary inventory/evidence/review paths, and `post_write_gate` status. Do not store those live run fields in `project/atomization-criteria.md`, atom files, source-baseline metadata, or durable project docs.
+
+Temporary writer/reviewer files may live beside the request state as `inventory.md`, `evidence.md`, `review.md`, or `post-write-review.md`. Treat them as operation-local scratch and audit material, not code suitability evidence. Only copy a service logic inventory into `<doc-root>/project/service-logic-inventory.md` when the accepted scope explicitly keeps a final coverage index and the entries are synced to real `atom_key` and AID references.
+
 ## Domain Subagent Workflow
 
-When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce a service logic inventory plus a judgment-labeled domain evidence packet that maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers. The packet must include inspected source files, domain-map coverage, perspectives reviewed, atom candidates with stable `atom_key` values, implementation reconstruction coverage map for applicable frontend/UI and backend/API/service behavior, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates with `target_key`/`target_path` relationships, split/merge proposals, stable AID assignments for each meaning line, and relevant labels from `change-judgment-policy.md`.
+When the docs operation is large enough to split by domain, use domain writer subagents only after the criteria document is approved, the docs write scope is accepted, and the Atomic Docs Goal Gate is satisfied. Each writer subagent must read the approved criteria document and produce an operation-local service logic inventory plus a judgment-labeled domain evidence packet that maps its output to the same `작성/리뷰 공통 품질 기준` used by reviewers. The packet must include inspected source files, domain-map coverage, perspectives reviewed, atom candidates with stable `atom_key` values, implementation reconstruction coverage map for applicable frontend/UI and backend/API/service behavior, source evidence, inferred `Intent` or `Rules`, natural-language `Current Implementation` facts, `Planned Changes` classifications, `Gaps`, graph candidates with `target_key`/`target_path` relationships, split/merge proposals, stable AID assignments for each meaning line, and relevant labels from `change-judgment-policy.md`.
 
 For multi-domain docs generation, split the accepted docs write scope into a sequential domain-bundle queue. A domain bundle is one durable domain or an accepted domain shard that can be written and reviewed independently within the approved criteria. Each domain bundle must use exactly one writer subagent and exactly one independent reviewer subagent. Do not run multiple domain bundles in parallel by default.
 
@@ -52,13 +68,15 @@ Run this gate after atom files, service logic inventories, graph edges, or parti
 
 Re-read the criteria document, accepted write scope, written atom files, known review findings, and source evidence touched by the operation. The gate must fail when an approved criteria document still contains pending-approval blockers, stale next-step wording for work that has already happened, completed Goal/inventory/writer/reviewer work described as future work, or obsolete draft-operation logs that are not active blockers.
 
-Partial scope is allowed, but it must be represented as the current accepted write scope, not as durable domain approval status. When only part of the docs set was written, summarize the result as an accepted partial-scope review target. Do not describe it as a complete project-wide code judgment baseline unless the accepted scope, source-baseline metadata, graph state, and relevant atoms actually cover that claim.
+Partial scope is allowed, but it must be represented in atomic-docs operation state as the current accepted write scope, not as durable domain approval status. When only part of the docs set was written, summarize the result as an accepted partial-scope review target. Do not describe it as a complete project-wide code judgment baseline unless the accepted scope, source-baseline metadata, graph state, and relevant atoms actually cover that claim.
 
-The gate must also review project documents. It fails when project documents require or imitate atom-only structure, when `project-goal.md` contains docs-operation metadata instead of service/product goals, when `project-glossary.md` uses one-line-only term definitions, when `project/service-logic-inventory.md` lacks behavior-level fields required for writer/reviewer work, when `project/source-convention.md` records runtime-impacting conventions without related atom_key/AID or coverage-gap linkage, or when project documents directly assert code judgment labels without service logic atom evidence.
+The gate must also review project documents. It fails when project documents require or imitate atom-only structure, when `project-goal.md` contains docs-operation metadata instead of service/product goals, when `project-glossary.md` uses one-line-only term definitions, when a retained `project/service-logic-inventory.md` lacks behavior-level fields required for writer/reviewer work or is not synced to real atom_key/AID references, when `project/source-convention.md` records runtime-impacting conventions without related atom_key/AID or coverage-gap linkage, or when project documents directly assert code judgment labels without service logic atom evidence.
 
 The gate must fail when written docs remain a source-observed inventory rather than implementation-reconstruction-ready docs for the accepted scope. Unresolved `confirmation_needed` blockers, missing source-baseline scope, missing frontend/UI reconstruction coverage, or missing backend/API/service reconstruction coverage must be reported as provisional scope or gaps instead of judgment-ready completion.
 
-Candidate or `needs_confirmation` domain output may remain a provisional review target, but it is not project-wide judgment-ready. Do not update source-baseline metadata for a project-wide baseline until accepted write scope, durable domain approval state, and judgment-ready scope are aligned and the post-write review passes.
+Candidate or `needs_confirmation` domain output may remain a provisional review target, but it is not project-wide judgment-ready. Do not update source-baseline metadata for a project-wide baseline until accepted write scope, durable domain approval state, and judgment-ready scope are aligned and the operation-local post-write review passes.
+
+Store the post-write gate result under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` or `work-state.json` `post_write_gate`. Do not write `docs/project/post-write-review.md` or another managed-docs review artifact by default; the final user-facing result belongs in the assistant response.
 
 The post-write review must also apply the Source Fact Fidelity Gate from `service-logic-coverage.md` to the written or changed atom lines. If an atom says a source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail, that claim must match the inspected source branch or remain a labeled `confirmation_needed` gap with source evidence and next action.
 

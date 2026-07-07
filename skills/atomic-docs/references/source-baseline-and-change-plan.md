@@ -16,9 +16,9 @@ The baseline records the last source-code commit hash used for a confirmed docs 
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
-Baseline metadata may be updated only for the judgment-ready scope that is also implementation-reconstruction-ready and passed post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
+Baseline metadata may be updated only for the judgment-ready scope that is also implementation-reconstruction-ready and passed the operation-local post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
 
-In operation summaries, call a scope a judgment-ready and implementation-reconstruction-ready scope only when the existing post-write review explicitly verifies both judgment readiness and implementation reconstruction readiness.
+In operation summaries, call a scope a judgment-ready and implementation-reconstruction-ready scope only when the post-write gate stored under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` or `work-state.json` `post_write_gate` explicitly verifies both judgment readiness and implementation reconstruction readiness.
 
 ## Full Refresh
 
@@ -32,7 +32,7 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 6. Ignore tests, settings, schema, build, and auxiliary files by default unless the user requested auxiliary-file reflection.
 7. Inspect project, common, and relevant domain context atoms when they exist.
 8. Use source-to-atom seed discovery to find likely domain and atom candidates.
-9. Build a service logic inventory for meaningful changed or targeted source behavior.
+9. Build an operation-local service logic inventory for meaningful changed or targeted source behavior.
 10. Expand affected scope through atomic graph traversal.
 11. Stop graph expansion when related atom files no longer create modification candidates.
 12. Present a domain-grouped change plan before writing domain atom docs.
@@ -54,10 +54,11 @@ A change plan should group by domain and list:
 - user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
 - source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
-- project document creation, update, or legacy migration actions, including `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md`
+- project document creation, update, or legacy migration actions, including `project/project-goal.md`, `project/project-glossary.md`, `project/source-convention.md`, and `project/service-logic-inventory.md` only when the user explicitly retains a final coverage index
+- atomic-docs operation state updates under `.stageflow/atomic-docs/requests/<request-id>/`, including accepted write scope, bundle queue, temporary inventory/evidence/review paths, and post-write gate status
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
-- service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
+- operation-local service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
 - implementation reconstruction readiness for the accepted scope, including frontend/UI coverage, backend/API/service coverage, and unresolved `confirmation_needed` blockers that prevent docs-only implementation
 - AID assignments for new or changed atom meaning lines, and explicit AID migrations when existing IDs cannot be preserved
 - affected atom files
