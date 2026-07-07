@@ -385,6 +385,10 @@ For backend/API/service/job/integration source, document API contract, request/r
 
 A docs set is not implementation-reconstruction-ready when these behaviors are only endpoint identifiers, screen identifiers, source identifiers, method-call sequences, source convention notes, one-line inventory, or unresolved `confirmation_needed` without next action.
 
+Do not use atom count, file count, or line count as a quality threshold. A short context atom can be complete when it only records a boundary, and a long behavior atom can still fail when implementation choices are missing. Review the density of reconstruction-critical decisions instead.
+
+Shallow atom review must fail a behavior, contract, or matrix atom when it mentions forms, editors, routes, access guards, payloads, validations, readiness, save/delete behavior, API/service contracts, or state transitions but omits the concrete fields, branches, rules, payload shape, contract semantics, state effects, or failure outcomes an implementer would otherwise have to rediscover from source. If an atom uses terms such as `field matrix`, `payload`, `validation`, `contract`, `readiness`, or `state transition`, include a table or structured list for the applicable fields and branches, or record an explicit not-applicable reason. A sentence such as "handles local validation", "maps payload", or "calls the API" is not enough.
+
 ## Source Fact Fidelity Gate
 
 Atom `Rules`, `Current Implementation`, `Gaps`, evidence packets, and review findings must preserve the source-observed behavior actually reachable through the inspected entry path. Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply.
@@ -496,5 +500,9 @@ Approved project documents may provide context such as non-goals or terminology 
 ## Atomicity Policy
 
 An atom is too broad when it covers unrelated behaviors, policies, rules, states, planned changes, or gap boundaries. Split or propose a split before writing confirmed docs. If the split is ambiguous, keep candidates in the change plan or `Gaps` and ask the user.
+
+An atom is over-compressed when it bundles independent entry points, user actions, save/delete scopes, API contracts, state transitions, persistence effects, or failure/recovery paths that can be implemented and judged separately. Do not keep those responsibilities inside one generic atom only because they share a domain, screen, service class, or folder. Use context atoms for broad boundaries, then promote concrete source-observed workflows, policies, contracts, and state transitions into behavior atoms with their own owned behavior and excluded behavior.
+
+Choose split boundaries from implementation and judgment independence, not from a project-specific domain list. Entry point, user action, saved aggregate, API contract, state transition, failure/recovery path, and persistence side effect are valid split evidence when they create different implementation decisions or review findings.
 
 Do not write a vague split gap that says more precision is needed without concrete evidence. A split proposal must name candidate atom keys, tentative paths or slugs, owning domain path, source files/classes/functions or other source identifiers, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.

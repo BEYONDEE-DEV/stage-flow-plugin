@@ -111,13 +111,20 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Preserve only fixed atom section headings, frontmatter keys, controlled judgment labels, AID tokens, and source identifiers", text)
         self.assertIn("`atom_key` values", text)
         self.assertIn("judgment-bearing prose under fixed atom sections such as `Planned Changes` and `Gaps` must also use Korean-visible field labels", text)
-        self.assertIn("do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label`", text)
+        self.assertIn("do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, `judgment label`", text)
+        self.assertIn("`conditions/branches`, `validation/guard`, `state transition`, `persistence side effect`, `external call`, or `error/recovery`", text)
         for korean_gap_label in [
             "`판정 라벨`",
             "`영향받는 동작`",
             "`다음 조치`",
             "`근거`",
             "`소스 근거`",
+            "`조건/분기`",
+            "`검증/가드`",
+            "`상태 전이`",
+            "`저장 효과`",
+            "`외부 호출`",
+            "`실패/복구`",
             "`관련 AID`",
         ]:
             self.assertIn(korean_gap_label, text)
@@ -706,6 +713,37 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("existing post-write review explicitly verifies both judgment readiness and implementation reconstruction readiness", baseline)
         self.assertIn("do not call the scope implementation-reconstruction-ready", baseline)
 
+    def test_atomic_docs_quality_gate_rejects_shallow_and_over_compressed_atoms(self) -> None:
+        skill = read(DOCS_SKILL)
+        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+
+        self.assertIn("Do not use atom count or line count as a quality proxy", skill)
+        self.assertIn("Do not use atom count, file count, or line count as a quality threshold", contract)
+        self.assertIn("Review the density of reconstruction-critical decisions", contract)
+        for shallow_marker in [
+            "Shallow atom review must fail",
+            "forms, editors, routes, access guards, payloads, validations, readiness, save/delete behavior, API/service contracts, or state transitions",
+            "concrete fields, branches, rules, payload shape, contract semantics, state effects, or failure outcomes",
+            "`field matrix`, `payload`, `validation`, `contract`, `readiness`, or `state transition`",
+            "A sentence such as \"handles local validation\", \"maps payload\", or \"calls the API\" is not enough",
+        ]:
+            self.assertIn(shallow_marker, contract)
+        for split_marker in [
+            "Split over-compressed atoms",
+            "An atom is over-compressed",
+            "independent entry points, user actions, save/delete scopes, API contracts, state transitions, persistence effects, or failure/recovery paths",
+            "Use context atoms for broad boundaries",
+            "Choose split boundaries from implementation and judgment independence",
+            "not from a project-specific domain list",
+        ]:
+            self.assertIn(split_marker, skill + "\n" + contract)
+        self.assertIn("Reviewer subagents must also fail shallow behavior atoms", generation)
+        self.assertIn("They must fail over-compressed atoms", generation)
+        self.assertIn("Review FAIL is not a completion state", generation)
+        self.assertIn("rerun the same relevant review until PASS", generation)
+        self.assertIn("Do not report the docs operation as complete, judgment-ready, or implementation-reconstruction-ready before that PASS", generation)
+
     def test_atomic_document_contract_requires_source_fact_fidelity(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
         self.assertIn("Source Fact Fidelity Gate", text)
@@ -734,7 +772,8 @@ class DocsSkillTests(unittest.TestCase):
     def test_judgment_items_use_korean_labels_in_korean_docs(self) -> None:
         contract = read(DOCS_REFS / "atomic-document-contract.md")
         policy = read(DOCS_REFS / "change-judgment-policy.md")
-        combined = contract + "\n" + policy
+        language = read(DOCS_REFS / "language-policy.md")
+        combined = contract + "\n" + policy + "\n" + language
 
         self.assertIn("For Korean managed docs, write judgment-bearing `Gaps`, `Planned Changes`, change plan items, and review findings with Korean-visible field labels", contract)
         self.assertIn("For Korean managed docs, keep the controlled judgment label unchanged but write the visible field labels and explanation prose in Korean", policy)
@@ -746,6 +785,12 @@ class DocsSkillTests(unittest.TestCase):
             "`근거`",
             "`영향받는 동작`",
             "`다음 조치`",
+            "`조건/분기`",
+            "`검증/가드`",
+            "`상태 전이`",
+            "`저장 효과`",
+            "`외부 호출`",
+            "`실패/복구`",
         ]:
             self.assertIn(korean_label, combined)
         for english_label in [
@@ -754,10 +799,17 @@ class DocsSkillTests(unittest.TestCase):
             "`basis`",
             "`source evidence`",
             "`judgment label`",
+            "`conditions/branches`",
+            "`validation/guard`",
+            "`state transition`",
+            "`persistence side effect`",
+            "`external call`",
+            "`error/recovery`",
         ]:
             self.assertIn(english_label, combined)
         self.assertIn("Do not use English scaffold labels", contract)
         self.assertIn("Do not write English scaffold labels", policy)
+        self.assertIn("as the visible prose structure", language)
 
     def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
         text = read(DOCS_REFS / "atomic-document-contract.md")
