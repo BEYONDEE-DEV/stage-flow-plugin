@@ -60,6 +60,6 @@ The gate must fail when written docs remain a source-observed inventory rather t
 
 Candidate or `needs_confirmation` domain output may remain a provisional review target, but it is not project-wide judgment-ready. Do not update source-baseline metadata for a project-wide baseline until accepted write scope, durable domain approval state, and judgment-ready scope are aligned and the post-write review passes.
 
-The post-write review must also apply the Source Fact Fidelity Gate from `atomic-document-contract.md` to the written or changed atom lines. If an atom says a source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail, that claim must match the inspected source branch or remain a labeled `confirmation_needed` gap with source evidence and next action.
+The post-write review must also apply the Source Fact Fidelity Gate from `service-logic-coverage.md` to the written or changed atom lines. If an atom says a source path validates, refuses, defaults, falls back, stores, stays read-only, catches, recovers, or can fail, that claim must match the inspected source branch or remain a labeled `confirmation_needed` gap with source evidence and next action.
 
 If the gate fails, revise the criteria document, change plan, evidence packet, service logic inventory, or atom draft within the accepted write scope and rerun the relevant reviewer. Do not update source-baseline metadata, complete the Codex Goal, or present the docs as judgment-ready while this gate is failing.

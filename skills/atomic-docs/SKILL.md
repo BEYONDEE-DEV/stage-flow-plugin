@@ -54,7 +54,11 @@ Use this skill to create, update, inspect, refresh, and manage durable project d
 Before acting, read only the references needed for the requested operation:
 
 - `references/docs-root-and-config.md` for storage mode selection, docs root discovery, confirmation, config, and recovery.
-- `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, non-atom project documents, project/common/domain context rules, required atom sections, confirmed/inferred wording, and forbidden per-atomic status metadata.
+- `references/atomic-document-contract.md` for category/domain paths, file-based `*-atom.md` atoms, stable `atom_key` identity, non-atom project documents, and project/common/domain context rules.
+- `references/atomization-criteria-contract.md` for the first criteria document, approved criteria shape, and criteria-review contract.
+- `references/source-convention-and-domain-policy.md` for source convention documents, domain discovery, hybrid naming, domain boundary review, and core business term coverage.
+- `references/service-logic-coverage.md` for natural-language service logic coverage, implementation reconstruction coverage, source fact fidelity, and Goal boundary rules.
+- `references/atom-format-and-judgment.md` for AID policy, required atom sections, judgment evidence, forbidden shapes, and atomicity rules.
 - `references/language-policy.md` for choosing the natural language used in docs content, preventing reference-example leakage into managed docs, and preserving fixed schema headings and code identifiers.
 - `references/refresh-flow.md` for choosing full refresh or targeted docs work, inspecting existing context, and routing to the direct sibling references below.
 - `references/criteria-flow.md` for first setup, `project/atomization-criteria.md`, criteria-review/revision cycles, decision-ready criteria approval summaries, and post-approval user action wording.

@@ -16,6 +16,16 @@ def read_refs(*names: str) -> str:
     return "\n".join(read(DOCS_REFS / name) for name in names)
 
 
+def read_atomic_contract_bundle() -> str:
+    return read_refs(
+        "atomic-document-contract.md",
+        "atomization-criteria-contract.md",
+        "source-convention-and-domain-policy.md",
+        "service-logic-coverage.md",
+        "atom-format-and-judgment.md",
+    )
+
+
 class DocsSkillTests(unittest.TestCase):
     def test_docs_skill_entry_references_required_contracts(self) -> None:
         text = read(DOCS_SKILL)
@@ -24,6 +34,10 @@ class DocsSkillTests(unittest.TestCase):
         for reference in [
             "docs-root-and-config.md",
             "atomic-document-contract.md",
+            "atomization-criteria-contract.md",
+            "source-convention-and-domain-policy.md",
+            "service-logic-coverage.md",
+            "atom-format-and-judgment.md",
             "language-policy.md",
             "refresh-flow.md",
             "criteria-flow.md",
@@ -74,6 +88,11 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("do not give these non-atom project documents `atom_key`, AID, `graph_edges`, or atom required sections", text)
         self.assertIn("post-write consistency and source fact review", text)
         self.assertIn("before reporting completion or presenting the docs as judgment-ready", text)
+
+    def test_atomic_docs_reference_files_stay_under_200_lines(self) -> None:
+        for path in sorted(DOCS_REFS.glob("*.md")):
+            line_count = len(read(path).splitlines())
+            self.assertLessEqual(line_count, 200, f"{path.name} has {line_count} lines")
 
     def test_language_policy_chooses_user_or_existing_docs_language(self) -> None:
         text = read(DOCS_REFS / "language-policy.md")
@@ -265,7 +284,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("create or reuse a Codex Goal before starting docs generation work", text)
 
     def test_atomic_document_contract_sections_and_boundaries(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("<doc-root>/<domain-path>/<file-slug>-atom.md", text)
         self.assertIn("<doc-root>/project/atomization-criteria.md", text)
         self.assertIn("criteria document is not an atom", text)
@@ -331,7 +350,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior", text)
 
     def test_atomization_criteria_document_contract_is_persisted(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Atomization Criteria Document", text)
         self.assertIn("<doc-root>/project/atomization-criteria.md", text)
         self.assertIn("Existing `<doc-root>/project/atomization-criteria-atom.md` files are legacy artifacts", text)
@@ -518,7 +537,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Fail when a project document directly claims code is implemented, missing, buggy, matching, or out of scope", text)
 
     def test_atomic_document_contract_defines_source_convention_document_format(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Source Convention Document", text)
         self.assertIn("<doc-root>/project/source-convention.md", text)
         self.assertIn("source convention document is not a service-logic atom", text)
@@ -560,7 +579,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("coverage gap or `confirmation_needed`", text)
 
     def test_atomic_document_contract_supports_code_judgment_evidence(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Judgment Evidence Policy", text)
         self.assertIn("required, optional, excluded, or boundary-defining", text)
         self.assertIn("acceptance criteria", text)
@@ -580,7 +599,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("A service judgment still needs service logic atom content, source evidence, baseline metadata, and a controlled judgment label", text)
 
     def test_atomic_document_contract_requires_atom_line_ids(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Atom Line ID Policy", text)
         self.assertIn("Every `*-atom.md` file must assign a stable unique ID", text)
         self.assertIn("judgment-relevant meaning line", text)
@@ -613,7 +632,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("use frontmatter `atom_key` for current identity", text)
 
     def test_atomic_document_contract_requires_service_logic_natural_language_coverage(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Service Logic Natural-Language Coverage", text)
         self.assertIn("natural-language service logic standard", text)
         self.assertIn("meaningful application, service, and domain logic", text)
@@ -651,7 +670,7 @@ class DocsSkillTests(unittest.TestCase):
 
     def test_atomic_docs_requires_source_to_docs_to_code_reconstruction_readiness(self) -> None:
         skill = read(DOCS_SKILL)
-        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        contract = read(DOCS_REFS / "service-logic-coverage.md")
         criteria = read(DOCS_REFS / "criteria-flow.md")
         generation = read(DOCS_REFS / "docs-generation-flow.md")
         inventory = read(DOCS_REFS / "project-documents-and-inventory.md")
@@ -715,7 +734,7 @@ class DocsSkillTests(unittest.TestCase):
 
     def test_atomic_docs_quality_gate_rejects_shallow_and_over_compressed_atoms(self) -> None:
         skill = read(DOCS_SKILL)
-        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        contract = read_atomic_contract_bundle()
         generation = read(DOCS_REFS / "docs-generation-flow.md")
 
         self.assertIn("Do not use atom count or line count as a quality proxy", skill)
@@ -745,7 +764,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not report the docs operation as complete, judgment-ready, or implementation-reconstruction-ready before that PASS", generation)
 
     def test_atomic_document_contract_requires_source_fact_fidelity(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "service-logic-coverage.md")
         self.assertIn("Source Fact Fidelity Gate", text)
         self.assertIn("actually reachable through the inspected entry path", text)
         self.assertIn("Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply", text)
@@ -770,7 +789,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("related stable `atom_key` and AID values", text)
 
     def test_judgment_items_use_korean_labels_in_korean_docs(self) -> None:
-        contract = read(DOCS_REFS / "atomic-document-contract.md")
+        contract = read(DOCS_REFS / "atom-format-and-judgment.md")
         policy = read(DOCS_REFS / "change-judgment-policy.md")
         language = read(DOCS_REFS / "language-policy.md")
         combined = contract + "\n" + policy + "\n" + language
@@ -812,7 +831,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("as the visible prose structure", language)
 
     def test_atomic_document_contract_separates_goal_scope_from_judgment_evidence(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "service-logic-coverage.md")
         self.assertIn("Atomic Docs Goal Boundary", text)
         self.assertIn("execution scope for performing the accepted docs operation", text)
         self.assertIn("does not replace criteria approval, accepted docs write scope", text)
@@ -821,14 +840,14 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Code suitability judgments still come from approved criteria, generated atoms, source evidence", text)
 
     def test_atomic_document_contract_rejects_evasive_split_or_identifier_only_coverage(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read_atomic_contract_bundle()
         self.assertIn("Do not leave an evasive split or coverage gap", text)
         self.assertIn("in place of documenting inspected service logic", text)
         self.assertIn("proposed owners, unresolved question, and the behavior already observed", text)
         self.assertIn("Do not use source identifiers without natural-language behavior as proof", text)
 
     def test_domain_boundary_policy_uses_general_quality_gate(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "source-convention-and-domain-policy.md")
         self.assertIn("Domain Boundary Quality Gate", text)
         self.assertIn("durable ownership boundary", text)
         for criterion in [
@@ -856,7 +875,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertNotIn("Do not use document state names such as", text)
 
     def test_hybrid_domain_naming_policy_prefers_project_native_language(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "source-convention-and-domain-policy.md")
         self.assertIn("Hybrid Domain Naming Policy", text)
         self.assertIn("Use a hybrid domain naming model", text)
         self.assertIn("Start with project-native feature/root language", text)
@@ -885,7 +904,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("do not default to technical labels such as `configuration`", text)
 
     def test_domain_discovery_promotes_concrete_aggregates_under_broad_roots(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "source-convention-and-domain-policy.md")
         self.assertIn("When a broad source root or category/root surface is rejected", text)
         self.assertIn("still inspect below it for concrete business aggregates", text)
         for evidence in [
@@ -901,7 +920,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("owned behavior, excluded behavior, adjacent boundary, and unresolved questions", text)
 
     def test_core_business_term_coverage_gate_prevents_parent_term_gaps(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "source-convention-and-domain-policy.md")
         self.assertIn("Core Business Term Coverage Gate", text)
         for evidence_source in [
             "type/interface names",
@@ -1347,6 +1366,10 @@ class DocsSkillTests(unittest.TestCase):
             read(path)
             for path in [
                 DOCS_REFS / "atomic-document-contract.md",
+                DOCS_REFS / "atomization-criteria-contract.md",
+                DOCS_REFS / "source-convention-and-domain-policy.md",
+                DOCS_REFS / "service-logic-coverage.md",
+                DOCS_REFS / "atom-format-and-judgment.md",
                 DOCS_REFS / "refresh-flow.md",
                 DOCS_REFS / "criteria-flow.md",
                 DOCS_REFS / "docs-generation-flow.md",
@@ -1362,7 +1385,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not copy reference example wording", read(DOCS_REFS / "language-policy.md"))
 
     def test_atomicity_policy_rejects_vague_split_gap(self) -> None:
-        text = read(DOCS_REFS / "atomic-document-contract.md")
+        text = read(DOCS_REFS / "atom-format-and-judgment.md")
         self.assertIn("Do not write a vague split gap", text)
         for required in [
             "candidate atom keys",
