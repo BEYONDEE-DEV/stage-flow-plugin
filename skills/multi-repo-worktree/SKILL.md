@@ -1,6 +1,6 @@
 ---
 name: multi-repo-worktree
-description: "Use only when the user explicitly invokes multi-repo-worktree, $multi-repo-worktree, or asks to use this skill for a multi-repo Git worktree bundle. Coordinates setup, status inspection, worktree creation planning, merge-back from derived branches to their creation/source branches, and syncing creation/source branch changes into derived branches across multiple independent repositories."
+description: "Use only when the user explicitly invokes multi-repo-worktree, $multi-repo-worktree, or asks to use this skill for a multi-repo Git worktree bundle. Coordinates keyword-based help, status, create, merge, and sync workflows across multiple independent repositories, requiring explanation and explicit user approval before create, merge, or sync commands are executed."
 ---
 
 # Multi Repo Worktree
@@ -14,13 +14,33 @@ This skill is for workspaces where one folder contains multiple independent Git 
 - Treat each service or package repository as an independent Git repository.
 - Do not treat the workspace root or a bundle folder as a Git repository unless `git rev-parse --show-toplevel` proves it.
 - Do not assume the same branch name in different repositories refers to the same branch object or commit.
+- Treat creation/source branches as the branches derived branches were created from.
 - Before any write operation, summarize the repository list, source branch, derived branch, upstream, dirty state, and intended operation for user confirmation.
+- Never execute `create`, `merge`, or `sync` commands before explaining the exact plan and receiving explicit user approval.
 - Do not run destructive commands such as reset, clean, forced checkout, forced push, or branch deletion unless the user explicitly requests that exact operation.
 - Prefer merge for branch update examples unless the user explicitly asks for rebase or the repository policy requires it.
 
+## Invocation Keywords
+
+Use this shape:
+
+```text
+$multi-repo-worktree <keyword> [free-form intent]
+```
+
+Supported keywords:
+
+- `help`: explain available keywords, required inputs, and safety rules.
+- `status`: inspect workspace, repository, worktree, branch, upstream, and dirty state.
+- `create`: create or plan a derived worktree bundle from a source branch.
+- `merge`: merge derived branch changes back into the creation/source branch.
+- `sync`: bring creation/source branch changes into derived branches.
+
+If the user explicitly invokes the skill without a keyword, show `help` and ask which keyword to use.
+
 ## Required First Step
 
-For setup, status, worktree creation, merge-back, or sync-derived requests:
+For `status`, `create`, `merge`, or `sync` requests:
 
 1. Read `references/worktree-operations.md`.
 2. Run the read-only inspector when a workspace path is available:
@@ -33,16 +53,17 @@ Use `--json` when structured output is easier to compare.
 
 ## Operation Model
 
-- **Setup**: identify repository groups, main worktrees, derived worktrees, branch naming pattern, and upstream availability.
-- **Current state**: report repo-by-repo branch, commit, upstream, dirty state, and worktree paths.
-- **Worktree creation**: plan repo-by-repo `git worktree add` commands from a confirmed source branch to a confirmed derived branch and target folder. Ask before running write commands.
-- **Merge-back**: merge a derived branch into its creation/source branch repo by repo. Confirm source branch, derived branch, clean state, and conflict strategy first.
-- **Sync-derived**: bring creation/source branch changes into each derived branch repo by repo. Confirm merge vs rebase first; default to merge examples.
+- **help**: explain the keyword syntax and show examples. Do not inspect or mutate repositories unless the user asks for a specific operation.
+- **status**: identify repository groups, main worktrees, derived worktrees, branch naming pattern, upstream availability, dirty state, and worktree paths.
+- **create**: plan repo-by-repo `git worktree add` commands from a confirmed source branch to a confirmed derived branch and target folder. Explain the plan and ask for approval before running write commands.
+- **merge**: merge a derived branch into its creation/source branch repo by repo. Explain source branch, derived branch, command order, clean state, upstream, and conflict strategy; ask for approval before running write commands.
+- **sync**: bring creation/source branch changes into each derived branch repo by repo. Explain merge vs rebase strategy, command order, clean state, and conflict strategy; ask for approval before running write commands.
 
 ## Safety Boundaries
 
 - This skill is not for single-repo-only tasks.
 - The bundled inspector is read-only; it must not create branches, create worktrees, merge, rebase, pull, fetch, push, reset, or clean.
+- `create`, `merge`, and `sync` are approval-gated operations. Showing a plan is allowed; executing the Git writes requires explicit approval after the explanation.
 - If a repository is dirty, paused by hooks, missing upstream, detached, or ambiguous, stop and explain the blocker before proposing write commands.
 - If the user asks for batch execution across repositories, present the exact repo list and operation order before executing.
 

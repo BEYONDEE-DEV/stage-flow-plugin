@@ -30,9 +30,13 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("Do not apply it implicitly", text)
         self.assertIn("ordinary Git, single-repo, or single-worktree questions", text)
         self.assertIn("multiple independent Git repositories", text)
-        self.assertIn("setup, status, worktree creation, merge-back, or sync-derived", text)
+        self.assertIn("help, status, create, merge, and sync", text)
+        self.assertIn("$multi-repo-worktree <keyword> [free-form intent]", text)
         self.assertIn("references/worktree-operations.md", text)
         self.assertIn("scripts/inspect_worktrees.py", text)
+        self.assertNotIn("**Setup**", text)
+        self.assertNotIn("merge-back", text)
+        self.assertNotIn("sync-derived", text)
         self.assertNotIn("TODO", text)
 
     def test_skill_records_source_and_derived_branch_safety_rules(self) -> None:
@@ -41,6 +45,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("creation/source branches", text)
         self.assertIn("derived branches", text)
         self.assertIn("Before any write operation", text)
+        self.assertIn("Never execute `create`, `merge`, or `sync` commands before explaining", text)
         self.assertIn("repository list, source branch, derived branch, upstream, dirty state", text)
         self.assertIn("Do not run destructive commands", text)
         self.assertIn("Prefer merge", text)
@@ -50,11 +55,19 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         text = read(REFERENCE)
 
         for phrase in [
-            "## Setup",
-            "## Current State",
-            "## Worktree Creation",
-            "## Merge Back To Source",
-            "## Sync Source Changes Into Derived Branches",
+            "## Keyword Contract",
+            "## Status",
+            "## Create",
+            "## Merge",
+            "## Sync",
+            "`help`",
+            "`status`",
+            "`create`",
+            "`merge`",
+            "`sync`",
+            "Do not expose `setup`, `merge-back`, or `sync-derived`",
+            "Explain the exact repo list, branch mapping, command order, and risks",
+            "Ask for explicit approval",
             "source branch",
             "derived branch",
             "same branch name appears in several repositories",
@@ -113,7 +126,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertIn('display_name: "Multi Repo Worktree"', text)
         self.assertIn('short_description: "Multi-repo worktree coordination."', text)
-        self.assertIn("Use $multi-repo-worktree", text)
+        self.assertIn("Use $multi-repo-worktree status", text)
         self.assertIn("allow_implicit_invocation: false", text)
 
     def test_plugin_manifest_exposes_multi_repo_worktree_prompt(self) -> None:
@@ -121,8 +134,9 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         interface = manifest["interface"]
 
         self.assertIn("multi-repo-worktree", interface["longDescription"])
+        self.assertIn("help, status, create, merge, and sync keywords", interface["longDescription"])
         self.assertIn(
-            "Use multi-repo-worktree to inspect and coordinate a multi-repo Git worktree bundle.",
+            "Use multi-repo-worktree status to inspect a multi-repo Git worktree bundle.",
             interface["defaultPrompt"],
         )
 

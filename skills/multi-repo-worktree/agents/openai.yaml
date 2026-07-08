@@ -1,7 +1,7 @@
 interface:
   display_name: "Multi Repo Worktree"
   short_description: "Multi-repo worktree coordination."
-  default_prompt: "Use $multi-repo-worktree to inspect and coordinate this multi-repo worktree bundle."
+  default_prompt: "Use $multi-repo-worktree status to inspect this multi-repo worktree bundle."
 
 policy:
   allow_implicit_invocation: false
