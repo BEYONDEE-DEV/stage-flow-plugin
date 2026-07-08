@@ -16,6 +16,35 @@ def read_refs(*names: str) -> str:
     return "\n".join(read(DOCS_REFS / name) for name in names)
 
 
+def section(text: str, heading: str) -> str:
+    lines = text.splitlines()
+    start = None
+    start_level = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("#"):
+            continue
+        level = len(stripped) - len(stripped.lstrip("#"))
+        title = stripped[level:].strip()
+        if title == heading:
+            start = index
+            start_level = level
+            break
+    if start is None or start_level is None:
+        raise AssertionError(f"Missing markdown section: {heading}")
+
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        stripped = lines[index].strip()
+        if not stripped.startswith("#"):
+            continue
+        level = len(stripped) - len(stripped.lstrip("#"))
+        if level <= start_level:
+            end = index
+            break
+    return "\n".join(lines[start:end])
+
+
 def read_atomic_contract_bundle() -> str:
     return read_refs(
         "atomic-document-contract.md",
@@ -773,6 +802,130 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("frontend/UI coverage, backend/API/service coverage", baseline)
         self.assertIn("post-write gate stored under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`", baseline)
         self.assertIn("do not call the scope implementation-reconstruction-ready", baseline)
+
+    def test_atomic_docs_requires_source_discovery_closure(self) -> None:
+        skill = read(DOCS_SKILL)
+        service = read(DOCS_REFS / "service-logic-coverage.md")
+        inventory = read(DOCS_REFS / "project-documents-and-inventory.md")
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        domain = read(DOCS_REFS / "source-convention-and-domain-policy.md")
+        criteria = read(DOCS_REFS / "atomization-criteria-contract.md")
+
+        closure_section = section(service, "Source Discovery Closure Gate")
+        inventory_section = section(inventory, "Service Logic Inventory")
+
+        for required in [
+            "source discovery closure",
+            "source surface or aggregate",
+            "`atom_key`/AID",
+            "coverage gap",
+            "`out_of_scope`",
+            "not-applicable",
+            "Unmapped or orphan source behavior",
+        ]:
+            self.assertIn(required, skill + "\n" + closure_section)
+
+        for required in [
+            "source discovery closure table",
+            "source feature inventory aggregate has no disposition",
+            "source discovery closure/disposition",
+            "row-level closure",
+            "route/controller/service/policy/persistence/workflow aggregate",
+        ]:
+            self.assertIn(required, generation + "\n" + criteria + "\n" + inventory_section)
+
+        self.assertIn("Rejected broad roots need concrete aggregate disposition", domain)
+        for disposition in [
+            "atom candidate",
+            "concrete split proposal",
+            "coverage gap",
+            "`out_of_scope`",
+            "not-applicable item",
+        ]:
+            self.assertIn(disposition, domain)
+
+    def test_atomic_docs_requires_high_risk_atom_matrices(self) -> None:
+        text = "\n".join(
+            [
+                read(DOCS_SKILL),
+                read(DOCS_REFS / "service-logic-coverage.md"),
+                read(DOCS_REFS / "docs-generation-flow.md"),
+            ]
+        ).lower()
+
+        for category in [
+            "account/auth/admin management",
+            "delete/approve",
+            "payment/refund",
+            "external integration",
+            "persistence mutation",
+            "idempotency",
+            "failure recovery",
+        ]:
+            self.assertIn(category, text)
+
+        for matrix in [
+            "payload/field matrix",
+            "branch matrix",
+            "state/persistence effect matrix",
+            "failure/recovery matrix",
+            "not-applicable reason",
+        ]:
+            self.assertIn(matrix, text)
+
+    def test_atomic_docs_reviewer_answer_sheet_and_claim_audit(self) -> None:
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        service = read(DOCS_REFS / "service-logic-coverage.md")
+        review_section = section(generation, "Domain Subagent Workflow")
+
+        for required in [
+            "reviewer answer sheet",
+            "same functional behavior can be implemented from docs alone",
+            "fields/branches/validation/state/failure details still require source",
+            "source identifiers appear without natural-language behavior",
+            "`AID claim -> checked entry path -> null/blank/default/fallback/exception branch -> source evidence`",
+        ]:
+            self.assertIn(required, review_section)
+
+        fidelity_section = section(service, "Source Fact Fidelity Gate")
+        for branch in [
+            "null handling",
+            "blank handling",
+            "default value fallback",
+            "explicit exception branches",
+            "persistence calls",
+        ]:
+            self.assertIn(branch, fidelity_section)
+
+    def test_atomic_docs_criteria_lifecycle_and_baseline_scope_guard(self) -> None:
+        skill = read(DOCS_SKILL)
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        criteria = read(DOCS_REFS / "atomization-criteria-contract.md")
+        baseline = read(DOCS_REFS / "source-baseline-and-change-plan.md")
+
+        for required in [
+            "criteria lifecycle reconciliation",
+            "after criteria approval",
+            "after docs generation",
+            "draft/future/pending/current-run state",
+            "atomic-docs operation state",
+            "stale draft/future/pending/current-run state",
+        ]:
+            self.assertIn(required, skill + "\n" + generation)
+
+        self.assertIn("remove obsolete draft-only or pending-approval blockers", criteria)
+        self.assertIn("Approved criteria should contain durable criteria", criteria)
+
+        for required in [
+            "partial scope from project-wide scope",
+            "accepted scope",
+            "source commit baseline",
+            "operation-local post-write PASS",
+            "implementation-reconstruction readiness",
+            "must not be treated as matching confirmed intent",
+            "`docs_stale`",
+        ]:
+            self.assertIn(required, baseline)
 
     def test_atomic_docs_quality_gate_rejects_shallow_and_over_compressed_atoms(self) -> None:
         skill = read(DOCS_SKILL)

@@ -59,6 +59,10 @@ Category and subdomain folders are allowed only as organization inside an approv
 
 When a broad source root or category/root surface is rejected, still inspect below it for concrete business aggregates. A concrete aggregate is a source-observed responsibility where routes, controllers, service methods, policy rules, persistence side effects, or user-visible workflow steps repeatedly describe the same capability, operation, lifecycle, or management task and tend to change together. Promote that aggregate to a concrete domain candidate or concrete split proposal with owned behavior, excluded behavior, adjacent boundary, and unresolved questions instead of stopping at the broad rejection.
 
+Rejected broad roots need concrete aggregate disposition. For each obvious sub-aggregate, record whether it becomes an atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item. A broad root rejection with no sub-aggregate disposition is not enough evidence for criteria approval or docs generation.
+
+Treat management/operational aggregate evidence as a domain discovery trigger when management verbs such as manage, register, approve, issue, settle, recover, disable, restore, or delete appear with an endpoint/service entry and a persistence, permission, policy, or workflow effect. The candidate name should preserve project/user business language unless the criteria records a stronger promotion basis.
+
 ## Hybrid Domain Naming Policy
 
 Use a hybrid domain naming model for criteria drafts and domain maps:

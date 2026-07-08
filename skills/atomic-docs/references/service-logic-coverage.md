@@ -26,6 +26,14 @@ Complex logic should be split into multiple atoms when separate behaviors, polic
 
 Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
 
+## Source Discovery Closure Gate
+
+For the accepted scope, maintain source discovery closure from inspected source surface/aggregate to documentation outcome. Every meaningful route, controller, service method, policy rule, persistence mutation/read model, workflow step, UI entry, job, event, or external integration must close as one of: owned by a real `atom_key`/AID, recorded as a coverage gap, marked `out_of_scope`, or marked not-applicable with a reason.
+
+Unmapped or orphan source behavior is a blocking review finding when the docs claim judgment readiness, baseline readiness, or implementation reconstruction readiness. A rejected broad source root still needs sub-aggregate disposition; do not hide lower-level behavior behind the broad rejection.
+
+High-risk atom coverage requires structured matrices when applicable. Account/auth/admin management, delete/approve actions, payment/refund behavior, external integration, persistence mutation, idempotency, and failure recovery must include payload/field matrix, branch matrix, state/persistence effect matrix, and failure/recovery matrix details, or a specific not-applicable reason. A label-only gap, endpoint summary, or generic "handled by service" sentence is not enough for these categories.
+
 ## Implementation Reconstruction Coverage
 
 Atomic docs must satisfy a source-to-docs-to-code implementation reconstruction standard for the accepted scope. A competent implementer should be able to implement the same functional behavior from the docs without rereading source. This does not require pixel-perfect visual design, exact CSS values, component internal structure, or library choice unless source or user requirements make them behavior-relevant. It does require basic design/state presentation, screen structure, and visual feedback guidance when they affect product behavior or the style the user asked to preserve.

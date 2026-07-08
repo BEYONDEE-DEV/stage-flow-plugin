@@ -18,6 +18,8 @@ When judging code against docs, first determine whether the relevant source beha
 
 Baseline metadata may be updated only for the judgment-ready scope that is also implementation-reconstruction-ready and passed the operation-local post-write review. Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they must not be used to claim a project-wide judgment-ready baseline.
 
+Every baseline-ready claim must distinguish partial scope from project-wide scope. The claim must name the accepted scope, source commit baseline, operation-local post-write PASS, implementation-reconstruction readiness, and whether the baseline is limited to a partial review target or covers the project-wide judgment baseline.
+
 In operation summaries, call a scope a judgment-ready and implementation-reconstruction-ready scope only when the post-write gate stored under `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` or `work-state.json` `post_write_gate` explicitly verifies both judgment readiness and implementation reconstruction readiness.
 
 ## Full Refresh
@@ -86,4 +88,4 @@ The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `
 
 If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
 
-Docs may only judge source behavior against service logic that is actually recorded in natural language. Source behavior absent from the docs is not implicitly correct; record it as a coverage gap, `confirmation_needed`, or `docs_stale` depending on the baseline and evidence. If missing frontend/UI or backend/API/service details would force an implementer to reread source or make arbitrary behavior choices, do not call the scope implementation-reconstruction-ready; record the missing details and next action instead.
+Docs may only judge source behavior against service logic that is actually recorded in natural language. Source behavior absent from the docs is not implicitly correct and must not be treated as matching confirmed intent. Record it as a coverage gap, `confirmation_needed`, or `docs_stale` depending on the accepted scope, baseline, and evidence. If missing frontend/UI or backend/API/service details would force an implementer to reread source or make arbitrary behavior choices, do not call the scope implementation-reconstruction-ready; record the missing details and next action instead.
