@@ -56,7 +56,7 @@ Use `--json` when structured output is easier to compare.
 - **help**: explain the keyword syntax and show examples. Do not inspect or mutate repositories unless the user asks for a specific operation.
 - **status**: identify repository groups, main worktrees, derived worktrees, branch naming pattern, dirty state, and worktree paths. User-facing status output must not use Markdown tables. Show the common bundle path once as `기준 폴더`, then render each repo as one line: `<repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>`.
 - **create**: plan repo-by-repo `git worktree add` commands from a confirmed source branch to a confirmed derived branch and target folder. Explain the plan and ask for approval before running write commands.
-- **merge**: merge a derived branch into its creation/source branch repo by repo. Explain source branch, derived branch, command order, clean state, upstream, and conflict strategy; ask for approval before running write commands.
+- **merge**: merge a derived branch into its creation/source branch repo by repo. Explain source branch, derived branch, command order, clean state, upstream, and conflict strategy; ask for approval before running write commands. After a successful merge, stop and ask whether to push the merged source branch; do not include `git push` in the merge command batch.
 - **sync**: bring creation/source branch changes into each derived branch repo by repo. Explain merge vs rebase strategy, command order, clean state, and conflict strategy; ask for approval before running write commands.
 
 ## Safety Boundaries
@@ -64,6 +64,7 @@ Use `--json` when structured output is easier to compare.
 - This skill is not for single-repo-only tasks.
 - The bundled inspector is read-only; it must not create branches, create worktrees, merge, rebase, pull, fetch, push, reset, or clean.
 - `create`, `merge`, and `sync` are approval-gated operations. Showing a plan is allowed; executing the Git writes requires explicit approval after the explanation.
+- `merge` has a second approval point after successful merge completion: summarize the merge result and ask `push까지 진행할까요?` before any `git push`.
 - If a repository is dirty, paused by hooks, missing upstream, detached, or ambiguous, stop and explain the blocker before proposing write commands.
 - If the user asks for batch execution across repositories, present the exact repo list and operation order before executing.
 

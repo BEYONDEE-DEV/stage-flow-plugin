@@ -105,6 +105,16 @@ git -C <source-worktree> merge <derived-branch>
 
 If the source branch is checked out in another worktree, use that worktree instead of trying to check it out elsewhere.
 
+After the requested merge operation finishes successfully, stop before pushing. Summarize:
+
+- merged repositories
+- skipped repositories
+- conflicts or validation blockers
+- source branch now containing the merge
+- upstream or push target, when known
+
+Then ask `push까지 진행할까요?`. Do not run `git push` as part of the merge command batch. If the merge failed or only partially completed, report the blocker first and do not ask to push a mixed result unless the user explicitly asks for a subset push plan.
+
 ## Sync
 
 `sync` means applying source branch updates into a derived branch. Explain the plan and get user approval before running commands.

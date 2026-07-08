@@ -76,6 +76,19 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, text)
 
+    def test_merge_requires_post_merge_push_prompt(self) -> None:
+        skill = read(SKILL)
+        reference = read(REFERENCE)
+
+        self.assertIn("After a successful merge, stop and ask whether to push", skill)
+        self.assertIn("do not include `git push` in the merge command batch", skill)
+        self.assertIn("`merge` has a second approval point after successful merge completion", skill)
+        self.assertIn("push까지 진행할까요?", skill)
+        self.assertIn("After the requested merge operation finishes successfully, stop before pushing", reference)
+        self.assertIn("Then ask `push까지 진행할까요?`", reference)
+        self.assertIn("Do not run `git push` as part of the merge command batch", reference)
+        self.assertIn("do not ask to push a mixed result", reference)
+
     def test_status_output_policy_uses_single_line_repo_summary(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
