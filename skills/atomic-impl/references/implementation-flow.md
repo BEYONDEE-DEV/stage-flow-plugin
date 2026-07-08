@@ -5,7 +5,7 @@
 Use this flow when a user wants code implemented from requirements, but the requirements first need to become atomic-docs quality implementation criteria. The output path is:
 
 ```text
-user requirements -> atomic-docs managed docs -> user approval -> code implementation -> docs/code compliance review
+user requirements -> implementation-basis atomic docs -> user approval -> code implementation -> implementation review -> user approval -> final atomic-docs update -> final docs/code compliance
 ```
 
 ## 1. Intake And Routing
@@ -26,18 +26,22 @@ Before writing implementation code, ensure the requested behavior has an accepte
 - If docs generation requires a Codex Goal, create or reuse the Goal as required by `atomic-docs` before writing project/common/domain docs, atom files, graph edges, source-baseline metadata, or operation-local inventory.
 - Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval unless the approved docs paths and write actions are named.
 
-## 3. Write Requirements As Implementation Criteria
+## 3. Write Requirements As Implementation-Basis Docs
 
 Write or update managed docs so the accepted behavior can be implemented from docs without rereading source for meaning.
 
 For each meaningful behavior, preserve:
 
 - user intent, confirmed rules, inferred rules marked as inferred, and explicit non-goals
+- new requested behavior as `Planned Changes` until it is implemented and approved by the user
+- existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists
 - input conditions, branches, validation/refusal/defaulting, permission or guard behavior
 - state transitions, persistence effects, external calls, events, and side effects
 - UI or API contract details, payload fields, forms, routes, empty/loading/error states, and save/delete scopes when applicable
 - failure, retry, fallback, recovery, and runtime exception behavior
 - source evidence, judgment labels, `Gaps`, related `atom_key`, AID, and graph relationships required by `atomic-docs`
+
+Use `Intent` and `Rules` for confirmed purpose and policy. Use `Gaps` or `confirmation_needed` for missing decisions, uncertain behavior, or source evidence that does not yet prove a confirmed rule. Do not write not-yet-implemented requested behavior as `Current Implementation`.
 
 Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences as substitutes for natural-language service logic.
 
@@ -64,12 +68,42 @@ Implement only behavior covered by the approved docs and accepted scope.
 - If the user requests behavior not in the approved docs, treat it as a docs scope change before coding it.
 - Keep unrelated refactors out of scope unless they are necessary to satisfy the approved docs.
 
-## 6. Validation And Compliance Review
+## 6. Implementation Review And User Approval
 
-After implementation, validate the real affected flow rather than only checking files.
+After implementation, validate and review the real affected flow before any final docs update.
 
 1. Run the project tests, validators, linters, or targeted commands that prove the documented behavior.
-2. Compare the confirmed user requirement, approved atomic docs, actual diff, and validation results.
-3. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
-4. If the code differs from the approved docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
-5. Summarize the final docs/code compliance result, validations run, and remaining out-of-scope or pre-existing issues.
+2. Run `Intent Compliance Review`: compare the confirmed user requirement, approved atomic docs, actual diff, and validation results.
+3. Run `Flow / Unexpected Issue Review`: inspect state transitions, data flow, validation, failure/recovery, side effects, changed implementation behavior, out-of-plan changes, and discovered pre-existing issues.
+4. Fix implementation issues that are in scope and caused by the change, then rerun validation and both reviews.
+5. If the implementation changed from the approved plan, introduced extra behavior, or revealed a pre-existing issue, report it to the user before treating it as approved.
+
+The post-implementation user summary must include:
+
+- implementation summary
+- items implemented exactly as the approved docs specified
+- items changed from the plan
+- extra out-of-plan changes or discovered pre-existing issues
+- final atomic docs paths and update contents that will be written after approval
+
+Ask whether to approve the implementation result and final docs update. Do not update final atomic docs until the user explicitly approves.
+
+## 7. Final Atomic Docs Update
+
+After the user approves the implementation result, update atomic docs through the existing `atomic-docs` gates.
+
+- Keep docs write scope, writer/reviewer cycle, post-write gate, judgment labels, source evidence, AID, `atom_key`, and graph rules intact.
+- Move completed approved items from `Planned Changes` to `Current Implementation`.
+- Add or refresh source evidence and validation basis for the implemented behavior.
+- Keep unimplemented, deferred, or unapproved behavior in `Planned Changes`, `Gaps`, `confirmation_needed`, out-of-scope, or discovered pre-existing issue entries as appropriate.
+- Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes.
+- If final docs update reveals that the implementation or docs are still inconsistent, return to the relevant implementation or docs approval gate instead of reporting completion.
+
+## 8. Final Compliance Review
+
+After final docs update, validate the real affected flow rather than only checking files.
+
+1. Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
+2. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
+3. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
+4. Summarize the final docs/code compliance result, validations run, final docs paths, and remaining out-of-scope or pre-existing issues.

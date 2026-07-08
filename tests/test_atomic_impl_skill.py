@@ -20,13 +20,15 @@ class AtomicImplSkillTests(unittest.TestCase):
         text = read(SKILL)
 
         self.assertIn("name: atomic-impl", text)
-        self.assertIn("requirements -> atomic-docs managed docs", text)
-        self.assertIn("user summary and document-path approval", text)
-        self.assertIn("code implementation -> docs/code compliance review", text)
+        self.assertIn("requirements -> implementation-basis atomic docs", text)
+        self.assertIn("code implementation -> implementation review -> user approval -> final atomic-docs update", text)
+        self.assertIn("final docs/code compliance", text)
         self.assertIn("Read `references/implementation-flow.md` before taking action", text)
         self.assertIn("skills/atomic-docs/SKILL.md", text)
         self.assertIn("Treat the written or updated atomic docs as the implementation source of truth", text)
         self.assertIn("Do not implement code before the relevant atomic docs are written or updated", text)
+        self.assertIn("put new requested behavior mainly in `Planned Changes`", text)
+        self.assertIn("`Current Implementation` only for behavior already observed in source", text)
         self.assertIn("explicitly approved as the implementation basis", text)
         self.assertIn("Do not bypass `atomic-docs` setup", text)
         self.assertIn("criteria approval", text)
@@ -37,12 +39,16 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("`.stageflow/atomic-docs.json`", text)
         self.assertIn("`project/atomization-criteria.md`", text)
         self.assertIn("blocking `confirmation_needed` gaps", text)
+        self.assertIn("run `Intent Compliance Review` and `Flow / Unexpected Issue Review`", text)
+        self.assertIn("require explicit user approval before final atomic-docs update", text)
+        self.assertIn("move completed approved items from `Planned Changes` to `Current Implementation`", text)
+        self.assertIn("Do not record out-of-plan changes", text)
         self.assertNotIn("TODO", text)
 
     def test_implementation_flow_preserves_atomic_docs_gates_before_code(self) -> None:
         text = read(FLOW)
 
-        self.assertIn("user requirements -> atomic-docs managed docs -> user approval -> code implementation", text)
+        self.assertIn("user requirements -> implementation-basis atomic docs -> user approval -> code implementation", text)
         self.assertIn("Read `skills/atomic-docs/SKILL.md` before any managed docs action", text)
         self.assertIn("If atomic-docs config or managed docs root is missing", text)
         self.assertIn("Stop after the accepted bootstrap/criteria step requires user review", text)
@@ -58,6 +64,8 @@ class AtomicImplSkillTests(unittest.TestCase):
 
         for required_detail in [
             "user intent, confirmed rules, inferred rules marked as inferred",
+            "new requested behavior as `Planned Changes`",
+            "existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists",
             "input conditions, branches, validation/refusal/defaulting",
             "state transitions, persistence effects, external calls, events, and side effects",
             "UI or API contract details, payload fields, forms, routes",
@@ -80,10 +88,24 @@ class AtomicImplSkillTests(unittest.TestCase):
         text = read(FLOW)
 
         self.assertIn("Run the project tests, validators, linters, or targeted commands", text)
-        self.assertIn("Compare the confirmed user requirement, approved atomic docs, actual diff, and validation results", text)
+        self.assertIn("Run `Intent Compliance Review`", text)
+        self.assertIn("Run `Flow / Unexpected Issue Review`", text)
+        self.assertIn("compare the confirmed user requirement, approved atomic docs, actual diff, and validation results", text)
+        self.assertIn("state transitions, data flow, validation, failure/recovery, side effects", text)
+        self.assertIn("Ask whether to approve the implementation result and final docs update", text)
         self.assertIn("missing documented behavior, undocumented implementation behavior, stale docs", text)
-        self.assertIn("If the code differs from the approved docs", text)
+        self.assertIn("If the code differs from the final docs", text)
         self.assertIn("Summarize the final docs/code compliance result", text)
+
+    def test_final_docs_update_requires_user_approval_and_atomic_docs_gates(self) -> None:
+        text = read(FLOW)
+
+        self.assertIn("Do not update final atomic docs until the user explicitly approves", text)
+        self.assertIn("update atomic docs through the existing `atomic-docs` gates", text)
+        self.assertIn("Move completed approved items from `Planned Changes` to `Current Implementation`", text)
+        self.assertIn("Add or refresh source evidence and validation basis", text)
+        self.assertIn("Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes", text)
+        self.assertIn("Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results", text)
 
     def test_atomic_impl_openai_metadata_mentions_skill_name(self) -> None:
         text = read(OPENAI_YAML)
