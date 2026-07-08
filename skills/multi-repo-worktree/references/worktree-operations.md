@@ -41,7 +41,26 @@ State inspection is read-only. Use:
 - `git status --porcelain`
 - `git worktree list --porcelain`
 
-Summarize each repo independently. If the same branch name appears in several repositories, list each repo and commit separately.
+User-facing `status` output must avoid Markdown tables because long paths break in narrow views. Use this shape instead:
+
+```text
+대상 묶음: worktrees/<bundle-name>
+원본 브랜치: <source-branch (추정)|확인 필요>
+기준 폴더: <absolute-bundle-folder>
+
+<repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>
+```
+
+Rules:
+
+- Show the common path once as `기준 폴더`.
+- Do not print extra workspace path or repository-count headers before the status block.
+- Show each repo on one line.
+- Show `폴더` as the path relative to `기준 폴더`.
+- Keep `dirty` and `clean` unchanged.
+- If the source branch comes from sibling worktree state rather than explicit user input, append `(추정)`.
+- Do not put `upstream`, `HEAD`, or risk notes into the primary repo line. Mention them separately only when they affect the user's requested next action.
+- If the same branch name appears in several repositories, list each repo separately.
 
 ## Create
 
