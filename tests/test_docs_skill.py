@@ -1373,21 +1373,31 @@ class DocsSkillTests(unittest.TestCase):
 
         for required in [
             "sequential domain-bundle queue",
-            "exactly one writer subagent and exactly one independent reviewer subagent",
+            "exactly one writer subagent and exactly four independent domain draft reviewer subagents",
+            "Domain Draft Atom Boundary / Context Hygiene Reviewer",
+            "Domain Draft Source Closure / Fact Fidelity Reviewer",
+            "Domain Draft Implementation Reconstruction / High-Risk Reviewer",
+            "Domain Draft Baseline / Reporting Reviewer",
             "Do not run multiple domain bundles in parallel by default",
-            "rerun the same reviewer cycle until PASS",
+            "One draft reviewer must not combine two perspectives",
+            "main agent must aggregate the four draft reviewer results instead of substituting its own direct PASS",
+            "rerun the failed perspective plus any perspective whose evidence changed",
             "Do not start the next domain bundle",
-            "Only a PASSed domain bundle can become input for the next bundle",
+            "Only a domain bundle with all four draft reviewer PASS results can become input for the next bundle",
             "reopen the affected earlier bundle",
             "Rerun any dependent later bundles whose PASS basis changed",
             "After every accepted domain bundle PASSes, the main agent orchestrates the Post-Write Consistency Review Gate",
-            "Domain reviewers own their bundle's PASS",
+            "The four domain draft reviewers own their bundle's PASS",
             "the main agent aggregates those results",
         ]:
             self.assertIn(required, combined)
 
         self.assertIn("After criteria approval and Goal handoff, process multi-domain docs generation as a sequential domain-bundle queue", skill)
+        self.assertIn("four independent domain draft reviewer subagents", skill)
+        self.assertIn("Rerun that same bundle until all four draft reviewers PASS", skill)
         self.assertIn("run mandatory post-write perspective reviews with separate subagents", skill)
+        self.assertIn("Each draft and post-write reviewer must PASS/FAIL from its assigned principle files", skill)
+        self.assertIn("Missing any required principle file is the same as a missing draft perspective", generation)
         self.assertIn("blocks a domain bundle only when the unresolved decision prevents that bundle from being implementation-reconstruction-ready or judgment-ready", generation)
         self.assertIn("Other uncertainty may remain as a labeled gap with source evidence and next action", generation)
 
