@@ -58,6 +58,8 @@ Implementation reconstruction review must not be combined with atom-boundary or 
 
 ## Source Fact Fidelity Gate
 
+In the final post-write gate, source fact fidelity is owned by the `Post-Write Source Closure / Fact Fidelity Reviewer`. This is not only a source mapping check: the reviewer must compare judgment-bearing docs claims with the actual inspected source branch.
+
 Atom `Rules`, `Current Implementation`, `Gaps`, evidence packets, and review findings must preserve the source-observed behavior actually reachable through the inspected entry path. Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply.
 
 When documenting validation, refusal, defaulting, fallback, exception, read-only, or storage-effect behavior, compare the relevant source branches instead of relying on one identifier. Inspect the endpoint or caller binding, validator activation, service guard, null handling, blank handling, optional dependency fallback, default value fallback, explicit exception branches, runtime exception possibility, transaction mode, and persistence calls when those details affect product, operation, or integration behavior.

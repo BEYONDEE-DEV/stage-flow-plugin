@@ -1400,7 +1400,7 @@ class DocsSkillTests(unittest.TestCase):
 
         for reviewer in [
             "Post-Write Atom Boundary / Context Hygiene Reviewer",
-            "Post-Write Source Closure Reviewer",
+            "Post-Write Source Closure / Fact Fidelity Reviewer",
             "Post-Write Implementation Reconstruction / High-Risk Reviewer",
             "Post-Write Baseline / Reporting Reviewer",
         ]:
@@ -1409,21 +1409,40 @@ class DocsSkillTests(unittest.TestCase):
         for required in [
             "four separate subagents",
             "One subagent must not combine two of these perspectives",
-            "must not substitute its own direct PASS",
+            "must not substitute its own direct PASS for any missing perspective or required principle-file review",
+            "principle files reviewed",
+            "Missing any required principle file is the same as a missing perspective review",
             "A final post-write PASS requires all four required perspectives to PASS",
-            "a missing perspective review is itself a blocking post-write FAIL",
+            "missing perspective review or missing principle-file review is itself a blocking post-write FAIL",
             "The main agent aggregates the four post-write reviewer results",
         ]:
             self.assertIn(required, generation)
 
+        for principle_file in [
+            "atomic-document-contract.md",
+            "atom-format-and-judgment.md",
+            "atomization-criteria-contract.md",
+            "source-convention-and-domain-policy.md",
+            "service-logic-coverage.md",
+            "change-judgment-policy.md",
+            "source-baseline-and-change-plan.md",
+            "docs-generation-flow.md",
+            "project-documents-and-inventory.md",
+        ]:
+            self.assertIn(principle_file, generation)
+
         self.assertIn("main agent aggregates those results and must not replace any required perspective review with its own direct quality PASS", skill)
+        self.assertIn("source closure/fact fidelity", skill)
         self.assertIn("Record each perspective's PASS/FAIL/provisional result", post_write)
+        self.assertIn("principle files reviewed", post_write)
         self.assertIn("rerun the relevant separate post-write reviewer subagent", post_write)
 
         for failure in [
             "over-compressed atoms",
             "behavior hidden in context atoms",
             "missing row-level closure",
+            "owns the Source Fact Fidelity Gate",
+            "actual inspected source branch",
             "same-functional-behavior implementation",
             "omit required high-risk matrices",
             "strict baseline-ready status",
@@ -1433,6 +1452,7 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Context atoms are not a shortcut for behavior coverage", service)
         self.assertIn("Review must fail context atom pollution", service)
         self.assertIn("A separate reconstruction/high-risk reviewer", service)
+        self.assertIn("source fact fidelity is owned by the `Post-Write Source Closure / Fact Fidelity Reviewer`", service)
 
     def test_required_subagent_gates_are_authorized_inside_accepted_operation(self) -> None:
         skill = read(DOCS_SKILL)
