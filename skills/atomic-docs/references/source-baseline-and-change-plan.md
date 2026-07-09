@@ -52,7 +52,7 @@ For domain-level work, update the domain context atom when the domain goal, resp
 A change plan should group by domain and list:
 
 - the limited first write action for draft criteria creation or update at `project/atomization-criteria.md` when criteria are new or changed
-- `검토된 Atom화 관점`, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
+- the criteria document's `Atom화 관점` section, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
 - user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
 - source exploration results that update the criteria document instead of remaining only in the change plan
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation

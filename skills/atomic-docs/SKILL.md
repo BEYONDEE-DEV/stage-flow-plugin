@@ -1,6 +1,6 @@
 ---
 name: atomic-docs
-description: "Use when the user says atomic-docs, atomic docs, atomic docs, the Stageflow atomic documentation skill, or asks Stageflow to create, update, inspect, refresh, or manage atomic project docs as a storage-mode-aware natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
+description: "Use when the user says atomic-docs, atomic docs, the Stageflow atomic documentation skill, or asks Stageflow to create, update, inspect, refresh, or manage atomic project docs as a storage-mode-aware natural-language knowledge base, especially docs that preserve intent, rules, current implementation, planned changes, gaps, source-code commit baselines, or atomic graph relationships."
 ---
 
 # Atomic Docs
