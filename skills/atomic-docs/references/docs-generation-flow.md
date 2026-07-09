@@ -4,6 +4,7 @@
 
 - [Atomic Docs Goal Gate](#atomic-docs-goal-gate)
 - [Atomic Docs Operation State](#atomic-docs-operation-state)
+- [Required Subagent Authorization](#required-subagent-authorization)
 - [Domain Subagent Workflow](#domain-subagent-workflow)
 - [Post-Write Consistency Review Gate](#post-write-consistency-review-gate)
 
@@ -17,7 +18,7 @@ The Goal objective must name the approved criteria document path, docs root, acc
 
 If `create_goal` is unavailable or fails, do not start docs generation. Report the Goal creation blocker to the user and leave project documents, common/domain atoms, service logic inventory, domain writer/reviewer subagents, graph edges, and source-baseline metadata untouched.
 
-Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, blocked by review FAIL, or waiting for criteria/scope approval.
+Complete the Goal only after the accepted docs operation is actually complete. Do not mark the Goal complete while work is incomplete, waiting for user input, or waiting for criteria/scope approval. A required reviewer/subagent that has not run yet is not a Goal blocker; run it. A review FAIL that can be corrected inside the accepted write scope is not a Goal-blocked state; revise and rerun the relevant review.
 
 ## Atomic Docs Operation State
 
@@ -33,6 +34,14 @@ After criteria approval and accepted docs write scope, create or resume atomic-d
 This namespace is not the managed docs root and is not a Stageflow workflow request artifact. It stores the current accepted write scope, domain-bundle queue, active bundle, writer/reviewer PASS or FAIL status, temporary inventory/evidence/review paths, and `post_write_gate` status. Do not store those live run fields in `project/atomization-criteria.md`, atom files, source-baseline metadata, or durable project docs.
 
 Temporary writer/reviewer files may live beside the request state as `inventory.md`, `evidence.md`, `review.md`, or `post-write-review.md`. Treat them as operation-local scratch and audit material, not code suitability evidence. Only copy a service logic inventory into `<doc-root>/project/service-logic-inventory.md` when the accepted scope explicitly keeps a final coverage index and the entries are synced to real `atom_key` and AID references.
+
+## Required Subagent Authorization
+
+Accepted bootstrap/criteria draft scope authorizes the criteria-review subagent and criteria-review/revision cycles. Do not ask for separate user approval solely to run criteria-review or rerun it after a draft structure FAIL. Criteria approval is still required before docs generation.
+
+After criteria approval, accepted docs write scope, and Atomic Docs Goal handoff, required domain writer subagents, independent domain reviewer subagents, same-bundle reruns after reviewer FAIL, and the main post-write consistency/source fact gates are authorized parts of the accepted operation. Run them automatically inside the accepted scope instead of stopping because subagent execution was not named again.
+
+During required subagent/review cycles, ask the user again only when a required step needs deletion, migration, push, an external service call, or when a reviewer/gate finds a blocker that cannot PASS without user decision. Do not report the operation as blocked merely because a required reviewer has not run, a post-write gate has not run, or a review FAIL still needs in-scope revision and rerun.
 
 ## Domain Subagent Workflow
 

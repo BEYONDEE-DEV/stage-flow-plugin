@@ -70,4 +70,4 @@ The Codex Goal used after criteria approval is an execution scope for performing
 
 Do not write Goal status or Goal completion as atom-level status, per-atom freshness, or judgment evidence. Code suitability judgments still come from approved criteria, generated atoms, source evidence, graph relationships, baseline metadata, and controlled judgment labels.
 
-If the Goal is incomplete, blocked, waiting for user input, or blocked by review FAIL, preserve that state in the operation summary or change plan rather than in atom judgment labels. Atom files should continue to describe intent, rules, current implementation, planned changes, and gaps.
+If the Goal is incomplete, waiting for user input, or blocked by a user-decision, tool, or runtime blocker, preserve that state in the operation summary or change plan rather than in atom judgment labels. Required reviewer/gate execution that has not run yet and review FAIL that can be corrected inside the accepted scope are not Goal-blocked states; run, revise, and rerun the required gate first. Atom files should continue to describe intent, rules, current implementation, planned changes, and gaps.

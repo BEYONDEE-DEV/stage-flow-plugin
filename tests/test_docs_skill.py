@@ -1383,6 +1383,28 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("blocks a domain bundle only when the unresolved decision prevents that bundle from being implementation-reconstruction-ready or judgment-ready", generation)
         self.assertIn("Other uncertainty may remain as a labeled gap with source evidence and next action", generation)
 
+    def test_required_subagent_gates_are_authorized_inside_accepted_operation(self) -> None:
+        skill = read(DOCS_SKILL)
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        service = read(DOCS_REFS / "service-logic-coverage.md")
+        combined = skill + "\n" + generation + "\n" + service
+
+        self.assertIn("Treat required atomic-docs subagents and review gates as authorized by the accepted operation scope", skill)
+        self.assertIn("Accepted bootstrap/criteria draft scope authorizes criteria-review/revision cycles", skill)
+        self.assertIn("domain writer/reviewer subagents, reviewer FAIL reruns, and post-write gates are required parts of the operation", skill)
+        self.assertIn("do not need separate user approval just to run", skill)
+
+        self.assertIn("Required Subagent Authorization", generation)
+        self.assertIn("Do not ask for separate user approval solely to run criteria-review", generation)
+        self.assertIn("Run them automatically inside the accepted scope instead of stopping because subagent execution was not named again", generation)
+        self.assertIn("During those required subagent/review cycles, ask the user again only when a required step needs deletion, migration, push, an external service call", skill)
+        self.assertIn("During required subagent/review cycles, ask the user again only when a required step needs deletion, migration, push, an external service call", generation)
+        self.assertIn("reviewer/gate blocker that cannot PASS without user decision", combined)
+
+        self.assertIn("A required reviewer/subagent that has not run yet is not a Goal blocker", generation)
+        self.assertIn("A review FAIL that can be corrected inside the accepted write scope is not a Goal-blocked state", generation)
+        self.assertIn("Required reviewer/gate execution that has not run yet and review FAIL that can be corrected inside the accepted scope are not Goal-blocked states", service)
+
     def test_refresh_flow_requires_goal_after_criteria_approval_before_docs_generation(self) -> None:
         text = read_refs(
             "docs-generation-flow.md",
@@ -1415,7 +1437,8 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("project documents, common/domain atoms, service logic inventory", text)
         self.assertIn("domain writer/reviewer subagents", text)
         self.assertIn("Complete the Goal only after the accepted docs operation is actually complete", text)
-        self.assertIn("waiting for user input, blocked by review FAIL", text)
+        self.assertIn("waiting for user input, or waiting for criteria/scope approval", text)
+        self.assertIn("review FAIL that can be corrected inside the accepted write scope is not a Goal-blocked state", text)
         self.assertIn("Atomic Docs Goal Gate status", text)
 
     def test_refresh_flow_uses_source_convention_document_as_separate_scope(self) -> None:
