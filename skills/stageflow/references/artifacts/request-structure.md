@@ -27,6 +27,7 @@ This file owns registry files, request folders, and routing to stage rule and re
 {
   "request_id": "20260621-1200-three-stage-workflow",
   "phase": "definition",
+  "active": true,
   "activated_by": "explicit_skill_invocation"
 }
 ```

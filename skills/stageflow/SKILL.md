@@ -1,6 +1,6 @@
 ---
 name: stageflow
-description: "Use when the user explicitly asks to use Stageflow, stage-flow, stageflow, a Stageflow workflow, `.stageflow`, or the stageflow plugin, or when a session current pointer shows an active Stageflow request. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
+description: "Use when the user explicitly asks to use Stageflow, stage-flow, stageflow, a Stageflow workflow, `.stageflow`, or the stageflow plugin, or when `.stageflow/sessions/<session-id>/current.json` has `active: true`. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
 ---
 
 # Stageflow
@@ -47,7 +47,7 @@ Do not use the removed root-level gates as required artifacts: `context.md`, `so
 ## Non-Negotiable Rules
 
 - Inspect the project before asking definition questions.
-- Keep every request in `.stageflow/requests/<request-id>/`, and use `.stageflow/sessions/<session-id>/current.json` as the active request authority.
+- Keep every request in `.stageflow/requests/<request-id>/`, and use `.stageflow/sessions/<session-id>/current.json` with `active: true` as the active request authority.
 - Do not use `create_goal` or `goal.md` for normal definition clarification. After a user stop signal, the only allowed definition goal is the transition-risk audit recorded in `transition-risk-goal.md` and `transition-risk.md`; it is a goal-achievement decision readiness audit.
 - Run `implementation-plan` and `implementation` as goals before writing or revising those later-stage artifacts, and record goal receipt in their `goal.md`.
 - Review each stage artifact with a subagent. The main agent writes `review/final.md`; self-review never satisfies the review gate.
@@ -95,7 +95,7 @@ At the start of every turn using this skill:
 1. Read the latest `UserPromptSubmit` hook result under `.stageflow/hook-state/sessions/<session-id>/main/current-turn.json`; fall back to `.stageflow/hook-state/current-turn.json` only when scoped state is unavailable.
 2. Process `status` and `turn_start_action` before any substantive answer:
    - `PREPASS` / `none`: outside Stageflow unless explicitly invoked.
-   - `REQUEST_REQUIRED` / `create_request`: inspect the project, create request scaffolding including `01-definition/definition-store/`, and write the session current pointer.
+   - `REQUEST_REQUIRED` / `create_request`: inspect the project, create request scaffolding including `01-definition/definition-store/`, and write the session current pointer with `active: true`.
    - `DEFINITION_STORE_REQUIRED` / `create_definition_store`: create required store files and rerun current-stage validation before processing the user answer.
    - `INVALID_CURRENT` / repair action: repair or replace current pointer/state before continuing.
    - `COMPLETED_CURRENT` / `start_new_request`: create or select a non-completed request before new workflow work.
@@ -106,7 +106,7 @@ At the start of every turn using this skill:
    - `SNAPSHOT_CURRENT_REQUIRED`: sync `definition.md` from the store and update the store fingerprint.
    - `IMPLEMENTATION_BLOCKED`: return to implementation-plan until its gates pass.
    - `OK`: continue only from the validated current stage.
-3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all stage folders, and write `.stageflow/sessions/<session-id>/current.json`.
+3. If Stageflow was explicitly invoked and no usable session current pointer exists, inspect the project, create a new request folder, scaffold all stage folders, and write `.stageflow/sessions/<session-id>/current.json` with `active: true`.
 4. Read `.stageflow/index.json`, session current pointer, request `state.json`, and current stage files.
 5. Decide whether the latest user message continues the current request or starts a separate request.
 6. Run the validator for the current stage when artifacts exist.

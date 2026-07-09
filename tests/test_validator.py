@@ -315,7 +315,7 @@ class ValidatorThreeStageTests(unittest.TestCase):
             encoding="utf-8",
         )
         (stageflow / "sessions" / "session-1" / "current.json").write_text(
-            json.dumps({"request_id": REQUEST_ID, "phase": state_phase}, indent=2),
+            json.dumps({"request_id": REQUEST_ID, "phase": state_phase, "active": True}, indent=2),
             encoding="utf-8",
         )
         (request_dir / "state.json").write_text(

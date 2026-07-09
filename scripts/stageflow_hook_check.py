@@ -282,6 +282,24 @@ def current_path(root: Path, payload: dict[str, Any]) -> Path:
     return root / ".stageflow" / "sessions" / session_id / "current.json"
 
 
+def is_stageflow_active(current: dict[str, Any] | None) -> bool:
+    return isinstance(current, dict) and current.get("active") is True
+
+def write_current(root: Path, payload: dict[str, Any], current: dict[str, Any]) -> bool:
+    path = current_path(root, payload)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+def set_stageflow_active(root: Path, payload: dict[str, Any], current: dict[str, Any], active: bool) -> dict[str, Any]:
+    updated = dict(current)
+    updated["active"] = active
+    write_current(root, payload, updated)
+    return updated
+
 def load_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
@@ -1118,6 +1136,9 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
     explicit = is_explicit_workflow(prompt)
     stageflow_dir = root / ".stageflow"
     current = load_json(current_path(root, payload))
+    if current is not None and explicit and not is_stageflow_active(current):
+        current = set_stageflow_active(root, payload, current, True)
+        result["stageflow_activated"] = True
 
     if current is None:
         if not explicit:
@@ -1140,6 +1161,19 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
                 "Inspect the project, create `.stageflow` request scaffolding including `01-definition/definition-store/`, and write the session current pointer before any substantive workflow answer.",
             )
             write_turn_state(root, payload, result)
+        return result
+
+    if not explicit and not is_stageflow_active(current):
+        result.update(
+            {
+                "status": "PREPASS",
+                "severity": "info",
+                "stageflow_inactive_prepass": True,
+                "preflight_required": False,
+                "reason": "Stageflow session current is inactive",
+            }
+        )
+        write_turn_state(root, payload, result)
         return result
 
     request_id = str(current.get("request_id") or "").strip()
@@ -1186,6 +1220,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         return result
 
     if phase == "completed" and not explicit:
+        current = set_stageflow_active(root, payload, current, False)
         result.update(
             {
                 "status": "PREPASS",
@@ -1244,6 +1279,7 @@ def handle_user_prompt_submit(root: Path, payload: dict[str, Any], result: dict[
         action = "repair_current_stage"
         instruction = "Repair the current Stageflow stage artifacts until the current-stage validator passes before advancing or answering as if the stage is ready."
     if phase == "completed":
+        current = set_stageflow_active(root, payload, current, False)
         status = "COMPLETED_CURRENT" if validation["status"] == "PASS" else "WARNING"
         severity = "warning"
         action = "start_new_request"
@@ -1373,7 +1409,13 @@ def enforce_awaiting_user_stop_continuity(
 
 
 def handle_stop(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    turn = read_turn_state(root, payload)
+    current = load_json(current_path(root, payload))
+    if not is_stageflow_active(current):
+        turn = read_turn_state(root, payload)
+        if not turn.get("request_creation_required"):
+            return result
+    else:
+        turn = read_turn_state(root, payload)
     if turn.get("preflight_required"):
         last_message = extract_last_assistant(payload)
 
@@ -1700,7 +1742,7 @@ def is_awaiting_user_definition_write(payload: dict[str, Any]) -> bool:
 
 def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     current = load_json(current_path(root, payload))
-    if current is None:
+    if not is_stageflow_active(current):
         return None, None
     request_id = str(current.get("request_id") or "").strip()
     state = load_json(root / ".stageflow" / "requests" / request_id / "state.json") if request_id else None
@@ -1709,7 +1751,13 @@ def active_request(root: Path, payload: dict[str, Any]) -> tuple[dict[str, Any] 
 
 def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     result["event"] = "pre_tool_use"
-    turn = read_turn_state(root, payload)
+    current = load_json(current_path(root, payload))
+    if not is_stageflow_active(current):
+        turn = read_turn_state(root, payload)
+        if not turn.get("request_creation_required"):
+            return result
+    else:
+        turn = read_turn_state(root, payload)
     gate = str(current_definition_store_gate(root, payload) or turn.get("definition_store_gate") or "")
     if gate:
         result["definition_store_gate"] = gate
@@ -1843,6 +1891,8 @@ def handle_pre_tool_use(root: Path, payload: dict[str, Any], result: dict[str, A
     return result
 
 def handle_subagent(event: str, root: Path, payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    if not is_stageflow_active(load_json(current_path(root, payload))):
+        return result
     turn = read_turn_state(root, payload)
     current, state = active_request(root, payload)
     request_id = str((current or {}).get("request_id") or turn.get("current_request_id") or "").strip()

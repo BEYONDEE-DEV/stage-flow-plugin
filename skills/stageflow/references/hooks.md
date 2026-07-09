@@ -54,20 +54,20 @@ Behavior:
 - Writes to `.stageflow/**` artifacts are allowed so the workflow can be created or repaired, except that while `DEFINITION_STORE_REQUIRED` is active the main agent is limited to required `01-definition/definition-store/` files. During store-backed definition clarification, live `sync-state.current_gate` controls access before stale turn-start state: store-only gates block `01-definition/definition.md` read/write, targeted-sync gates allow only targeted sync store files, full-consistency gates allow only full-consistency store reports, and `snapshot-current` allows the main agent to sync `definition.md`.
 - Read-like tools that target `01-definition/definition.md` are blocked during store-only definition answer turns. The hot path must use `definition-store/working-set.json` instead of repeatedly reading the full snapshot.
 - Non-write tools and read-only shell commands return `PREPASS`.
-- Non-Stageflow file edits are blocked while an active Stageflow request lacks a valid session current pointer or while the plugin-bundled validator fails `--phase implementation-plan` for the target project root.
+- Non-Stageflow file edits are blocked only while the session current pointer has `active: true` and either lacks a valid request or the plugin-bundled validator fails `--phase implementation-plan` for the target project root.
 - Completed Stageflow requests do not gate unrelated non-Stageflow edits. Explicit Stageflow resume/status/start prompts against a completed current request still return `COMPLETED_CURRENT`.
 
 ## UserPromptSubmit
 
-The hook reads `.stageflow/sessions/<session-id>/current.json`, then validates the current request stage with the plugin-bundled `scripts/validate_stageflow.py` against the target project root.
+The hook reads `.stageflow/sessions/<session-id>/current.json`. For non-explicit prompts, it validates the current request only when that file has `active: true`; missing or false `active` means Stageflow is inactive and returns `PREPASS`. Explicit Stageflow prompts set `active: true` on an existing current pointer before validation, or request new scaffolding when no current pointer exists.
 
 Behavior:
 
-- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, an internal preflight marker, and store turn state for the Stop hook. Request creation must include `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`.
-- Non-Stageflow prompts without a session current pointer, including maintenance mentions such as Stageflow plugin docs or hook debugging, record `PREPASS` and `turn_start_action: none`; stdout is empty. This PREPASS state overwrites any stale prior turn state so Stop does not block unrelated later turns.
-- Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state`.
+- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, an internal preflight marker, and store turn state for the Stop hook. Request creation must write the session current pointer with `active: true` and include `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`.
+- Non-Stageflow prompts without a session current pointer, or with a current pointer whose `active` is missing or false, record `PREPASS` and `turn_start_action: none`; stdout is empty. This PREPASS state overwrites any stale prior turn state so Stop does not block unrelated later turns.
+- Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state` only after explicit Stageflow activation or while `active: true` is already set.
 - Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` only for explicit Stageflow prompts. Non-Stageflow prompts with a completed current pointer record `PREPASS`.
-- Active requests record an internal preflight marker:
+- Requests with `current.json.active: true` record an internal preflight marker:
 
 ```text
 Stageflow preflight: current=<request-id>, phase=<phase>, validation=<PASS|FAIL|AWAITING_USER>

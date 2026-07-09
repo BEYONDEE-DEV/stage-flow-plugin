@@ -340,7 +340,7 @@ class HookCheckThreeStageTests(unittest.TestCase):
             encoding="utf-8",
         )
         (stageflow / "sessions" / "session-1" / "current.json").write_text(
-            json.dumps({"request_id": REQUEST_ID, "phase": state_phase}, indent=2),
+            json.dumps({"request_id": REQUEST_ID, "phase": state_phase, "active": True}, indent=2),
             encoding="utf-8",
         )
         (request_dir / "state.json").write_text(
@@ -834,7 +834,7 @@ Approved.
                 encoding="utf-8",
             )
             (root / ".stageflow" / "sessions" / "session-1" / "current.json").write_text(
-                json.dumps({"request_id": REQUEST_ID, "phase": "definition"}, indent=2),
+                json.dumps({"request_id": REQUEST_ID, "phase": "definition", "active": True}, indent=2),
                 encoding="utf-8",
             )
             (request_dir / "state.json").write_text(
@@ -911,6 +911,55 @@ Approved.
             self.assertEqual(result["turn_start_action"], "none")
             self.assertEqual(result["_stdout"], "")
 
+    def test_current_without_active_prepasses_for_plain_prompt(self):
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            current_data = json.loads(current_path.read_text(encoding="utf-8"))
+            current_data.pop("active", None)
+            current_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "README 문구 수정해줘"})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertTrue(result["stageflow_inactive_prepass"])
+            self.assertEqual(result["_stdout"], "")
+
+    def test_inactive_current_false_prepasses_for_plain_prompt(self):
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            current_data = json.loads(current_path.read_text(encoding="utf-8"))
+            current_data["active"] = False
+            current_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "README 문구 수정해줘"})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertTrue(result["stageflow_inactive_prepass"])
+            self.assertEqual(result["_stdout"], "")
+
+    def test_explicit_stageflow_prompt_activates_existing_current(self):
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            current_data = json.loads(current_path.read_text(encoding="utf-8"))
+            current_data.pop("active", None)
+            current_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
+            self.assertEqual(result["status"], "OK")
+            self.assertTrue(result["stageflow_activated"])
+            self.assertTrue(json.loads(current_path.read_text(encoding="utf-8"))["active"])
+
+    def test_simple_workflow_prompt_does_not_activate_stageflow_current(self):
+        with temp_project() as root:
+            self.create_project(root, "definition")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            current_data = json.loads(current_path.read_text(encoding="utf-8"))
+            current_data.pop("active", None)
+            current_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            prompt = "[$stageflow:simple-workflow] 스킬을 이용하여 atomic-docs 스킬 개선"
+            result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": prompt})
+            self.assertEqual(result["status"], "PREPASS")
+            self.assertTrue(result["stageflow_inactive_prepass"])
+            self.assertIsNone(json.loads(current_path.read_text(encoding="utf-8")).get("active"))
+
     def test_plain_prompt_clears_stale_request_required_state(self) -> None:
         with temp_project() as root:
             required = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
@@ -925,7 +974,7 @@ Approved.
         with temp_project() as root:
             current_dir = root / ".stageflow" / "sessions" / "session-1"
             current_dir.mkdir(parents=True)
-            (current_dir / "current.json").write_text(json.dumps({"request_id": "missing-request", "phase": "definition"}, indent=2), encoding="utf-8")
+            (current_dir / "current.json").write_text(json.dumps({"request_id": "missing-request", "phase": "definition", "active": True}, indent=2), encoding="utf-8")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "INVALID_CURRENT")
             self.assertEqual(result["turn_start_action"], "repair_current_pointer")
@@ -955,7 +1004,7 @@ Approved.
             state = root / ".stageflow" / "requests" / REQUEST_ID / "state.json"
             current = root / ".stageflow" / "sessions" / "session-1" / "current.json"
             state.write_text(json.dumps({"request_id": REQUEST_ID, "phase": "service-plan"}, indent=2), encoding="utf-8")
-            current.write_text(json.dumps({"request_id": REQUEST_ID, "phase": "service-plan"}, indent=2), encoding="utf-8")
+            current.write_text(json.dumps({"request_id": REQUEST_ID, "phase": "service-plan", "active": True}, indent=2), encoding="utf-8")
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "INVALID_CURRENT")
             self.assertEqual(result["turn_start_action"], "repair_current_state")
@@ -966,6 +1015,8 @@ Approved.
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "stageflow status"})
             self.assertEqual(result["status"], "COMPLETED_CURRENT")
             self.assertEqual(result["turn_start_action"], "start_new_request")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            self.assertFalse(json.loads(current_path.read_text(encoding="utf-8"))["active"])
 
     def test_completed_current_non_stageflow_prompt_prepasses(self) -> None:
         with temp_project() as root:
@@ -973,6 +1024,8 @@ Approved.
             result = self.run_hook(root, "user_prompt_submit", {"session_id": "session-1", "prompt": "README 문구 수정해줘"})
             self.assertEqual(result["status"], "PREPASS")
             self.assertTrue(result["completed_current_prepass"])
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            self.assertFalse(json.loads(current_path.read_text(encoding="utf-8"))["active"])
             self.assertEqual(result["_stdout"], "")
 
     def test_completed_current_does_not_block_non_stageflow_write(self) -> None:
@@ -983,6 +1036,21 @@ Approved.
                 "pre_tool_use",
                 {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}},
             )
+            self.assertEqual(result["_wire_output"], {})
+
+    def test_inactive_current_does_not_block_non_stageflow_write(self):
+        with temp_project() as root:
+            self.create_project(root, "implementation")
+            current_path = root / ".stageflow" / "sessions" / "session-1" / "current.json"
+            current_data = json.loads(current_path.read_text(encoding="utf-8"))
+            current_data["active"] = False
+            current_path.write_text(json.dumps(current_data, indent=2), encoding="utf-8")
+            result = self.run_hook(
+                root,
+                "pre_tool_use",
+                {"session_id": "session-1", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}},
+            )
+            self.assertEqual(result["status"], "PREPASS")
             self.assertEqual(result["_wire_output"], {})
 
     def test_implementation_prompt_checks_implementation_plan_gate(self) -> None:
