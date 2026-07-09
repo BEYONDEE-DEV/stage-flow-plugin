@@ -59,14 +59,14 @@ Behavior:
 
 ## UserPromptSubmit
 
-The hook reads `.stageflow/sessions/<session-id>/current.json`. For non-explicit prompts, it validates the current request only when that file has `active: true`; missing or false `active` means Stageflow is inactive and returns `PREPASS`. Explicit Stageflow prompts set `active: true` on an existing current pointer before validation, or request new scaffolding when no current pointer exists.
+The hook reads `.stageflow/sessions/<session-id>/current.json`. For non-explicit prompts, it validates the current request only when that file has `active: true`; missing or false `active` means Stageflow is inactive and returns `PREPASS`. Only `$stageflow:stageflow` or `[$stageflow:stageflow](...)` is an explicit Stageflow prompt. It sets `active: true` on an existing current pointer before validation, or requests new scaffolding when no current pointer exists.
 
 Behavior:
 
-- Command-like Stageflow prompts without a session current pointer, such as `workflow status`, `use Stageflow`, or `resume Stageflow`, record `REQUEST_REQUIRED`, `turn_start_action: create_request`, an internal preflight marker, and store turn state for the Stop hook. Request creation must write the session current pointer with `active: true` and include `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`.
+- `$stageflow:stageflow` prompts without a session current pointer record `REQUEST_REQUIRED`, `turn_start_action: create_request`, an internal preflight marker, and store turn state for the Stop hook. Request creation must write the session current pointer with `active: true` and include `01-definition/definition-store/` with `working-set.json`, `decision-ledger.jsonl`, `trace-index.json`, and `sync-state.json`.
 - Non-Stageflow prompts without a session current pointer, or with a current pointer whose `active` is missing or false, record `PREPASS` and `turn_start_action: none`; stdout is empty. This PREPASS state overwrites any stale prior turn state so Stop does not block unrelated later turns.
 - Invalid or stale current pointers record `INVALID_CURRENT` with `turn_start_action: repair_current_pointer` or `repair_current_state` only after explicit Stageflow activation or while `active: true` is already set.
-- Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` only for explicit Stageflow prompts. Non-Stageflow prompts with a completed current pointer record `PREPASS`.
+- Completed current requests record `COMPLETED_CURRENT` with `turn_start_action: start_new_request` only for `$stageflow:stageflow` prompts. Non-Stageflow prompts with a completed current pointer record `PREPASS`.
 - Requests with `current.json.active: true` record an internal preflight marker:
 
 ```text

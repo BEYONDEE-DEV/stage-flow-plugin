@@ -1,6 +1,6 @@
 ---
 name: stageflow
-description: "Use when the user explicitly asks to use Stageflow, stage-flow, stageflow, a Stageflow workflow, `.stageflow`, or the stageflow plugin, or when `.stageflow/sessions/<session-id>/current.json` has `active: true`. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
+description: "Use only when the user invokes `$stageflow:stageflow` or `[$stageflow:stageflow](...)`, or when the Stageflow session current has `active: true`. Enforces a fixed three-stage loop: definition, implementation plan, and implementation; definition requires artifact/review/approval, while later stages also require a goal handoff before advancement."
 ---
 
 # Stageflow
