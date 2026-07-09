@@ -61,11 +61,11 @@ A change plan should group by domain and list:
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
 - operation-local service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
-- implementation reconstruction readiness for the accepted scope, including frontend/UI coverage, backend/API/service coverage, and unresolved `confirmation_needed` blockers that prevent docs-only implementation
+- implementation reconstruction readiness for the accepted scope, including frontend/UI coverage, backend/API/service coverage, unresolved `confirmation_needed` blockers, and separate `deferred_decision` blockers that prevent docs-only implementation
 - AID assignments for new or changed atom meaning lines, and explicit AID migrations when existing IDs cannot be preserved
 - affected atom files
 - affected atom sections
-- judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `confirmation_needed`, or `docs_stale`
+- judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `deferred_decision`, `confirmation_needed`, or `docs_stale`
 - related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings whenever the referenced atom lines are known
 - new domains, category or domain-path moves, atom splits, atom merges, and split proposals
 - atom identity changes, including `atom_key` preservation for moves/renames/splits/merges, legacy slug-derived fallback migrations, and duplicate `atom_key` conflicts
@@ -75,7 +75,7 @@ A change plan should group by domain and list:
 - inferred `Intent` or `Rules` that require confirmation
 - natural-language `Current Implementation` changes
 - `Planned Changes` reconciliation candidates
-- `Gaps`, bug candidates, uncertain mappings, rename/merge proposals, and implemented-plan candidates
+- `Gaps`, bug candidates, uncertain mappings, deferred decisions, rename/merge proposals, and implemented-plan candidates
 - graph path corrections, `target_key`/`target_path` consistency, or target-key conflicts
 - source-baseline metadata updates and docs-root config writes, including whether the update is limited to a judgment-ready partial scope or a project-wide judgment-ready baseline, and whether that scope is implementation-reconstruction-ready
 - unresolved boundary questions that must be accepted before writing confirmed structure
@@ -85,6 +85,8 @@ The accepted change plan defines the only paths and write actions allowed for th
 ## Inference And Gaps
 
 The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `Rules` from code. Inferred `Intent` and `Rules` remain inferred until confirmed by the user. Inferred `Intent` or inferred `Rules` alone cannot create confirmed required behavior, confirmed out-of-scope behavior, or `matches_confirmed_intent`; use `confirmation_needed` until the user or approved workflow confirms the basis.
+
+When a user answers a confirmation question, do not turn that same answer back into `confirmation_needed`. If the answer confirms future implementation or behavior change, close the question as a `Planned Changes` item; use `approved_required_change` or `approved_optional_change` for the planned behavior, and use `missing_required_behavior` when current source does not implement that confirmed future behavior. If the answer explicitly defers deciding a concrete policy, boundary, condition, API contract, or permission mapping, close the question as `deferred_decision`; report it separately from `confirmation_needed` and count it separately in user-facing summaries. Create a new `confirmation_needed` item only for a different unresolved detail that is neither confirmed nor deliberately deferred.
 
 If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
 

@@ -382,6 +382,7 @@ class DocsSkillTests(unittest.TestCase):
             "missing_required_behavior",
             "unapproved_implemented_behavior",
             "out_of_scope_behavior",
+            "deferred_decision",
             "confirmation_needed",
             "docs_stale",
         ]:
@@ -412,8 +413,15 @@ class DocsSkillTests(unittest.TestCase):
             "approved_optional_change",
             "tentative_future_change",
             "implemented_pending_confirmation",
+            "deferred_decision",
         ]:
             self.assertIn(planned_type, text)
+        self.assertIn("Do not use `confirmation_needed` for an answer the user has already resolved", text)
+        self.assertIn("If the user confirms a future implementation or behavior change", text)
+        self.assertIn("record the concrete future behavior as `approved_required_change` or `approved_optional_change`", text)
+        self.assertIn("use `missing_required_behavior` for the mismatch", text)
+        self.assertIn("If the user chooses to decide the policy or mapping later", text)
+        self.assertIn("exclude it from `confirmation_needed` counts", text)
         self.assertIn("Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior", text)
 
     def test_atomization_criteria_document_contract_is_persisted(self) -> None:
@@ -1567,6 +1575,32 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not classify behavior as healthy only because no related gap exists", text)
         self.assertIn("Source behavior absent from the docs is not implicitly correct", text)
         self.assertIn("coverage gap, `confirmation_needed`, or `docs_stale`", text)
+
+    def test_refresh_flow_separates_deferred_decisions_from_confirmation_needed(self) -> None:
+        skill = read(DOCS_SKILL)
+        change = read(DOCS_REFS / "change-judgment-policy.md")
+        contract = read(DOCS_REFS / "atom-format-and-judgment.md")
+        flow = read(DOCS_REFS / "source-baseline-and-change-plan.md")
+        combined = "\n".join([skill, change, contract, flow])
+
+        self.assertIn("Do not treat a user-confirmed future implementation, change, or deliberate later-decision choice as `confirmation_needed`", skill)
+        self.assertIn("record deliberate later-decision choices as `deferred_decision`", skill)
+        self.assertIn("keep user-facing summaries' `confirmation_needed`, `deferred_decision`, `Planned Changes`, and `missing_required_behavior` counts separate", skill)
+
+        self.assertIn("the user or approved workflow explicitly chose to decide a specific policy, boundary, condition, API contract, or permission mapping later", change)
+        self.assertIn("If the user confirms a future implementation or behavior change", change)
+        self.assertIn("use `missing_required_behavior` for the mismatch", change)
+        self.assertIn("If the user chooses to decide the policy or mapping later", change)
+
+        self.assertIn("A user-confirmed future implementation or behavior change is not `confirmation_needed`", contract)
+        self.assertIn("A user-confirmed plan to decide a policy, boundary, condition, API contract, or permission mapping later is `deferred_decision`", contract)
+
+        self.assertIn("When a user answers a confirmation question, do not turn that same answer back into `confirmation_needed`", flow)
+        self.assertIn("close the question as a `Planned Changes` item", flow)
+        self.assertIn("close the question as `deferred_decision`", flow)
+        self.assertIn("count it separately in user-facing summaries", flow)
+        self.assertIn("Create a new `confirmation_needed` item only for a different unresolved detail that is neither confirmed nor deliberately deferred", flow)
+        self.assertIn("unresolved `confirmation_needed` blockers, and separate `deferred_decision` blockers", combined)
 
     def test_change_judgment_policy_requires_natural_language_docs_for_matching(self) -> None:
         text = read(DOCS_REFS / "change-judgment-policy.md")
