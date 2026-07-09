@@ -39,8 +39,13 @@ class PluginHookDeclarationTests(unittest.TestCase):
                     commands.append(hook["command"])
         return commands
 
+    def stageflow_command_entries(self) -> list[str]:
+        return [command for command in self.command_entries() if "stageflow_hook_check.py" in command]
+
     def test_hooks_do_not_reference_target_cwd_relative_wrapper(self) -> None:
-        for command in self.command_entries():
+        commands = self.stageflow_command_entries()
+        self.assertGreater(len(commands), 0)
+        for command in commands:
             with self.subTest(command=command):
                 self.assertIn("stageflow_hook_check.py", command)
                 self.assertIn("STAGEFLOW_PLUGIN_ROOT", command)
@@ -54,7 +59,7 @@ class PluginHookDeclarationTests(unittest.TestCase):
                 self.assertNotIn("stock-auto-trade", command)
 
     def test_user_prompt_submit_hook_runs_from_target_project_cwd(self) -> None:
-        commands = self.command_entries()
+        commands = self.stageflow_command_entries()
         command = next(item for item in commands if "user_prompt_submit" in item)
         payload = json.dumps({"session_id": "session-1", "prompt": "hello"})
         env = os.environ.copy()

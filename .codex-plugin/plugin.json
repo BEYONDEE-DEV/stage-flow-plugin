@@ -8,13 +8,14 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Stageflow",
-    "shortDescription": "Plan Codex work and expose the atomic-docs skill.",
-    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose an atomic-docs skill for storage-mode-aware atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships. It also exposes atomic-impl for docs-first implementation from approved atomic-docs requirements, and multi-repo-worktree for explicitly invoked multi-repo Git worktree bundle coordination with help, status, create, merge, and sync keywords.",
+    "shortDescription": "Plan Codex work and expose Simple Workflow plus atomic-docs.",
+    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose an atomic-docs skill for storage-mode-aware atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships. It also exposes Simple Workflow for a lightweight reviewed plan.md flow, atomic-impl for docs-first implementation from approved atomic-docs requirements, and multi-repo-worktree for explicitly invoked multi-repo Git worktree bundle coordination with help, status, create, merge, and sync keywords.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [
       "Planning",
       "Stageflow Workflow",
+      "Simple Workflow",
       "Validation",
       "Documentation"
     ],
@@ -22,6 +23,8 @@
       "Use Stageflow to plan this change before coding.",
       "Use Stageflow to clarify this request and create a validated plan.",
       "Resume the current Stageflow request.",
+      "Use Simple Workflow to capture requirements, write plan.md, review it internally, and wait for approval.",
+      "Resume the current .simple workflow request.",
       "Use atomic-docs to create storage-mode-aware project documentation.",
       "Use atomic-docs to refresh atom files from source-code changes.",
       "Use atomic-docs to inspect intent, implementation, planned changes, and gaps.",

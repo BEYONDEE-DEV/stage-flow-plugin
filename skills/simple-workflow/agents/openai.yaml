@@ -1,0 +1,6 @@
+interface:
+  display_name: "Simple Workflow"
+  short_description: "Four-step requirements, plan, review, and goal workflow."
+  default_prompt: "Use $simple-workflow to capture requirements, write a plan, review it, and prepare goal execution."
+policy:
+  allow_implicit_invocation: true

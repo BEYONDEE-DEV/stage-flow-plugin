@@ -6,6 +6,7 @@
 
 - 새 Stageflow 작업은 요청에 `Stageflow`, `stageflow`, `stage-flow`, `.stageflow` 중 하나를 반드시 포함해야 합니다.
 - `이 작업 계획 세워줘`처럼 일반적으로 말하면 Stageflow가 자동 시작된다고 가정하면 안 됩니다.
+- 가벼운 `plan.md` 중심 흐름을 쓰려면 `Simple Workflow`, `simple-workflow`, `.simple` 중 하나를 명시하세요.
 - `atomic-docs`를 쓰려면 요청에 `atomic-docs`를 명시하세요.
 
 ## Stageflow 시작
@@ -109,6 +110,16 @@ approve
 ```text
 Resume the current Stageflow request.
 ```
+
+## Simple Workflow
+
+간단한 계획-리뷰-승인 흐름을 쓰려면 다음처럼 요청합니다.
+
+```text
+Use Simple Workflow to capture requirements, write plan.md, review it internally, and wait for approval.
+```
+
+Simple Workflow는 `.simple/requests/<request-id>/plan.md`를 중심으로 진행하고, 내부 `review.md`가 통과한 뒤 사용자가 `승인`, `진행`, `실행`, `approve`, `proceed`처럼 명확히 말해야 구현으로 넘어갑니다.
 
 ## Atomic Docs
 

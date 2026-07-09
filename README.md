@@ -2,6 +2,8 @@
 
 Stageflow is a Codex plugin for request definition, implementation planning, implementation review, and atomic project documentation workflows.
 
+It also bundles Simple Workflow as a lightweight `plan.md`-centered workflow alongside the full Stageflow flow.
+
 ## Installation
 
 The plugin name is `stageflow`, and the marketplace name is `stage-flow-local`.
@@ -55,6 +57,12 @@ You should see:
 ```text
 stageflow@stage-flow-local  installed, enabled
 ```
+
+## Included Workflows
+
+- Stageflow: use `Stageflow`, `stageflow`, `stage-flow`, or `.stageflow`.
+- Simple Workflow: use `Simple Workflow`, `simple-workflow`, or `.simple`.
+- Atomic Docs: use `atomic-docs`.
 
 ## Update
 
