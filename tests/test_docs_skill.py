@@ -1380,16 +1380,59 @@ class DocsSkillTests(unittest.TestCase):
             "Only a PASSed domain bundle can become input for the next bundle",
             "reopen the affected earlier bundle",
             "Rerun any dependent later bundles whose PASS basis changed",
-            "After every accepted domain bundle PASSes, the main agent, not a domain reviewer, runs the Post-Write Consistency Review Gate",
+            "After every accepted domain bundle PASSes, the main agent orchestrates the Post-Write Consistency Review Gate",
             "Domain reviewers own their bundle's PASS",
-            "the main post-write gate owns cross-domain connectivity",
+            "the main agent aggregates those results",
         ]:
             self.assertIn(required, combined)
 
         self.assertIn("After criteria approval and Goal handoff, process multi-domain docs generation as a sequential domain-bundle queue", skill)
-        self.assertIn("Run the main post-write gate only after every accepted domain bundle has PASSed", skill)
+        self.assertIn("run mandatory post-write perspective reviews with separate subagents", skill)
         self.assertIn("blocks a domain bundle only when the unresolved decision prevents that bundle from being implementation-reconstruction-ready or judgment-ready", generation)
         self.assertIn("Other uncertainty may remain as a labeled gap with source evidence and next action", generation)
+
+    def test_post_write_gate_requires_separate_perspective_subagents(self) -> None:
+        skill = read(DOCS_SKILL)
+        generation = read(DOCS_REFS / "docs-generation-flow.md")
+        service = read(DOCS_REFS / "service-logic-coverage.md")
+        post_write = section(generation, "Post-Write Consistency Review Gate")
+        combined = skill + "\n" + generation + "\n" + service
+
+        for reviewer in [
+            "Post-Write Atom Boundary / Context Hygiene Reviewer",
+            "Post-Write Source Closure Reviewer",
+            "Post-Write Implementation Reconstruction / High-Risk Reviewer",
+            "Post-Write Baseline / Reporting Reviewer",
+        ]:
+            self.assertIn(reviewer, generation)
+
+        for required in [
+            "four separate subagents",
+            "One subagent must not combine two of these perspectives",
+            "must not substitute its own direct PASS",
+            "A final post-write PASS requires all four required perspectives to PASS",
+            "a missing perspective review is itself a blocking post-write FAIL",
+            "The main agent aggregates the four post-write reviewer results",
+        ]:
+            self.assertIn(required, generation)
+
+        self.assertIn("main agent aggregates those results and must not replace any required perspective review with its own direct quality PASS", skill)
+        self.assertIn("Record each perspective's PASS/FAIL/provisional result", post_write)
+        self.assertIn("rerun the relevant separate post-write reviewer subagent", post_write)
+
+        for failure in [
+            "over-compressed atoms",
+            "behavior hidden in context atoms",
+            "missing row-level closure",
+            "same-functional-behavior implementation",
+            "omit required high-risk matrices",
+            "strict baseline-ready status",
+        ]:
+            self.assertIn(failure, combined)
+
+        self.assertIn("Context atoms are not a shortcut for behavior coverage", service)
+        self.assertIn("Review must fail context atom pollution", service)
+        self.assertIn("A separate reconstruction/high-risk reviewer", service)
 
     def test_required_subagent_gates_are_authorized_inside_accepted_operation(self) -> None:
         skill = read(DOCS_SKILL)

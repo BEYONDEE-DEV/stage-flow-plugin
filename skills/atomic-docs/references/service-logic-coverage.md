@@ -24,6 +24,8 @@ For each meaningful service logic item, the docs must record:
 
 Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
 
+Context atoms are not a shortcut for behavior coverage. A context atom may preserve domain purpose, glossary terms, included and excluded behavior, and adjacent boundaries, but it must not own concrete endpoint flow, payload rules, state transitions, persistence effects, external integration behavior, or failure/recovery details that belong in behavior atoms. Review must fail context atom pollution instead of treating it as acceptable broad coverage.
+
 Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
 
 ## Source Discovery Closure Gate
@@ -51,6 +53,8 @@ Review must fail when a criteria document or completed docs set omits implementa
 Do not use atom count, file count, or line count as a quality threshold. A short context atom can be complete when it only records a boundary, and a long behavior atom can still fail when implementation choices are missing. Review the density of reconstruction-critical decisions instead.
 
 Shallow atom review must fail a behavior, contract, or matrix atom when it mentions forms, editors, routes, access guards, payloads, validations, readiness, save/delete behavior, API/service contracts, or state transitions but omits the concrete fields, branches, rules, payload shape, contract semantics, state effects, or failure outcomes an implementer would otherwise have to rediscover from source. If an atom uses terms such as `field matrix`, `payload`, `validation`, `contract`, `readiness`, or `state transition`, include a table or structured list for the applicable fields and branches, or record an explicit not-applicable reason. A sentence such as "handles local validation", "maps payload", or "calls the API" is not enough.
+
+Implementation reconstruction review must not be combined with atom-boundary or source-closure review in the final post-write gate. A separate reconstruction/high-risk reviewer must answer whether the docs alone support same-functional-behavior implementation and must FAIL when high-risk categories lack required matrices or specific not-applicable reasons.
 
 ## Source Fact Fidelity Gate
 
