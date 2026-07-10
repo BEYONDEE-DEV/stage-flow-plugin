@@ -29,11 +29,11 @@ Section codes are:
 - `gap` for `Gaps`
 - `source` for source evidence rows
 
-Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. New AID values use the target atom's stable `atom_key` as the prefix and must be globally unique across the docs set, not just unique within one atom.
+Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragraphs, and an `AID` column for tables. New AID values use the current owning atom's stable `atom_key` as their creation prefix and must be globally unique across the docs set, not just unique within one atom.
 
 Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. Project documents such as `project/atomization-criteria.md`, `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md` are not atoms and are not required to use AID values.
 
-Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. Category moves, file renames, path drift, and atom slug changes are not AID change reasons. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record the migration explicitly in the change plan and review findings. Do not infer the current owning atom only from an older preserved AID prefix; use frontmatter `atom_key` for current identity.
+Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. After a cross-atom move, the preserved AID prefix may identify the atom where the AID was created rather than the current owner; this is valid and must not be treated as an ownership mismatch. Category moves, file renames, path drift, atom slug changes, and cross-atom movement are not AID change reasons. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record it explicitly in the change plan and review findings. Resolve current ownership from the containing file's frontmatter `atom_key`, never from an older preserved AID prefix.
 
 ## Required Atom Sections
 

@@ -30,7 +30,7 @@ Trivial getters, mechanical DTO copying, framework boilerplate, and generated wi
 
 ## Source Discovery Closure Gate
 
-For the accepted scope, maintain source discovery closure from inspected source surface/aggregate to documentation outcome. Every meaningful route, controller, service method, policy rule, persistence mutation/read model, workflow step, UI entry, job, event, or external integration must close as one of: owned by a real `atom_key`/AID, recorded as a coverage gap, marked `out_of_scope`, or marked not-applicable with a reason.
+For the accepted scope, maintain source discovery closure from inspected source surface/aggregate to documentation outcome. Every meaningful route, controller, service method, policy rule, persistence mutation/read model, workflow step, UI entry, job, event, external integration, runtime schema/migration, runtime setting, route configuration, or behavior-relevant test must close as one of: owned by a real `atom_key`/AID, recorded as a coverage gap, marked `out_of_scope`, or marked not-applicable with a reason. Tests support source interpretation but do not replace inspection of reachable production behavior.
 
 Unmapped or orphan source behavior is a blocking review finding when the docs claim judgment readiness, baseline readiness, or implementation reconstruction readiness. A rejected broad source root still needs sub-aggregate disposition; do not hide lower-level behavior behind the broad rejection.
 
@@ -54,11 +54,11 @@ Do not use atom count, file count, or line count as a quality threshold. A short
 
 Shallow atom review must fail a behavior, contract, or matrix atom when it mentions forms, editors, routes, access guards, payloads, validations, readiness, save/delete behavior, API/service contracts, or state transitions but omits the concrete fields, branches, rules, payload shape, contract semantics, state effects, or failure outcomes an implementer would otherwise have to rediscover from source. If an atom uses terms such as `field matrix`, `payload`, `validation`, `contract`, `readiness`, or `state transition`, include a table or structured list for the applicable fields and branches, or record an explicit not-applicable reason. A sentence such as "handles local validation", "maps payload", or "calls the API" is not enough.
 
-Implementation reconstruction review must not be combined with atom-boundary or source-closure review in the final post-write gate. A separate reconstruction/high-risk reviewer must answer whether the docs alone support same-functional-behavior implementation and must FAIL when high-risk categories lack required matrices or specific not-applicable reasons.
+Implementation reconstruction review must not be combined with atom-boundary or source-closure review. Each domain has a separate reconstruction/high-risk reviewer, and the final reconstruction reviewer checks only end-to-end behavior crossing domain or frontend/backend boundaries unless changed evidence invalidates a local PASS. The reconstruction perspective must FAIL when applicable high-risk categories lack required matrices or specific not-applicable reasons.
 
 ## Source Fact Fidelity Gate
 
-In the final post-write gate, source fact fidelity is owned by the `Post-Write Source Closure / Fact Fidelity Reviewer`. This is not only a source mapping check: the reviewer must compare judgment-bearing docs claims with the actual inspected source branch.
+Within each domain bundle, local source fact fidelity is owned by the `Domain Draft Source Closure / Fact Fidelity Reviewer`, which compares judgment-bearing claims with the actual inspected source branch. In the project-wide final gate, the corresponding final reviewer checks cross-domain source ownership, project-wide closure, changed shared evidence, and contradictions that could invalidate an earlier domain PASS; it does not repeat every unchanged local claim.
 
 Atom `Rules`, `Current Implementation`, `Gaps`, evidence packets, and review findings must preserve the source-observed behavior actually reachable through the inspected entry path. Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply.
 
