@@ -13,6 +13,9 @@ EVENT_ALIASES = {
     "user-prompt-submit": "user_prompt_submit",
     "user_prompt_submit": "user_prompt_submit",
     "UserPromptSubmit": "user_prompt_submit",
+    "pre-tool-use": "pre_tool_use",
+    "pre_tool_use": "pre_tool_use",
+    "PreToolUse": "pre_tool_use",
     "stop": "stop",
     "Stop": "stop",
 }

@@ -37,11 +37,23 @@ Simple Workflow uses one human artifact, one internal review record, and small m
 {
   "request_id": "20260609-1120-simple-workflow-plugin",
   "phase": "plan",
+  "goal_status": "pending",
+  "goal_plan_fingerprint": null,
   "last_validated_at": null
 }
 ```
 
 Allowed phases are `plan`, `review`, and `completed`.
+
+The selected request id must match `YYYYMMDD-HHMM-short-slug` and be registered exactly once in
+`index.json`. The selected index entry, session `current.json`, and request `state.json` must have
+the same phase. Readers accept legacy `id` in place of `request_id` and legacy `status` in place of
+`phase`, but missing or contradictory values are invalid.
+
+`goal_status` is optional for legacy requests. New requests use `pending`, change it to `active`
+only after `create_goal` succeeds, set `completing` immediately before requesting Goal completion,
+and use `completed` only after `update_goal(status="complete")` succeeds. An active, completing, or
+completed Goal records `goal_plan_fingerprint` as `sha256:<hex>`.
 
 ## plan.md
 
@@ -115,3 +127,8 @@ PASS
 
 현재 `plan.md` fingerprint에 대한 내부 리뷰가 통과했다.
 ```
+
+The complete trimmed `## Verdict` body must equal `PASS`; containing the word `PASS` inside a
+different verdict is invalid. `## Blocking Issues` uses blocking-specific no-issue vocabulary,
+while `## Flow Check` uses flow-specific no-issue vocabulary. Do not swap the two fields' status
+values.

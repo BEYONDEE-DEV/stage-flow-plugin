@@ -102,6 +102,66 @@ class ValidatorTests(unittest.TestCase):
             result = self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "plan", expect_success=False)
             self.assertIn("concrete plan", result.stdout)
 
+    def test_plan_rejects_placeholder_variants(self) -> None:
+        for placeholder in (
+            "TODO 나중에",
+            "TBD 추후",
+            "미정",
+            "추후 결정",
+            "구현 세부는 추후 결정한다",
+            "구현 전에 TODO 나중에 정한다",
+            "구현 세부는 TBD로 둔다",
+            "`TODO`",
+            "구현은 `TBD`",
+            "구현은 `TBD`로 처리한다",
+            "결정은 `미정`",
+            "결정은 `미정`으로 작성한다",
+            "`TODO 나중에`",
+            "구현은 PLACEHOLDER로 둔다",
+            "구현은 placeholder로 처리한다",
+            "구현은 placeholder로 고정한다",
+            "구현은 placeholder로 두고 검증한다",
+            "구현은 placeholder를 넣고 검증한다",
+            "구현은 placeholder 상태로 유지하고 회귀 테스트로 고정한다",
+        ):
+            with self.subTest(placeholder=placeholder), temp_project() as td:
+                root = make_project(Path(td), phase="plan", plan_body=plan_text(plan_cell=placeholder))
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "plan",
+                    expect_success=False,
+                )
+                self.assertIn("concrete plan", result.stdout)
+
+    def test_backticked_placeholder_identifier_is_allowed_as_concrete_code_target(self) -> None:
+        plans = (
+            "`TODO` marker를 제거하고 실제 검증 명령을 연결한다.",
+            "`TODO`, `TBD`, `미정` 등 placeholder 변형을 차단하고 회귀 테스트로 검증한다.",
+            "`TODO`, `TBD`, `N/A`, `미정` 토큰을 차단하고 검증한다.",
+            "placeholder 변형을 차단하고 검증한다.",
+            "재현된 placeholder 계획을 자동 테스트로 고정한다.",
+            "placeholder 계획과 빈 index 회귀를 자동 테스트로 고정한다.",
+        )
+        for plan in plans:
+            with self.subTest(plan=plan), temp_project() as td:
+                root = make_project(
+                    Path(td),
+                    phase="plan",
+                    plan_body=plan_text(plan_cell=plan),
+                )
+                self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "plan",
+                )
+
     def test_plan_requires_flow_check(self) -> None:
         with temp_project() as td:
             root = make_project(Path(td), plan_body=plan_text(include_flow_check=False))
@@ -125,6 +185,49 @@ class ValidatorTests(unittest.TestCase):
             root = make_project(Path(td), review_stale=True)
             result = self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "review", expect_success=False)
             self.assertIn("fingerprint is stale", result.stdout)
+
+    def test_review_verdict_must_be_exact_pass(self) -> None:
+        for verdict in ("FAIL: do not PASS", "pass", "Pass", "PASSIVE"):
+            with self.subTest(verdict=verdict), temp_project() as td:
+                root = make_project(Path(td))
+                request_dir = root / ".simple" / "requests" / REQUEST_ID
+                review = request_dir / "review.md"
+                review.write_text(
+                    review.read_text(encoding="utf-8").replace("\nPASS\n", f"\n{verdict}\n"),
+                    encoding="utf-8",
+                )
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "review",
+                    expect_success=False,
+                )
+                self.assertIn("verdict must be `PASS`", result.stdout)
+
+    def test_review_status_vocabulary_is_field_specific(self) -> None:
+        replacements = (
+            ("차단 없음", "No flow issues", "Blocking Issues"),
+            ("사용자에게 알려야 할 관련 흐름 문제 없음", "No blocking issues", "Flow Check"),
+        )
+        for old, new, expected in replacements:
+            with self.subTest(field=expected), temp_project() as td:
+                root = make_project(Path(td))
+                request_dir = root / ".simple" / "requests" / REQUEST_ID
+                review = request_dir / "review.md"
+                review.write_text(review.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "review",
+                    expect_success=False,
+                )
+                self.assertIn(expected, result.stdout)
 
     def test_review_blocking_issues_block_goal_execution(self) -> None:
         with temp_project() as td:
@@ -161,10 +264,174 @@ class ValidatorTests(unittest.TestCase):
 
     def test_all_passes_with_plan_and_internal_review_only(self) -> None:
         with temp_project() as td:
-            root = make_project(Path(td))
+            root = make_project(Path(td), phase="completed")
             self.assertFalse((root / ".simple" / "requests" / REQUEST_ID / "requirements.md").exists())
             self.assertFalse((root / ".simple" / "requests" / REQUEST_ID / "goal.md").exists())
             self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "all")
+
+    def test_empty_index_fails(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            write_json(root / ".simple" / "index.json", {})
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("requests` list", result.stdout)
+            self.assertIn("registered exactly once", result.stdout)
+
+    def test_metadata_phases_must_match(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            write_json(
+                root / ".simple" / "sessions" / SESSION_ID / "current.json",
+                {"request_id": REQUEST_ID, "phase": "plan", "activated_by": "test"},
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("phases must match", result.stdout)
+
+    def test_phase_and_legacy_status_aliases_must_not_conflict(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            write_json(
+                root / ".simple" / "index.json",
+                {
+                    "version": "1",
+                    "requests": [
+                        {"id": REQUEST_ID, "phase": "review", "status": "plan", "title": "Test"}
+                    ],
+                },
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("phase and legacy status values must match", result.stdout)
+
+    def test_legacy_request_id_aliases_are_accepted_consistently(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            write_json(
+                root / ".simple" / "index.json",
+                {"version": "1", "requests": [{"request_id": REQUEST_ID, "status": "review"}]},
+            )
+            write_json(
+                root / ".simple" / "sessions" / SESSION_ID / "current.json",
+                {"id": REQUEST_ID, "status": "review"},
+            )
+            write_json(
+                root / ".simple" / "requests" / REQUEST_ID / "state.json",
+                {"id": REQUEST_ID, "status": "review"},
+            )
+            self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+            )
+
+    def test_request_id_format_is_enforced_before_path_resolution(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            bad_id = "../outside"
+            write_json(
+                root / ".simple" / "sessions" / SESSION_ID / "current.json",
+                {"request_id": bad_id, "phase": "review"},
+            )
+            write_json(
+                root / ".simple" / "index.json",
+                {"version": "1", "requests": [{"id": bad_id, "status": "review"}]},
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("YYYYMMDD-HHMM-short-slug", result.stdout)
+
+    def test_validation_phase_must_match_state_phase(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td), phase="plan")
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("requires `state.json` phase `review`", result.stdout)
+
+    def test_goal_status_must_be_compatible_with_phase(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td), phase="plan")
+            write_json(
+                root / ".simple" / "requests" / REQUEST_ID / "state.json",
+                {
+                    "request_id": REQUEST_ID,
+                    "phase": "plan",
+                    "goal_status": "active",
+                    "goal_plan_fingerprint": "sha256:" + "0" * 64,
+                },
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "plan",
+                expect_success=False,
+            )
+            self.assertIn("incompatible with goal_status", result.stdout)
+
+    def test_active_goal_fingerprint_must_match_plan(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td))
+            write_json(
+                root / ".simple" / "requests" / REQUEST_ID / "state.json",
+                {
+                    "request_id": REQUEST_ID,
+                    "phase": "review",
+                    "goal_status": "active",
+                    "goal_plan_fingerprint": "sha256:" + "0" * 64,
+                },
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("goal_plan_fingerprint must match", result.stdout)
 
 
 def make_project(
