@@ -22,7 +22,7 @@ It reports when:
 - an explicit Simple Workflow prompt has no active request
 - an active `plan` or `review` request receives a follow-up prompt that does not mention Simple Workflow again; this is a non-blocking continuation warning that reminds Codex to keep applying Simple Workflow rules
 - the active request points to a missing or completed request
-- `plan.md` is missing for the plan phase
+- an active plan request is still drafting before `plan.md` exists; this is an expected awaiting-input state, so readiness preserves continuation context and `Stop` allows the user-facing question without running plan validation
 - internal `review.md` is missing for the review or completed phase
 - internal `review.md` has a stale plan fingerprint
 - a v2 plan has `plan_approval_status: pending`; readiness tells the agent that initial or revised execution is on hold until explicit approval
@@ -43,8 +43,10 @@ Goal flows independent. For an in-scope Simple Workflow `create_goal`, it emits
 - local `goal_status` is not already `active`, `completing`, or `completed`
 
 The pre-tool hook does not prove user approval; the agent has already made that conversational
-decision before attempting the tool call. `Stop` emits a blocking wire response only when the
-current phase's required artifacts or validation are invalid.
+decision before attempting the tool call. Once `plan.md` exists, plan validation resumes normally.
+`Stop` emits a blocking wire response only when the current phase's required artifacts or validation
+are invalid, while a plan request that has not written `plan.md` yet remains a non-blocking drafting
+state so Codex can ask for the user input required to write it.
 
 For material replan after Goal creation, `goal_plan_fingerprint` continues to identify the original
 Goal objective and is never changed. `approved_plan_fingerprint` identifies the latest explicitly

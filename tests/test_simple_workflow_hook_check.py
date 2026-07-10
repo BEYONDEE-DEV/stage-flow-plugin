@@ -443,12 +443,49 @@ class HookCheckTests(unittest.TestCase):
             text.index(".codex/plugins/cache/**/simple-workflow-plugin/**/scripts/simple_workflow_hook_check.py"),
         )
 
-    def test_stop_event_checks_current_request(self) -> None:
+    def test_plan_drafting_stop_allows_user_question_before_plan_exists(self) -> None:
         with temp_project() as td:
-            root = make_project(Path(td), write_plan=False)
+            root = make_project(Path(td), phase="plan", write_plan=False)
+            result = self.run_hook(root, {"session_id": SESSION_ID}, event="stop")
+            self.assertEqual(result["status"], "PASS")
+            self.assertTrue(result["drafting"])
+            self.assertEqual(result["validation"]["status"], "SKIPPED")
+            self.assertNotIn("decision", result)
+            self.assertNotIn("missing required artifact", result["reason"])
+            self.assertEqual(self.run_wire(root, {"session_id": SESSION_ID}, "stop"), {})
+
+    def test_plan_drafting_user_prompt_continues_without_missing_artifact_error(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td), phase="plan", write_plan=False)
+            result = self.run_hook(root, {"session_id": SESSION_ID, "prompt": "요구사항은 그대로야"})
+            self.assertEqual(result["status"], "WARN")
+            self.assertTrue(result["drafting"])
+            self.assertTrue(result["continuation_required"])
+            self.assertEqual(result["validation"]["status"], "SKIPPED")
+            self.assertNotIn("missing required artifact", result["reason"])
+            self.assertNotIn("FAIL plan:", result["reason"])
+            wire = self.run_wire(
+                root,
+                {"session_id": SESSION_ID, "prompt": "요구사항은 그대로야"},
+                "user_prompt_submit",
+            )
+            context = json.loads(wire["hookSpecificOutput"]["additionalContext"])
+            self.assertTrue(context["drafting"])
+            self.assertNotIn("missing required artifact", context["reason"])
+
+    def test_invalid_written_plan_reports_first_detail_and_next_action(self) -> None:
+        with temp_project() as td:
+            root = make_project(
+                Path(td),
+                phase="plan",
+                plan_body="# Plan\n\n## Summary\n\n검증할 수 없는 불완전한 계획이다.\n",
+            )
             result = self.run_hook(root, {"session_id": SESSION_ID}, event="stop")
             self.assertEqual(result["status"], "BLOCKED")
-            self.assertIn("plan.md", result["reason"])
+            self.assertEqual(result["validation"]["status"], "FAIL")
+            self.assertIn("FAIL plan:", result["reason"])
+            self.assertIn("Requirements Coverage", result["reason"])
+            self.assertIn("Next action:", result["reason"])
 
 
 def set_phase(root: Path, phase: str) -> None:

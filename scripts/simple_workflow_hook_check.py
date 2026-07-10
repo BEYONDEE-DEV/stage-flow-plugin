@@ -170,6 +170,28 @@ def check_user_prompt(
         return result
 
     result["artifact_status"] = artifacts(request_dir)
+    if is_plan_drafting(phase, result["artifact_status"]):
+        result["drafting"] = True
+        result["validation"] = {
+            "status": "SKIPPED",
+            "reason": "plan drafting is awaiting input; plan.md is validated after it is written",
+        }
+        warnings: list[str] = []
+        if not explicit:
+            result["prompt_relevant"] = True
+            result["continuation_required"] = True
+            warnings.append(CONTINUATION_WARNING)
+        if warnings:
+            result.update(status="WARN", severity="warning", reason="; ".join(warnings), warnings=warnings)
+        else:
+            result.update(
+                status="DRAFTING",
+                severity="info",
+                reason="Simple Workflow plan drafting is awaiting user input",
+                warnings=[],
+            )
+        return result
+
     result["validation"] = run_validator(root, session_id, PHASE_TO_VALIDATION[phase])
     warnings: list[str] = []
     missing = missing_for_phase(phase, result["artifact_status"])
@@ -225,6 +247,20 @@ def check_create_goal_gate(
 def check_stop(root: Path, session_id: str, request_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
     phase = str(result["phase"])
     result["artifact_status"] = artifacts(request_dir)
+    if is_plan_drafting(phase, result["artifact_status"]):
+        result.update(
+            status="PASS",
+            severity="info",
+            reason="Simple Workflow plan drafting may pause for user input before plan.md exists",
+            drafting=True,
+            validation={
+                "status": "SKIPPED",
+                "reason": "plan.md is validated after it is written",
+            },
+            warnings=[],
+        )
+        return result
+
     result["validation"] = run_validator(root, session_id, PHASE_TO_VALIDATION[phase])
     warnings: list[str] = []
     missing = missing_for_phase(phase, result["artifact_status"])
@@ -286,6 +322,10 @@ def artifacts(directory: Path) -> dict[str, bool]:
     return {name: (directory / name).is_file() for name in ("plan.md", "review.md")}
 
 
+def is_plan_drafting(phase: str, status: dict[str, bool]) -> bool:
+    return phase == "plan" and not status.get("plan.md", False)
+
+
 def missing_for_phase(phase: str, status: dict[str, bool]) -> str:
     required = {
         "plan": ("plan.md",),
@@ -332,8 +372,26 @@ def run_validator(root: Path, session_id: str, phase: str) -> dict[str, str]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    first = result.stdout.strip().splitlines()[0] if result.stdout.strip() else "validator produced no output"
-    return {"status": "PASS" if result.returncode == 0 else "FAIL", "reason": first}
+    return {
+        "status": "PASS" if result.returncode == 0 else "FAIL",
+        "reason": summarize_validator_output(result.stdout),
+    }
+
+
+def summarize_validator_output(output: str) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        return "validator produced no output"
+    if not lines[0].startswith("FAIL "):
+        return lines[0]
+    detail = next((line.removeprefix("- ") for line in lines[1:] if line.startswith("- ")), "")
+    next_action = next((line for line in lines[1:] if line.startswith("Next action:")), "")
+    reason = lines[0]
+    if detail:
+        reason = f"{reason} {detail}"
+    if next_action:
+        reason = f"{reason}; {next_action}"
+    return reason
 
 
 def read_payload() -> dict[str, Any]:
