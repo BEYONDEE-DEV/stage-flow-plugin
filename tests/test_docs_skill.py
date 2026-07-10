@@ -71,9 +71,10 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 'display_name: "Atomic Docs"',
-                'short_description: "Source-based docs for behavior reconstruction."',
+                'short_description: "Docs for same-behavior reconstruction and review."',
                 'default_prompt: "Use $atomic-docs',
                 "same-functional-behavior reconstruction",
+                "fresh docs-only reviewer",
             ),
         )
 
@@ -276,6 +277,69 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_reconstruction_review_is_docs_only_and_source_fidelity_is_separate(self) -> None:
+        text = refs(
+            "service-logic-coverage.md",
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "fresh docs-only reviewer",
+                "managed docs in scope",
+                "approved criteria/project context",
+                "Do not give it the source tree",
+                "operation inventory",
+                "source evidence packet",
+                "actual source access",
+                "must FAIL when it needs source",
+                "do not create a separate probe artifact",
+                "Partial reconstruction PASS applies only",
+                "must not be reported as project-wide readiness",
+            ),
+        )
+        self.assertNotIn("reconstruction-probe.json", text)
+
+    def test_required_aids_keep_verification_conditions_inline(self) -> None:
+        text = read(REFS / "atom-format-and-judgment.md")
+        assert_all(
+            self,
+            text,
+            (
+                "confirmed required `Intent`",
+                "`approved_required_change`",
+                "observable verification condition",
+                "in that same item",
+                "Do not require a separate acceptance AID",
+                "independently reviewable meaning",
+            ),
+        )
+
+    def test_explicit_implementation_compliance_reuses_post_write_review(self) -> None:
+        text = read(SKILL) + refs("docs-generation-flow.md", "change-judgment-policy.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Only Atomic Impl or an explicit docs/code compliance operation",
+                ".stageflow/atomic-docs/requests/<request-id>/post-write-review.md",
+                "## 구현 검증",
+                "docs basis",
+                "implementation basis",
+                "관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap",
+                "Normal docs generation",
+                "project inventory",
+                "`work-state.json`",
+                "affected AID rows",
+                "changed in-scope required AIDs",
+                "drafts this section after implementation review",
+                "finalizes the same section after final docs/code compliance",
+            ),
+        )
+        self.assertNotIn("verification-trace.json", text)
+
     def test_source_discovery_includes_runtime_relevant_auxiliary_surfaces(self) -> None:
         text = refs(
             "service-logic-coverage.md",
@@ -390,6 +454,25 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+        final_reconstruction = text.split(
+            "### Final Implementation Reconstruction / High-Risk Reviewer", 1
+        )[1].split("### Final Baseline / Reporting Reviewer", 1)[0]
+        for reference in (
+            "service-logic-coverage.md",
+            "atom-format-and-judgment.md",
+            "atomic-document-contract.md",
+        ):
+            self.assertIn(reference, final_reconstruction)
+
+        assert_all(
+            self,
+            text,
+            (
+                "operation-state evidence for reporting or ownership checks",
+                "Never provide operation-state evidence to a docs-only reconstruction reviewer",
+            ),
+        )
+
     def test_final_reviewers_are_cross_domain_not_duplicate_domain_reviews(self) -> None:
         text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
         for role in (
@@ -411,6 +494,23 @@ class DocsSkillTests(unittest.TestCase):
                 "reopen the affected bundle",
             ),
         )
+
+    def test_graph_impact_discovery_does_not_trust_existing_edges_alone(self) -> None:
+        text = refs("atomic-graph.md", "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Existing graph edges are not proof",
+                "domain/common context",
+                "glossary meaning and source-of-truth rules",
+                "shared payload/state/storage/permission/integration contracts",
+                "operation-inventory ownership",
+                "Do not create a separate impact-trace artifact",
+                "uninspected boundaries",
+            ),
+        )
+        self.assertNotIn("impact-trace.json", text)
 
     def test_required_subagents_are_authorized_inside_accepted_scope(self) -> None:
         text = read(REFS / "docs-generation-flow.md")

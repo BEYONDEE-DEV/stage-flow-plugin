@@ -33,6 +33,7 @@ Write or update managed docs so the accepted behavior can be implemented from do
 For each meaningful behavior, preserve:
 
 - user intent, confirmed rules, inferred rules marked as inferred, and explicit non-goals
+- an observable verification condition or verifiable invariant inside each in-scope confirmed required AID meaning item; do not require a separate acceptance AID unless it is an independently reviewable meaning
 - new requested behavior as `Planned Changes` until it is implemented and approved by the user
 - existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists
 - input conditions, branches, validation/refusal/defaulting, permission or guard behavior
@@ -48,6 +49,8 @@ Avoid endpoint lists, source identifier lists, class-role summaries, or method-c
 ## 4. Review And User Approval Before Code
 
 After the docs write/review gates pass, summarize the docs for the user before coding.
+
+The relevant domain reconstruction reviewer must have PASSed from managed docs and approved project context without source access. If that reviewer needs source or an unstated implementation decision, return to docs writing rather than approving implementation.
 
 The summary must include:
 
@@ -78,6 +81,14 @@ After implementation, validate and review the real affected flow before any fina
 4. Fix implementation issues that are in scope and caused by the change, then rerun validation and both reviews.
 5. If the implementation changed from the approved plan, introduced extra behavior, or revealed a pre-existing issue, report it to the user before treating it as approved.
 
+Use the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` for the implementation review record. Draft one `## 구현 검증` section with `docs basis` and `implementation basis` once, followed by changed in-scope required AID rows:
+
+```text
+관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap
+```
+
+Do not create a separate trace file or copy this table into atoms, project inventory, or `work-state.json`. A compliance-only operation creates or resumes an Atomic Docs request and uses the same path. If either basis changes, recheck only affected rows.
+
 The post-implementation user summary must include:
 
 - implementation summary
@@ -98,6 +109,7 @@ After the user approves the implementation result, update atomic docs through th
 - Keep unimplemented, deferred, or unapproved behavior in `Planned Changes`, `Gaps`, `confirmation_needed`, out-of-scope, or discovered pre-existing issue entries as appropriate.
 - Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes.
 - If final docs update reveals that the implementation or docs are still inconsistent, return to the relevant implementation or docs approval gate instead of reporting completion.
+- Preserve the draft `## 구현 검증` section in operation state; do not move it into `Current Implementation`.
 
 ## 8. Final Compliance Review
 
@@ -105,5 +117,6 @@ After final docs update, validate the real affected flow rather than only checki
 
 1. Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
 2. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
-3. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
-4. Summarize the final docs/code compliance result, validations run, final docs paths, and remaining out-of-scope or pre-existing issues.
+3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used for that compliance result.
+4. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
+5. Summarize the final docs/code compliance result, validations run, final docs paths, and remaining out-of-scope or pre-existing issues.

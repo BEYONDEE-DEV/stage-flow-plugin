@@ -45,7 +45,9 @@ Each atom file must preserve these sections:
 - `Planned Changes`
 - `Gaps`
 
-`Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining. Include acceptance criteria when the behavior can be judged by observable source behavior.
+`Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining.
+
+Every AID-bearing confirmed required `Intent`, required `Rules`, or `approved_required_change` meaning item must include an observable verification condition or a verifiable invariant in that same item. Include the applicable precondition/input, expected result, refusal/failure result, state/storage/external effect, or explicit exclusion needed to judge the requirement. Do not accept generic wording such as "works correctly" or a test name without expected behavior. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning.
 
 `Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points, and expresses those facts as natural-language service logic. A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient.
 

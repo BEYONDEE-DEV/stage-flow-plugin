@@ -1,4 +1,4 @@
 interface:
   display_name: "Atomic Docs"
-  short_description: "Source-based docs for behavior reconstruction."
-  default_prompt: "Use $atomic-docs to create or refresh source-based project docs that support same-functional-behavior reconstruction."
+  short_description: "Docs for same-behavior reconstruction and review."
+  default_prompt: "Use $atomic-docs to create or refresh project docs that a fresh docs-only reviewer can use for same-functional-behavior reconstruction and implementation judgment."

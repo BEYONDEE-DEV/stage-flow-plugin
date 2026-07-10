@@ -14,12 +14,15 @@ Required path: `requirements -> implementation-basis atomic docs -> user approva
 - Treat the written or updated atomic docs as the implementation source of truth for this request.
 - Do not implement code before the relevant atomic docs are written or updated, summarized for the user, and explicitly approved as the implementation basis.
 - During the initial implementation-basis docs write, put new requested behavior mainly in `Planned Changes`; use `Intent` and `Rules` for purpose and policy, `Gaps` or `confirmation_needed` for uncertainty, and `Current Implementation` only for behavior already observed in source.
+- Before code, require every in-scope confirmed required AID to include an observable verification condition or invariant in the same meaning item, and require the relevant docs-only reconstruction reviewer to PASS without source access.
 - Do not bypass `atomic-docs` setup, docs-root discovery, criteria approval, docs write scope approval, Goal gate, writer/reviewer cycle, post-write gate, language policy, source-baseline, judgment label, AID, `atom_key`, or graph rules.
 - If `.stageflow/atomic-docs.json`, the managed docs root, or `project/atomization-criteria.md` is missing or unapproved, follow the `atomic-docs` bootstrap/criteria flow and stop for approval before docs generation or code implementation.
 - Keep the managed docs write scope separate from code implementation approval. Writing docs does not automatically approve code changes.
 - If the written docs still contain blocking `confirmation_needed` gaps for the requested behavior, ask the user to resolve them before implementing that behavior.
 - After code implementation, run `Intent Compliance Review` and `Flow / Unexpected Issue Review`, summarize the implementation result for the user, and require explicit user approval before final atomic-docs update.
+- During implementation review, draft `## 구현 검증` in the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record docs and implementation basis once, then only changed in-scope required AIDs with implementation evidence, validation evidence, and verdict or gap.
 - After that approval, update final atomic docs through the existing `atomic-docs` gates; move completed approved items from `Planned Changes` to `Current Implementation` with source evidence and validation basis.
+- After final docs update, finalize that same `## 구현 검증` section during docs/code compliance. Do not copy the table into atoms, project inventory, `work-state.json`, or a separate trace file.
 - Do not record out-of-plan changes, changed implementation behavior, or discovered pre-existing issues as confirmed behavior before user approval.
 
 ## Required Reference
@@ -42,6 +45,8 @@ Then ask for explicit approval to implement from those docs. Continue to code on
 ## Implementation Basis
 
 During code implementation, compare every behavior change against the approved docs. If implementation reveals the docs are stale, incomplete, contradictory, or too shallow to implement safely, return to the docs update/approval step instead of guessing in code.
+
+The implementation-verification table is scoped to the changed required AIDs, not every atom or AID in the project. If the docs or implementation basis changes, recheck only affected rows.
 
 ## Final Docs Update Gate
 

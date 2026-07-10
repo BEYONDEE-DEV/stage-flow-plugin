@@ -57,6 +57,18 @@ When the source behavior is present in code but absent from natural-language doc
 - `implemented_pending_confirmation`: observed implementation that may satisfy a plan but still needs user or workflow confirmation before being treated as expected behavior
 - `deferred_decision`: confirmed plan to decide a specific policy, boundary, condition, API contract, or permission mapping later; this must stay separate from `confirmation_needed`
 
+## Explicit Implementation Compliance
+
+Only Atomic Impl or an explicit docs/code compliance operation writes the lightweight implementation-verification table. Use `## 구현 검증` in `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record `docs basis` and `implementation basis` once for the operation, then one row per changed in-scope required AID:
+
+```text
+관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap
+```
+
+Draft the section after implementation review and finalize the same section after final docs update and compliance review. Normal docs generation and source refresh continue to use the ordinary judgment evidence contract and do not require this table. Do not put the table in managed atom files, project inventory, `work-state.json`, or a new trace artifact. When a basis changes, rerun only the affected AID rows before reusing a prior verdict.
+
+Within an explicit compliance operation, do not issue `matches_confirmed_intent` for an in-scope required AID whose row lacks implementation and validation evidence. This does not add a second evidence format to ordinary docs refresh findings.
+
 ## Gap And Review Finding Shape
 
 Use natural-language prose, but each judgment-bearing `Gaps` item or review finding must include:

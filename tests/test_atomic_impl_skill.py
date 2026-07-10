@@ -75,6 +75,35 @@ class AtomicImplSkillTests(unittest.TestCase):
         ]:
             self.assertIn(required_detail, text)
 
+    def test_implementation_requires_inline_verification_and_docs_only_pass(self) -> None:
+        text = read(SKILL) + read(FLOW)
+        for required in (
+            "observable verification condition or verifiable invariant",
+            "do not require a separate acceptance AID",
+            "docs-only reconstruction reviewer",
+            "without source access",
+            "return to docs writing rather than approving implementation",
+        ):
+            self.assertIn(required, text)
+
+    def test_implementation_compliance_uses_linked_post_write_review(self) -> None:
+        text = read(SKILL) + read(FLOW)
+        for required in (
+            ".stageflow/atomic-docs/requests/<request-id>/post-write-review.md",
+            "## 구현 검증",
+            "docs basis",
+            "implementation basis",
+            "관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap",
+            "changed in-scope required AID",
+            "Do not create a separate trace file",
+            "recheck only affected rows",
+            "Draft one `## 구현 검증` section",
+            "Preserve the draft `## 구현 검증` section",
+            "Finalize the linked `post-write-review.md` `## 구현 검증` section",
+        ):
+            self.assertIn(required, text)
+        self.assertNotIn("verification-trace.json", text)
+
     def test_implementation_flow_requires_user_summary_with_doc_paths(self) -> None:
         text = read(FLOW)
 
@@ -111,8 +140,9 @@ class AtomicImplSkillTests(unittest.TestCase):
         text = read(OPENAI_YAML)
 
         self.assertIn('display_name: "Atomic Impl"', text)
-        self.assertIn('short_description: "Atomic-docs guided implementation flow."', text)
+        self.assertIn('short_description: "Implement and verify from approved atomic docs."', text)
         self.assertIn("Use $atomic-impl", text)
+        self.assertIn("verify changed required AIDs", text)
         self.assertNotIn("Use -impl", text)
 
     def test_plugin_manifest_exposes_atomic_impl_prompt(self) -> None:

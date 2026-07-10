@@ -12,11 +12,14 @@ Every reviewer report must include:
 - `perspective`: exactly one assigned perspective
 - `principle files reviewed`: every required principle file for that perspective
 - `verdict`: `PASS`, `FAIL`, or `provisional`
-- blocking findings with source evidence and affected `atom_key`/AID when known
+- blocking findings with perspective-appropriate evidence: docs evidence for reconstruction/boundary checks, source evidence for source-review perspectives, and operation-state evidence for reporting or ownership checks
+- affected `atom_key`/AID when known
 - evidence that changed since the previous run
 - rerun requirement and affected perspectives
 
 A reviewer must not issue PASS when a required principle file was not read. The main agent aggregates reports but cannot replace a missing reviewer or issue that perspective's PASS itself.
+
+Provide operation inventory or other operation-state evidence only to reporting, source, or ownership checks that require it. Never provide operation-state evidence to a docs-only reconstruction reviewer.
 
 ## Domain Draft Reviewers
 
@@ -38,7 +41,7 @@ FAIL when a meaningful source surface lacks an atom/AID or explicit disposition,
 
 Read `service-logic-coverage.md`, `atom-format-and-judgment.md`, and `atomic-document-contract.md`.
 
-FAIL when implementing the domain from docs still requires arbitrary choices or rereading source, or when applicable forms, payloads, branches, state effects, transactions, permissions, integrations, or failure paths are absent. Require the applicable high-risk matrices or a specific not-applicable reason.
+Run this perspective as a fresh docs-only reviewer. Give it managed docs in scope, approved criteria/project context, and the required principle files only. Do not give it the source tree, operation inventory, or source evidence packet. FAIL when implementing the domain from docs requires arbitrary choices or source access, or when applicable forms, payloads, branches, state effects, transactions, permissions, integrations, or failure paths are absent. Require the applicable high-risk matrices or a specific not-applicable reason. Record missing decisions in the existing reviewer report; do not create a separate probe artifact.
 
 ### Domain Draft Reporting Reviewer
 
@@ -48,11 +51,14 @@ FAIL when domain evidence, operation state, labels, unresolved decisions, or par
 
 ## Domain Reviewer Answer Sheet
 
-The source and reconstruction reviewers must answer:
+The reconstruction reviewer answers from managed docs only:
 
 - Can the same domain behavior be implemented from these docs alone?
 - Which fields, branches, validations, state effects, or failures still require source?
 - Do any source identifiers appear without natural-language behavior?
+
+The source reviewer answers with actual source access:
+
 - Does every meaningful source surface have an atom/AID, gap, `out_of_scope`, or not-applicable result?
 - Which judgment-bearing claims were checked against their actual entry and branch paths?
 
@@ -64,7 +70,7 @@ Run these four independent reviewers only after every accepted domain bundle has
 
 ### Final Atom Boundary / Context Hygiene Reviewer
 
-Check cross-domain ownership, duplicate responsibilities, hidden shared behavior, project/common promotion, context boundaries, and graph consistency. Reopen a domain when the project-wide view exposes a local boundary defect.
+Check cross-domain ownership, duplicate responsibilities, hidden shared behavior, project/common promotion, context boundaries, and graph consistency. Before trusting graph closure, inspect relevant glossary source-of-truth terms and shared payload/state/storage/permission/integration contracts for missing relationship candidates. Reopen a domain when the project-wide view exposes a local boundary defect.
 
 ### Final Source Closure / Fact Fidelity Reviewer
 
@@ -72,7 +78,9 @@ Check project-wide inventory closure, source surfaces that cross domains, shared
 
 ### Final Implementation Reconstruction / High-Risk Reviewer
 
-Check end-to-end flows that cross domains, frontend/backend contract continuity, shared state transitions, error propagation, recovery, and high-risk behavior spanning more than one bundle. Do not redo isolated domain matrices that remain unchanged and already PASSed.
+Read `service-logic-coverage.md`, `atom-format-and-judgment.md`, and `atomic-document-contract.md`.
+
+Run this perspective with accepted managed docs, criteria/project context, and required principle files only, without source or operation evidence. Check end-to-end flows that cross domains, frontend/backend contract continuity, shared state transitions, error propagation, recovery, and high-risk behavior spanning more than one bundle. Do not redo isolated domain matrices that remain unchanged and already PASSed.
 
 ### Final Baseline / Reporting Reviewer
 

@@ -31,6 +31,10 @@ Keep accepted scope, bundle queue, active bundle, writer/reviewer results, tempo
 
 Temporary `inventory.md`, `evidence.md`, domain review files, and `post-write-review.md` may live beside request state. Delete or ignore temporary inventory after completion unless the accepted scope explicitly retains a synced project coverage index.
 
+Only Atomic Impl or an explicit docs/code compliance operation adds `## 구현 검증` to the linked request's `post-write-review.md`. Record `docs basis` and `implementation basis` once, followed by one row per changed in-scope required AID with `관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap`. Atomic Impl drafts this section after implementation review and finalizes the same section after final docs/code compliance. A compliance-only operation creates or resumes an Atomic Docs request and uses the same path.
+
+Normal docs generation or refresh does not require this table. Do not store it in an atom, project inventory, `work-state.json`, or a separate verification-trace file. If either basis changes, review only affected AID rows again.
+
 For partial or targeted docs work, record the inspected source commit as `source_commit_observed`. Never use this operation-local value to advance the managed docs global source baseline.
 
 ## Required Subagent Authorization
@@ -45,6 +49,8 @@ Split multi-domain work into a sequential queue of durable domains or accepted d
 
 Each domain bundle uses exactly one writer and exactly four independent draft reviewers. The writer produces or revises the bundle's inventory rows, source evidence, atom files, AIDs, graph candidates, project-document impacts, and explicit dispositions. The four reviewer perspectives and their principle files are defined in `reviewer-perspectives.md`.
 
+Run the reconstruction/high-risk perspective as a fresh docs-only reviewer without the source tree, operation inventory, or source evidence packet. Run the source-closure/fact-fidelity perspective separately with actual source access. Both perspectives must PASS; one must not substitute for the other.
+
 Run the four reviewers after the writer. If a perspective FAILs, revise the same bundle and rerun that perspective plus any perspective whose evidence changed. Do not rerun unaffected PASS results. Do not start the next bundle until all four perspectives PASS or a user decision is required.
 
 Only a four-reviewer-PASS bundle can become input to the next bundle. If later work changes an earlier bundle's boundary, ownership, graph, shared contract, glossary/source convention, source evidence, or reconstruction basis, reopen that bundle and rerun its writer and affected reviewer perspectives. Rerun dependent later bundles when their PASS basis changed.
@@ -54,6 +60,8 @@ Only a four-reviewer-PASS bundle can become input to the next bundle. If later w
 ## Project-Wide Final Gate
 
 After every accepted bundle has four PASS results, run four separate project-wide final reviewer subagents from `reviewer-perspectives.md`. These reviewers check cross-domain boundaries and graph, project-wide source closure and changed shared evidence, end-to-end reconstruction across frontend/backend or other boundaries, and global baseline/reporting eligibility.
+
+The final reconstruction/high-risk reviewer also receives docs-only input. The final source reviewer retains source access for cross-domain fidelity and closure.
 
 Final reviewers must not repeat unchanged row-level or branch-level domain review. They may recheck local evidence when a cross-domain contradiction, changed shared source, or missing end-to-end link makes the earlier PASS basis unreliable.
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Atomic Impl"
-  short_description: "Atomic-docs guided implementation flow."
-  default_prompt: "Use $atomic-impl to document these requirements in atomic docs and implement from the approved docs."
+  short_description: "Implement and verify from approved atomic docs."
+  default_prompt: "Use $atomic-impl to document these requirements, implement from the approved atomic docs, and verify changed required AIDs against the final code."

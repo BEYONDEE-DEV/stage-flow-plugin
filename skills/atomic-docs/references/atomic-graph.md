@@ -43,6 +43,10 @@ All graph edges are directional. Add explicit inverse edges only when the invers
 
 ## Traversal Policy
 
+Existing graph edges are not proof that every relationship has been discovered. Before graph traversal for a changed or planned behavior, inspect the relevant domain/common context, glossary meaning and source-of-truth rules, shared payload/state/storage/permission/integration contracts, and operation-inventory ownership. Use these surfaces to seed missing relationship candidates without running an exhaustive project-wide search for every AID.
+
+When that check finds a durable relationship, update the existing atom body or graph edge through the accepted change plan. Put unresolved candidates or conflicts in the existing change plan, `Gaps`, or reviewer report. Do not create a separate impact-trace artifact. For partial work, report inspected adjacent impact and uninspected boundaries instead of claiming project-wide conflict closure.
+
 Source-to-atom discovery is a separate seed step. Atomic graph traversal starts from seed atom files and expands to related atom files. Continue traversal while related atoms create plausible modification candidates. Stop when no further modification candidates appear.
 
 Relevance should be inferred from edge type and traversal distance, not strength or priority fields.
