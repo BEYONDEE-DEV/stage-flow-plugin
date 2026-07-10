@@ -14,7 +14,7 @@ HOOK_WRAPPER = ROOT / "hooks" / "simple_workflow_hook.py"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.test_simple_workflow_validator import REQUEST_ID, SESSION_ID, make_project, review_text, sha256, temp_project, write_json
+from tests.test_simple_workflow_validator import REQUEST_ID, SESSION_ID, make_project, make_v2_project, review_text, sha256, temp_project, write_json
 
 
 class HookCheckTests(unittest.TestCase):
@@ -261,6 +261,36 @@ class HookCheckTests(unittest.TestCase):
             self.assertEqual(result["status"], "WARN")
             self.assertTrue(result["continuation_required"])
             self.assertTrue(any("Active Simple Workflow request exists" in warning for warning in result["warnings"]))
+
+    def test_v2_pending_plan_readiness_holds_execution_for_approval(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="active",
+                approval_status="pending",
+                goal_fingerprint="sha256:" + "1" * 64,
+                approved_fingerprint="sha256:" + "2" * 64,
+            )
+            result = self.run_hook(root, {"session_id": SESSION_ID, "prompt": "상태 알려줘"})
+            self.assertEqual(result["status"], "WARN")
+            self.assertEqual(result["workflow_version"], 2)
+            self.assertEqual(result["plan_approval_status"], "pending")
+            self.assertTrue(any("awaits explicit user approval" in warning for warning in result["warnings"]))
+
+    def test_v2_pending_plan_stop_allows_reapproval_response(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="active",
+                approval_status="pending",
+                goal_fingerprint="sha256:" + "1" * 64,
+                approved_fingerprint="sha256:" + "2" * 64,
+            )
+            result = self.run_hook(root, {"session_id": SESSION_ID}, event="stop")
+            self.assertEqual(result["status"], "PASS")
+            self.assertNotIn("decision", result)
 
     def test_general_prompt_without_active_request_still_prepasses(self) -> None:
         with temp_project() as td:

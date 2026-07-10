@@ -25,6 +25,7 @@ It reports when:
 - `plan.md` is missing for the plan phase
 - internal `review.md` is missing for the review or completed phase
 - internal `review.md` has a stale plan fingerprint
+- a v2 plan has `plan_approval_status: pending`; readiness tells the agent that initial or revised execution is on hold until explicit approval
 
 A completed request does not capture unrelated prompts. Explicit Simple Workflow invocation with a
 completed pointer asks the agent to create or select a new request.
@@ -44,6 +45,14 @@ Goal flows independent. For an in-scope Simple Workflow `create_goal`, it emits
 The pre-tool hook does not prove user approval; the agent has already made that conversational
 decision before attempting the tool call. `Stop` emits a blocking wire response only when the
 current phase's required artifacts or validation are invalid.
+
+For material replan after Goal creation, `goal_plan_fingerprint` continues to identify the original
+Goal objective and is never changed. `approved_plan_fingerprint` identifies the latest explicitly
+approved plan. Review validation allows a coherent v2 `pending` state so Codex can ask for
+reapproval, and `Stop` must not deadlock that response. After reapproval, the agent updates the
+approved fingerprint and status, reruns review validation, and resumes the same Goal without another
+`create_goal` call. Before Goal completion, the skill runs plugin-bundled `--phase completion`; this
+is a pre-`update_goal` structural check, not a natural-language approval classifier.
 
 Run manually with the plugin-bundled checker against a target project root:
 

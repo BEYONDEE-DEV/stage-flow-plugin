@@ -71,6 +71,143 @@ class ValidatorTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
 
+    def test_v2_plan_requires_observable_outcome(self) -> None:
+        for outcome in (
+            "잘 완료한다.",
+            "결과는 추후 확인한다.",
+            "결과를 확인한다.",
+            "사용자가 상태를 확인한다.",
+            "테스트가 통과한다.",
+            "`TODO` 사용자가 명령 출력에서 승인 상태와 plan fingerprint 일치를 확인할 수 있다.",
+            "`추후` 사용자가 명령 출력에서 승인 상태와 plan fingerprint 일치를 확인할 수 있다.",
+        ):
+            with self.subTest(outcome=outcome), temp_project() as td:
+                root = make_v2_project(Path(td), phase="plan", plan_body=v2_plan_text(outcome=outcome))
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "plan",
+                    expect_success=False,
+                )
+                self.assertIn("concrete observable outcome", result.stdout)
+
+    def test_v2_plan_requires_completion_evidence_column_and_cells(self) -> None:
+        cases = (
+            (plan_text(), "Completion Evidence"),
+            (
+                v2_plan_text().replace(
+                    "| Requirement | Plan | Completion Evidence |",
+                    "| Requirement | Notes | Completion Evidence |",
+                ),
+                "header must be exactly",
+            ),
+            (v2_plan_text(evidence="-"), "concrete completion evidence"),
+            (v2_plan_text(evidence="추후 확인한다."), "concrete completion evidence"),
+            (v2_plan_text(evidence="테스트"), "concrete completion evidence"),
+            (v2_plan_text(evidence="상태 확인"), "concrete completion evidence"),
+            (v2_plan_text(evidence="관련 명령"), "concrete completion evidence"),
+            (
+                v2_plan_text(evidence="`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx` 테스트 상태 확인"),
+                "concrete completion evidence",
+            ),
+            (
+                v2_plan_text(evidence="`TODO` 관련 validator 테스트가 승인 상태 결과를 확인한다."),
+                "concrete completion evidence",
+            ),
+            (
+                v2_plan_text(evidence="`TBD` 관련 validator 테스트가 승인 상태 결과를 확인한다."),
+                "concrete completion evidence",
+            ),
+            (
+                v2_plan_text(evidence="`추후` 관련 validator 테스트가 승인 상태 결과를 확인한다."),
+                "concrete completion evidence",
+            ),
+        )
+        for body, expected in cases:
+            with self.subTest(expected=expected), temp_project() as td:
+                root = make_v2_project(Path(td), phase="plan", plan_body=body)
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "plan",
+                    expect_success=False,
+                )
+                self.assertIn(expected, result.stdout)
+
+    def test_v2_plan_with_concrete_evidence_passes(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="plan")
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "plan")
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="plan",
+                plan_body=v2_plan_text(outcome="확인 가능한 결과여야 하며 사용자는 최종 상태와 명령 출력을 관찰한다."),
+            )
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "plan")
+
+    def test_v2_state_requires_goal_and_plan_approval_status(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="plan")
+            state = root / ".simple" / "requests" / REQUEST_ID / "state.json"
+            write_json(state, {"request_id": REQUEST_ID, "workflow_version": 2, "phase": "plan"})
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "plan",
+                expect_success=False,
+            )
+            self.assertIn("require `goal_status`", result.stdout)
+            self.assertIn("plan_approval_status", result.stdout)
+
+    def test_v2_pending_goal_cannot_claim_approved_plan(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="pending",
+                approval_status="approved",
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("pending goal_status requires", result.stdout)
+
+    def test_unknown_workflow_version_is_rejected_but_missing_is_legacy(self) -> None:
+        with temp_project() as td:
+            root = make_project(Path(td), phase="plan")
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "plan")
+        for version in (1, 3, "2", True):
+            with self.subTest(version=version), temp_project() as td:
+                root = make_project(Path(td), phase="plan")
+                state = root / ".simple" / "requests" / REQUEST_ID / "state.json"
+                write_json(state, {"request_id": REQUEST_ID, "workflow_version": version, "phase": "plan"})
+                result = self.run_validator(
+                    root,
+                    "--current",
+                    "--session-id",
+                    SESSION_ID,
+                    "--phase",
+                    "plan",
+                    expect_success=False,
+                )
+                self.assertIn("workflow_version", result.stdout)
+
     def test_missing_plan_fails(self) -> None:
         with temp_project() as td:
             root = make_project(Path(td), write_plan=False)
@@ -433,6 +570,108 @@ class ValidatorTests(unittest.TestCase):
             )
             self.assertIn("goal_plan_fingerprint must match", result.stdout)
 
+    def test_v2_initial_review_bootstraps_without_goal_fingerprints(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="pending",
+                approval_status="pending",
+            )
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "review")
+
+    def test_v2_pending_replan_allows_origin_and_approved_fingerprint_to_differ(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="active",
+                approval_status="pending",
+                goal_fingerprint="sha256:" + "1" * 64,
+                approved_fingerprint="sha256:" + "2" * 64,
+            )
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "review")
+
+    def test_v2_approved_replan_keeps_original_goal_fingerprint(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="active",
+                approval_status="approved",
+                goal_fingerprint="sha256:" + "1" * 64,
+            )
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "review")
+
+    def test_v2_active_goal_requires_latest_approval_fingerprint(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", goal_status="active", approval_status="approved")
+            request_dir = root / ".simple" / "requests" / REQUEST_ID
+            write_json(
+                request_dir / "state.json",
+                {
+                    "request_id": REQUEST_ID,
+                    "workflow_version": 2,
+                    "phase": "review",
+                    "plan_approval_status": "approved",
+                    "goal_status": "active",
+                    "goal_plan_fingerprint": "sha256:" + sha256(request_dir / "plan.md"),
+                },
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("approved_plan_fingerprint", result.stdout)
+
+    def test_v2_approved_plan_fingerprint_must_match_current_plan(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                phase="review",
+                goal_status="active",
+                approval_status="approved",
+                goal_fingerprint="sha256:" + "1" * 64,
+                approved_fingerprint="sha256:" + "2" * 64,
+            )
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "review",
+                expect_success=False,
+            )
+            self.assertIn("approved_plan_fingerprint must match", result.stdout)
+
+    def test_v2_completion_pre_gate_runs_before_completed_phase(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", goal_status="active", approval_status="approved")
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "completion")
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", goal_status="active", approval_status="pending")
+            result = self.run_validator(
+                root,
+                "--current",
+                "--session-id",
+                SESSION_ID,
+                "--phase",
+                "completion",
+                expect_success=False,
+            )
+            self.assertIn("plan_approval_status: approved", result.stdout)
+
+    def test_v2_completed_request_passes_all(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="completed", goal_status="completed", approval_status="approved")
+            self.run_validator(root, "--current", "--session-id", SESSION_ID, "--phase", "all")
+
 
 def make_project(
     root: Path,
@@ -474,6 +713,41 @@ def make_project(
     return root
 
 
+def make_v2_project(
+    root: Path,
+    *,
+    phase: str = "review",
+    plan_body: str | None = None,
+    goal_status: str | None = None,
+    approval_status: str | None = None,
+    goal_fingerprint: str | None = None,
+    approved_fingerprint: str | None = None,
+) -> Path:
+    root = make_project(root, phase=phase, plan_body=plan_body or v2_plan_text())
+    request_dir = root / ".simple" / "requests" / REQUEST_ID
+    current_fingerprint = "sha256:" + sha256(request_dir / "plan.md")
+    resolved_goal_status = goal_status or {
+        "plan": "pending",
+        "review": "active",
+        "completed": "completed",
+    }[phase]
+    resolved_approval_status = approval_status or (
+        "pending" if resolved_goal_status == "pending" else "approved"
+    )
+    state: dict[str, object] = {
+        "request_id": REQUEST_ID,
+        "workflow_version": 2,
+        "phase": phase,
+        "plan_approval_status": resolved_approval_status,
+        "goal_status": resolved_goal_status,
+    }
+    if resolved_goal_status in {"active", "completing", "completed"}:
+        state["goal_plan_fingerprint"] = goal_fingerprint or current_fingerprint
+        state["approved_plan_fingerprint"] = approved_fingerprint or current_fingerprint
+    write_json(request_dir / "state.json", state)
+    return root
+
+
 def plan_text(req: str = "REQ-001", plan_cell: str | None = None, include_flow_check: bool = True) -> str:
     plan = plan_cell if plan_cell is not None else f"`{req}`에서 요구한 동작을 구현한다."
     flow_check = """## Flow Check
@@ -507,6 +781,50 @@ def plan_text(req: str = "REQ-001", plan_cell: str | None = None, include_flow_c
 ## Out Of Scope
 
 - 사용자-facing requirements와 goal 산출물은 범위에서 제외한다.
+"""
+
+
+def v2_plan_text(
+    req: str = "REQ-001",
+    *,
+    outcome: str = "사용자가 변경된 상태를 명령 출력으로 확인할 수 있고 관련 validator 테스트가 통과한다.",
+    plan_cell: str | None = None,
+    evidence: str = "관련 validator 테스트와 실제 상태 출력으로 완료 결과를 확인한다.",
+) -> str:
+    plan = plan_cell if plan_cell is not None else f"`{req}`에서 요구한 동작을 구현한다."
+    return f"""# Plan
+
+## Summary
+
+워크플로 구현을 실제 목표와 검증 가능한 완료 증거 중심으로 정리한다.
+
+## Outcome And Completion Criteria
+
+- {outcome}
+
+## Requirements Coverage
+
+| Requirement | Plan | Completion Evidence |
+| --- | --- | --- |
+| {req} | {plan} | {evidence} |
+
+## Change Targets
+
+| Target | Planned Change |
+| --- | --- |
+| `scripts/` and `skills/simple-workflow/` | 목표 달성 중심의 검증 규칙을 적용한다. |
+
+## Flow Check
+
+- 사용자 목표, 상태 전이, 실패 복구, 승인, 검증 흐름을 함께 확인한다.
+
+## Validation
+
+- `{req}`의 실제 결과와 validator 테스트를 검증한다.
+
+## Out Of Scope
+
+- 다른 워크플로 정책 변경은 범위에서 제외한다.
 """
 
 

@@ -121,12 +121,16 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
     state = read_json(request_dir / "state.json")
     phase = metadata_phase(state) or metadata_phase(current)
     goal_status = str(state.get("goal_status") or "pending").strip()
+    workflow_version = state.get("workflow_version")
+    plan_approval_status = str(state.get("plan_approval_status") or "").strip()
     result.update(
         current_request_id=request_id,
         current_source="session",
         current_path=rel(root, current_path),
         phase=phase,
         goal_status=goal_status,
+        workflow_version=workflow_version,
+        plan_approval_status=plan_approval_status,
         validation_phase=PHASE_TO_VALIDATION.get(phase, "all"),
         preflight_required=True,
     )
@@ -173,6 +177,10 @@ def check_user_prompt(
         warnings.append(missing)
     if result["validation"]["status"] == "FAIL":
         warnings.append(result["validation"].get("reason", "validation failed"))
+    if result.get("workflow_version") == 2 and result.get("plan_approval_status") == "pending":
+        warnings.append(
+            "Current v2 plan awaits explicit user approval; do not execute the pending plan or revised scope."
+        )
     if not explicit:
         result["prompt_relevant"] = True
         result["continuation_required"] = True

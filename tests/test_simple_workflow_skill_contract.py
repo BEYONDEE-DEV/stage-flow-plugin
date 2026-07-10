@@ -61,6 +61,47 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("repair local `goal_status: active`", self.text)
         self.assertIn("another unfinished Goal exists", self.text)
 
+    def test_v2_planning_is_outcome_and_evidence_first(self) -> None:
+        self.assertIn("`workflow_version: 2`", self.text)
+        self.assertIn("`## Outcome And Completion Criteria`", self.text)
+        self.assertIn("`Requirement | Plan | Completion Evidence`", self.text)
+        self.assertIn("planned and actual completion evidence", self.text)
+        self.assertIn("Requests without `workflow_version` are legacy requests", self.text)
+
+    def test_question_depth_is_adaptive_to_material_decisions(self) -> None:
+        self.assertIn("Question depth is adaptive, not a quota", self.text)
+        self.assertIn("materially change the goal, scope, expected outcome", self.text)
+        self.assertIn("Infer reversible low-risk details", self.text)
+        self.assertIn("behaviorally equivalent implementation details", self.text)
+
+    def test_material_replan_reuses_goal_and_requires_reapproval(self) -> None:
+        self.assertIn("## Adaptive Execution And Material Replan", self.text)
+        self.assertIn("A method-only adaptation", self.text)
+        self.assertIn("A material change", self.text)
+        self.assertIn("`plan_approval_status: pending`", self.text)
+        self.assertIn("ask for explicit execution approval again", self.text)
+        self.assertIn("continue the same active Goal", self.text)
+        self.assertIn("never change the immutable `goal_plan_fingerprint`", self.text)
+
+    def test_v2_goal_start_and_recovery_track_both_fingerprints(self) -> None:
+        self.assertIn("`approved_plan_fingerprint: sha256:<hex>`", self.text)
+        self.assertIn("the two fingerprints start equal", self.text)
+        self.assertIn("original objective fingerprint", self.text)
+        self.assertIn("repair all four local fields", self.text)
+
+    def test_post_reviews_require_requirement_evidence_and_block_gaps(self) -> None:
+        self.assertIn("must list every `REQ-###` with the actual evidence", self.text)
+        self.assertIn("response must cover every `REQ-###`", self.text)
+        self.assertIn("A critical outcome that cannot be observed is a verification gap", self.text)
+        self.assertIn("do not create a new evidence artifact", self.text)
+
+    def test_completion_pre_gate_and_rescope_policy_preserve_goal(self) -> None:
+        self.assertIn("validation with `--phase completion`", self.text)
+        self.assertIn("Do not continue on failure", self.text)
+        self.assertIn("do not label partial work complete", self.text)
+        self.assertIn("offer a fallback only when it preserves the approved outcome", self.text)
+        self.assertIn("material rescope through the replan flow", self.text)
+
     def test_completion_order_and_partial_failure_recovery_are_explicit(self) -> None:
         self.assertIn("## Completion And Partial-Failure Recovery", self.text)
         self.assertIn("durably set `state.json` `goal_status: completing`", self.text)

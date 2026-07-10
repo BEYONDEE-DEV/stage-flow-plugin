@@ -13,12 +13,12 @@ Follow exactly this sequence:
 
 1. Listen to the user's requirements.
 2. Inspect the project, infer the user's intent, and ask the user to confirm or correct that inferred intent before writing `plan.md`. Ask clarification questions from broad to narrow: 대분류 before 중분류, and 중분류 before 소분류.
-3. Write `plan.md` from the confirmed intent and requirements.
+3. Write `plan.md` from the confirmed intent and requirements, including the observable outcome, completion criteria, and planned completion evidence for every requirement.
 4. Review `plan.md` with a subagent and write internal `review.md`.
 5. If review fails, revise `plan.md` and repeat the subagent review until it passes.
 6. When the agent determines from conversation context that the user clearly authorizes execution, reconcile the current Goal with `get_goal`, call `create_goal` at most once for the reviewed request, and record the successful Goal start in `state.json`.
-7. Execute the approved `plan.md` and run its validation commands.
-8. Run both post-execution reviews, complete the Goal, and then close the local request metadata.
+7. Execute the approved `plan.md`, adapt implementation details only inside the approved goal and scope, and run its validation commands.
+8. Map every requirement to actual completion evidence, run both post-execution reviews, pass the completion pre-gate, complete the Goal, and then close the local request metadata.
 
 Natural-language approval intent belongs to the agent applying this skill. Hooks must not classify approval with keyword or regular-expression matching. A `UserPromptSubmit` hook may report request readiness, while `PreToolUse(create_goal)` only enforces structural prerequisites after the agent has already determined that the user approved execution.
 
@@ -44,7 +44,7 @@ Use request IDs in this form: `YYYYMMDD-HHMM-short-slug`.
 
 Allowed phases are `plan`, `review`, and `completed`.
 
-Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests may record `goal_status` as `pending`, `active`, `completing`, or `completed`, plus `goal_plan_fingerprint` after Goal creation. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
+Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests use integer `workflow_version: 2`, `plan_approval_status: pending|approved`, and may record `goal_status` as `pending`, `active`, `completing`, or `completed`. After Goal creation, `goal_plan_fingerprint` permanently identifies the plan fingerprint named in the original Goal objective, while `approved_plan_fingerprint` identifies the latest plan explicitly approved for execution. Requests without `workflow_version` are legacy requests; unknown versions are invalid. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
 
 The phase transitions are:
 
@@ -53,12 +53,12 @@ plan -> review -> completed
 ```
 
 - Enter `review` only after the current `plan.md` has a passing subagent review and matching fingerprint.
-- Keep phase `review` while the approved work is executing; set `goal_status: active` only after `create_goal` succeeds.
+- Keep phase `review` while the approved work is executing; set `goal_status: active`, `plan_approval_status: approved`, and both plan fingerprints to the current reviewed fingerprint only after `create_goal` succeeds.
 - Enter `completed` only after approved work, validation, and both post-execution reviews pass and `update_goal(status="complete")` succeeds.
 
 ## Artifact Rules
 
-`plan.md` must include `# Plan`, `## Summary`, `## Requirements Coverage` with a concrete execution plan for every `REQ-###`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`.
+For `workflow_version: 2`, `plan.md` must include `# Plan`, `## Summary`, `## Outcome And Completion Criteria`, `## Requirements Coverage`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`. The outcome section must name the user-visible or system-visible final state and how it can be observed. The requirements table must use `Requirement | Plan | Completion Evidence`; every `REQ-###` needs a concrete execution plan and a concrete planned evidence source. Legacy requests keep their existing plan shape.
 
 ## Shared Planning And Review Principles
 
@@ -66,6 +66,7 @@ Use the same principles when writing `plan.md`, reviewing `plan.md` with a subag
 
 - Preserve the user's confirmed intent and the approved scope.
 - Give every `REQ-###` a concrete, verifiable execution plan.
+- Define the observable outcome first and tie every `REQ-###` to planned and actual completion evidence.
 - Tell the user about relevant flow problems discovered while planning or implementing, even when they were pre-existing or outside the requested change.
 - Clearly separate in-scope problems from out-of-scope issues; do not fix out-of-scope issues without user approval.
 - Keep validation tied to the real affected product, feature, state, data, user, command, hook, or validator flow.
@@ -101,6 +102,8 @@ Use three clarification depths:
 - `중분류`: major behavior areas, ownership, sequencing, state or data responsibility, integration responsibility, and review/approval flow.
 - `소분류`: copy/text, exact fallback behavior, edge case detail, validation detail, and small acceptance refinements.
 
+Question depth is adaptive, not a quota. Ask a question only when its answer can materially change the goal, scope, expected outcome, ownership, sequencing, irreversible risk, or validation standard. Infer reversible low-risk details from inspected project facts and record the assumption in `plan.md` when it matters. A depth may have no user question when the bounded subagent check confirms that no decision at that depth can change the plan. Do not ask preference questions whose answers only choose between behaviorally equivalent implementation details.
+
 Before moving from `대분류` to `중분류`, run a bounded subagent check asking whether any unresolved `대분류` question remains. Before moving from `중분류` to `소분류`, run another bounded subagent check asking whether any unresolved `중분류` question remains. Give the subagent only the user's request, inspected project facts, answered questions, and the candidate next-depth questions. The subagent must return `PASS` only when no higher-level question is still needed for `plan.md`.
 
 If the subagent finds a missing higher-level question, ask that question before descending. Do not write `plan.md` while a broad or mid-level decision that can change the plan is still open. Do not create a new artifact for these checks; summarize the latest checkpoint to the user when asking the next batch and record the final result in `review.md` under `## Question Depth Check`.
@@ -127,24 +130,39 @@ Before calling `create_goal`, call `get_goal` and reconcile it with the selected
 
 The plugin `PreToolUse(create_goal)` hook is a structural gate only. Scope the gate only to Goal objectives containing an exact `.simple/requests/<request-id>/plan.md` path; mentioning Simple Workflow or `.simple` as a topic is not enough. Unrelated Stageflow or other `create_goal` calls must prepass. For an in-scope call, deny the tool unless the path's request id exactly equals the selected request, the selected request is in `review`, metadata is coherent, plugin-bundled review validation passes, the objective fingerprint equals the current plan fingerprint, the review verdict body is exactly uppercase `PASS`, and local `goal_status` is not already `active`, `completing`, or `completed`. Do not write `goal.md`.
 
-After `create_goal` succeeds, record `goal_status: active` and `goal_plan_fingerprint: sha256:<hex>` in `state.json`. If that local write fails, use the matching active Goal returned by `get_goal` as authoritative on the next turn and retry only the local metadata write; never call `create_goal` again for recovery.
+After `create_goal` succeeds for a v2 request, record `goal_status: active`, `plan_approval_status: approved`, `goal_plan_fingerprint: sha256:<hex>`, and `approved_plan_fingerprint: sha256:<hex>` in `state.json`; the two fingerprints start equal. `goal_plan_fingerprint` remains immutable for Goal reconciliation. If that local write wholly or partially fails, use the matching active Goal request id and original objective fingerprint returned by `get_goal` as authoritative on the next turn and repair all four local fields; never call `create_goal` again for recovery. Legacy requests keep the existing single-fingerprint behavior.
+
+## Adaptive Execution And Material Replan
+
+Keep execution flexible without silently changing the approved goal:
+
+- A method-only adaptation changes implementation mechanics but preserves every approved requirement, scope boundary, expected outcome, owner, and validation standard. Do not rewrite `plan.md` or ask for another approval. Explain the deviation and prove equivalent or better completion evidence in both post-execution reviews.
+- A material change modifies a requirement, scope boundary, expected outcome, ownership, irreversible risk, or validation standard. Stop before executing the changed work and tell the user what new fact was discovered plus the retry, goal-preserving fallback, or rescope choices.
+- Before editing a material plan, obtain the user's decision about the change. Then durably set `plan_approval_status: pending`, revise `plan.md`, repeat the internal review and `--phase review` validation, summarize the revision, and ask for explicit execution approval again.
+- While a v2 plan is pending approval, `UserPromptSubmit` readiness must say that execution is on hold. `Stop` must still allow Codex to send the reapproval request; hooks must not decide the user's answer.
+- After explicit reapproval, update only `approved_plan_fingerprint` to the current reviewed plan fingerprint, set `plan_approval_status: approved`, rerun `--phase review`, and continue the same active Goal. Never call `create_goal` again and never change the immutable `goal_plan_fingerprint`.
+
+If the pending marker write succeeds but a later plan edit or review fails, remain pending and repair that sequence. If the user declines the material change, do not reduce scope silently; either continue the previously approved work when still valid or present a plan-preserving fallback. A rescope becomes executable only after revised plan review and explicit approval.
 
 ## Post-Implementation Review
 
 After approved work and validation commands are complete, run bounded subagent review from two perspectives before the final user response. Both reviews must use `Shared Planning And Review Principles`. This gate applies to code-changing and read-only work.
 
-1. `Intent Compliance Review`: compare the confirmed user intent, approved `plan.md`, actual diff when code changed, or actual outputs and commands when work was read-only, plus validation results. If the work misses the intent, violates the approved plan, introduces an in-scope regression, or leaves an expected validation failing, Codex must fix it automatically and repeat validation plus both post-implementation reviews.
-2. `Flow / Unexpected Issue Review`: inspect the affected user, state, data, failure or recovery, command, hook, and validator flows. If a relevant issue is in scope or caused by the implementation, Codex must fix it automatically and repeat validation plus both post-implementation reviews. If the issue is outside the user's intent, pre-existing, or requires expanded scope, Codex must tell the user before changing it.
+1. `Intent Compliance Review`: compare the confirmed user intent, latest approved `plan.md`, actual diff when code changed, or actual outputs and commands when work was read-only, plus validation results. Its response must list every `REQ-###` with the actual evidence that proves it and identify any method-only adaptation. If the work misses the intent, lacks evidence for a requirement, violates the approved goal or scope, introduces an in-scope regression, or leaves an expected validation failing, Codex must fix it automatically and repeat validation plus both post-implementation reviews.
+2. `Flow / Unexpected Issue Review`: inspect the affected user, state, data, failure or recovery, command, hook, and validator flows and independently challenge whether the evidence proves the observable outcome. Its response must cover every `REQ-###`; a test command alone is insufficient when it does not observe the real affected result. If a relevant issue is in scope or caused by the implementation, Codex must fix it automatically and repeat validation plus both post-implementation reviews. If the issue is outside the user's intent, pre-existing, or requires expanded scope, Codex must tell the user before changing it.
 
-Do not create new user-facing artifacts for post-implementation review. Summarize the two review results in the final response. If an out-of-scope or pre-existing issue blocks safe completion, explain the blocker and wait for the user's decision.
+Keep requirement-to-evidence coverage inside the bounded reviewer responses and the final summary; do not create a new evidence artifact. Do not create new user-facing artifacts for post-implementation review. A critical outcome that cannot be observed is a verification gap, not a pass. Obtain the smallest missing user-supplied evidence or present retry/fallback/rescope choices instead of claiming completion. Summarize the two review results in the final response. If an out-of-scope or pre-existing issue blocks safe completion, explain the blocker and wait for the user's decision.
 
 ## Completion And Partial-Failure Recovery
 
-Complete only when every approved requirement has evidence, validation passes, and both post-execution reviews pass. Use this order:
+Complete only when every approved requirement has actual evidence, the observable outcome is proven, validation passes, and both post-execution reviews pass. Use this order:
 
-1. While phase remains `review`, durably set `state.json` `goal_status: completing`. If this write fails, do not call `update_goal`.
-2. Call `update_goal(status="complete")`; this is the first completed transition.
-3. After Goal completion succeeds, set the selected `state.json`, session `current.json`, and matching `index.json` entry to phase `completed`; set `state.json` `goal_status` to `completed` while preserving the reviewed fingerprint.
-4. Run plugin-bundled validation with `--phase all` and then give the final response.
+1. While phase and mirrored metadata remain `review`, run plugin-bundled validation with `--phase completion`. For v2 this requires the latest passing review, `plan_approval_status: approved`, and `approved_plan_fingerprint` equal to the current plan. Do not continue on failure.
+2. While phase remains `review`, durably set `state.json` `goal_status: completing`. If this write fails, do not call `update_goal`.
+3. Call `update_goal(status="complete")`; this is the first completed transition.
+4. After Goal completion succeeds, set the selected `state.json`, session `current.json`, and matching `index.json` entry to phase `completed`; set `state.json` `goal_status` to `completed` while preserving both fingerprints and approval status.
+5. Run plugin-bundled validation with `--phase all` and then give the final response.
 
 If `update_goal` fails, keep local phase `review` and `goal_status: completing`; use `get_goal` to determine whether the Goal remains active before retrying Goal completion. If Goal completion succeeds but local completion metadata fails, the durable `completing` marker records the recovery path: a matching complete Goal, or no unfinished Goal after completion was requested, means repair only local completed metadata and validation on the next turn. Never create a replacement Goal from `completing`. For read-only work, the same completion order applies after the two reviews compare the approved plan with actual outputs, commands, and validation results.
+
+If any REQ remains unmet, do not label partial work complete. Retry in scope when safe, offer a fallback only when it preserves the approved outcome, or ask the user to approve a material rescope through the replan flow. Completion convenience never overrides the approved goal.

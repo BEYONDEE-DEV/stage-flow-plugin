@@ -36,9 +36,12 @@ Simple Workflow uses one human artifact, one internal review record, and small m
 ```json
 {
   "request_id": "20260609-1120-simple-workflow-plugin",
+  "workflow_version": 2,
   "phase": "plan",
+  "plan_approval_status": "pending",
   "goal_status": "pending",
   "goal_plan_fingerprint": null,
+  "approved_plan_fingerprint": null,
   "last_validated_at": null
 }
 ```
@@ -50,10 +53,17 @@ The selected request id must match `YYYYMMDD-HHMM-short-slug` and be registered 
 the same phase. Readers accept legacy `id` in place of `request_id` and legacy `status` in place of
 `phase`, but missing or contradictory values are invalid.
 
+Missing `workflow_version` identifies a legacy request. New requests use integer
+`workflow_version: 2`; other values are invalid. V2 requests use `plan_approval_status: pending`
+before initial approval or during material replan, and `approved` only while the current plan is
+authorized for execution.
+
 `goal_status` is optional for legacy requests. New requests use `pending`, change it to `active`
 only after `create_goal` succeeds, set `completing` immediately before requesting Goal completion,
-and use `completed` only after `update_goal(status="complete")` succeeds. An active, completing, or
-completed Goal records `goal_plan_fingerprint` as `sha256:<hex>`.
+and use `completed` only after `update_goal(status="complete")` succeeds. For v2, Goal creation sets
+`goal_plan_fingerprint` and `approved_plan_fingerprint` to the same reviewed value.
+`goal_plan_fingerprint` remains the immutable fingerprint from the Goal objective;
+`approved_plan_fingerprint` changes only after an explicitly approved material replan.
 
 ## plan.md
 
@@ -66,11 +76,15 @@ completed Goal records `goal_plan_fingerprint` as `sha256:<hex>`.
 
 요청된 변경의 목적과 접근 방식을 간단히 설명한다.
 
+## Outcome And Completion Criteria
+
+- 사용자가 변경된 요청 상태를 validator 명령 출력에서 확인할 수 있고 관련 테스트가 통과한다.
+
 ## Requirements Coverage
 
-| Requirement | Plan |
-| --- | --- |
-| REQ-001 | `REQ-001`에서 요구한 동작을 구현한다. |
+| Requirement | Plan | Completion Evidence |
+| --- | --- | --- |
+| REQ-001 | `REQ-001`에서 요구한 동작을 구현한다. | 관련 테스트와 실제 사용자 흐름의 상태 출력으로 완료를 확인한다. |
 
 ## Change Targets
 
@@ -91,6 +105,15 @@ completed Goal records `goal_plan_fingerprint` as `sha256:<hex>`.
 
 - `## Requirements Coverage`에 포함되지 않은 작업은 범위에서 제외한다.
 ```
+
+The outcome must be observable rather than a generic completion claim. Each v2 requirement row
+must name evidence that can prove the affected result, such as a test, command output, state,
+response, file, or user-flow observation. Empty, deferred, or placeholder evidence is invalid.
+
+During material replan, set `plan_approval_status: pending` before editing `plan.md`. Keep
+`goal_plan_fingerprint` unchanged, replace `review.md` with a passing review of the revised plan,
+and update `approved_plan_fingerprint` plus approval status only after explicit reapproval. No new
+Goal or plan artifact is created.
 
 ## review.md
 

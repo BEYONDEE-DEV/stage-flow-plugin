@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 PHASES = {"plan", "review", "completed"}
-VALIDATION_PHASES = {"plan", "review", "all"}
-VALIDATION_STATE_PHASE = {"plan": "plan", "review": "review", "all": "completed"}
+VALIDATION_PHASES = {"plan", "review", "completion", "all"}
+VALIDATION_STATE_PHASE = {"plan": "plan", "review": "review", "completion": "review", "all": "completed"}
 GOAL_STATUSES = {"pending", "active", "completing", "completed"}
+PLAN_APPROVAL_STATUSES = {"pending", "approved"}
 BLOCKING_OK = {
     "none",
     "no blocking issues",
@@ -87,6 +88,22 @@ PLACEHOLDER_TARGET_ACTION_RE = re.compile(
     r"(?:제거|교체|차단|검증|탐지|거부|치환|삭제)(?:한다|하고|하며|하도록|해|하여|할\b)"
 )
 PLACEHOLDER_REGRESSION_FIX_RE = re.compile(r"(?:테스트.{0,40}고정|고정.{0,40}테스트)")
+OUTCOME_TARGET_RE = re.compile(r"(?:사용자|요청|상태|동작|응답|출력|파일|흐름|요구사항|Goal|plan)", re.IGNORECASE)
+OUTCOME_METHOD_RE = re.compile(r"(?:명령|테스트|validator|출력|응답|파일|경로|사용자\s*흐름|상태\s*필드|diff|증거)", re.IGNORECASE)
+OUTCOME_PROOF_RE = re.compile(r"(?:확인|관찰|통과|일치|반환|표시|검증|증명|대조|가능)")
+GENERIC_OUTCOME_RE = re.compile(r"^\s*(?:[-*]\s*)?(?:잘|정상적으로)?\s*(?:완료|동작|처리)(?:한다|된다)?[.!]?\s*$")
+EVIDENCE_SOURCE_RE = re.compile(
+    r"(?:테스트|validator|명령|출력|응답|상태|파일|경로|diff|사용자\s*흐름|검사)",
+    re.IGNORECASE,
+)
+EVIDENCE_TARGET_RE = re.compile(
+    r"(?:REQ-\d{3}|동작|결과|상태|흐름|요구|규칙|경계|순서|fingerprint|plan|Goal|승인|섹션|열|셀|버전|호환|복구|경고|범위|출력|증거|소스|cache|캐시|설치|plugin|플러그인)",
+    re.IGNORECASE,
+)
+EVIDENCE_PROOF_RE = re.compile(
+    r"(?:통과|일치|반환|표시|확인|비교|검증|관찰|차단|거부|성공|실패|보존)",
+    re.IGNORECASE,
+)
 
 VALIDATOR_TEMPLATES = {
     "index": '''{
@@ -102,7 +119,10 @@ VALIDATOR_TEMPLATES = {
 }\n''',
     "state": '''{
   "request_id": "20260609-1120-simple-workflow-plugin",
+  "workflow_version": 2,
   "phase": "plan",
+  "plan_approval_status": "pending",
+  "goal_status": "pending",
   "last_validated_at": null
 }\n''',
     "plan": '''# Plan
@@ -111,11 +131,15 @@ VALIDATOR_TEMPLATES = {
 
 요청된 변경의 목적과 접근 방식을 간단히 설명한다.
 
+## Outcome And Completion Criteria
+
+- 사용자가 변경된 요청 상태를 validator 명령 출력에서 확인할 수 있고 관련 테스트가 통과한다.
+
 ## Requirements Coverage
 
-| Requirement | Plan |
-| --- | --- |
-| REQ-001 | `REQ-001`에서 요구한 동작을 구현한다. |
+| Requirement | Plan | Completion Evidence |
+| --- | --- | --- |
+| REQ-001 | `REQ-001`에서 요구한 동작을 구현한다. | 관련 테스트와 실제 사용자 흐름의 상태 출력으로 완료를 확인한다. |
 
 ## Change Targets
 
@@ -274,10 +298,12 @@ def validate(ctx: Ctx, phase: str, errors: list[str]) -> None:
         errors.append(
             f"validation phase `{phase}` requires `state.json` phase `{expected_phase}`, got `{state_phase}`"
         )
-    if phase in {"plan", "review", "all"}:
+    if phase in {"plan", "review", "completion", "all"}:
         validate_plan(ctx, errors)
-    if phase in {"review", "all"}:
+    if phase in {"review", "completion", "all"}:
         validate_review(ctx, errors)
+    if phase in {"completion", "all"}:
+        validate_completion(ctx, phase, errors)
 
 
 def validate_meta(ctx: Ctx, errors: list[str]) -> None:
@@ -286,13 +312,21 @@ def validate_meta(ctx: Ctx, errors: list[str]) -> None:
         errors.append("`state.json` must include `phase`")
     elif phase not in PHASES:
         errors.append(f"`state.json` phase `{phase}` is not allowed")
+    version = ctx.state.get("workflow_version")
+    if version is not None and (type(version) is not int or version != 2):
+        errors.append("`state.json` workflow_version must be integer `2` when present")
 
 
 def validate_plan(ctx: Ctx, errors: list[str]) -> None:
     text = read_md(ctx.request_dir / "plan.md", "`plan.md`", errors)
     if not text:
         return
-    need_heads(text, "plan.md", ["# Plan", "## Summary", "## Requirements Coverage", "## Change Targets", "## Flow Check", "## Validation", "## Out Of Scope"], errors)
+    heads = ["# Plan", "## Summary", "## Requirements Coverage", "## Change Targets", "## Flow Check", "## Validation", "## Out Of Scope"]
+    korean_heads = ["## Summary", "## Requirements Coverage", "## Change Targets", "## Flow Check", "## Validation", "## Out Of Scope"]
+    if is_v2(ctx.state):
+        heads.insert(2, "## Outcome And Completion Criteria")
+        korean_heads.insert(1, "## Outcome And Completion Criteria")
+    need_heads(text, "plan.md", heads, errors)
     ids = req_ids(text)
     if not ids:
         errors.append("`plan.md` must include at least one `REQ-###` requirement id")
@@ -302,16 +336,26 @@ def validate_plan(ctx: Ctx, errors: list[str]) -> None:
     require_korean_sections(
         text,
         "plan.md",
-        ["## Summary", "## Requirements Coverage", "## Change Targets", "## Flow Check", "## Validation", "## Out Of Scope"],
+        korean_heads,
         errors,
     )
+    if is_v2(ctx.state):
+        outcome = section(text, "## Outcome And Completion Criteria")
+        if not meaningful_outcome(outcome):
+            errors.append("`plan.md` Outcome And Completion Criteria must define a concrete observable outcome")
     coverage = section(text, "## Requirements Coverage")
+    if is_v2(ctx.state):
+        header = coverage_header(coverage)
+        if [norm(cell) for cell in header] != ["requirement", "plan", "completion evidence"]:
+            errors.append("`plan.md` v2 Requirements Coverage header must be exactly `Requirement | Plan | Completion Evidence`")
     for rid in ids:
         row = coverage_row(coverage, rid)
         if not row:
             errors.append(f"`plan.md` Requirements Coverage must include a table row for `{rid}`")
         elif not meaningful_plan_cell(row):
             errors.append(f"`plan.md` Requirements Coverage must include a concrete plan for `{rid}`")
+        elif is_v2(ctx.state) and not meaningful_evidence_cell(row):
+            errors.append(f"`plan.md` Requirements Coverage must include concrete completion evidence for `{rid}`")
 
 
 def validate_review(ctx: Ctx, errors: list[str]) -> None:
@@ -333,6 +377,22 @@ def validate_review(ctx: Ctx, errors: list[str]) -> None:
     if norm(section(text, "## Question Depth Check")) not in QUESTION_DEPTH_OK:
         errors.append("`review.md` Question Depth Check must say `No unresolved higher-level questions` or `None`")
     validate_review_language(text, errors)
+
+
+def validate_completion(ctx: Ctx, phase: str, errors: list[str]) -> None:
+    goal_status = str(ctx.state.get("goal_status") or "").strip()
+    if phase == "completion" and goal_status and goal_status not in {"active", "completing"}:
+        errors.append("completion validation requires goal_status `active` or `completing`")
+    if not is_v2(ctx.state):
+        return
+    approval_status = str(ctx.state.get("plan_approval_status") or "").strip()
+    if approval_status != "approved":
+        errors.append("completion requires `plan_approval_status: approved`")
+    approved = str(ctx.state.get("approved_plan_fingerprint") or "").strip().lower()
+    if not FINGERPRINT_RE.fullmatch(approved):
+        errors.append("completion requires `approved_plan_fingerprint: sha256:<hex>`")
+    elif approved.removeprefix("sha256:") != plan_fp(ctx.request_dir):
+        errors.append("completion requires approved_plan_fingerprint to match the current `plan.md`")
 
 
 def read_json(path: Path, label: str, errors: list[str]) -> dict[str, Any]:
@@ -404,6 +464,57 @@ def coverage_row(coverage: str, rid: str) -> list[str]:
         if cells and cells[0] == rid:
             return cells
     return []
+
+
+def coverage_header(coverage: str) -> list[str]:
+    for line in coverage.splitlines():
+        if "|" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and norm(cells[0]) == "requirement":
+            return cells
+    return []
+
+
+def meaningful_outcome(value: str) -> bool:
+    prose = INLINE_CODE_RE.sub("", value).strip()
+    if len(prose) < 40 or not HANGUL_RE.search(prose) or GENERIC_OUTCOME_RE.fullmatch(prose):
+        return False
+    if (
+        PLAN_PLACEHOLDER_RE.search(prose)
+        or PLACEHOLDER_DEFERRAL_USAGE_RE.search(prose)
+        or has_inline_placeholder(value)
+    ):
+        return False
+    return bool(
+        OUTCOME_TARGET_RE.search(prose)
+        and OUTCOME_METHOD_RE.search(prose)
+        and OUTCOME_PROOF_RE.search(prose)
+    )
+
+
+def meaningful_evidence_cell(row: list[str]) -> bool:
+    if len(row) < 3:
+        return False
+    evidence = row[2].strip()
+    prose = INLINE_CODE_RE.sub("", evidence).strip()
+    if len(prose) < 20 or evidence == "-":
+        return False
+    if (
+        PLAN_PLACEHOLDER_RE.search(prose)
+        or PLACEHOLDER_DEFERRAL_USAGE_RE.search(prose)
+        or has_inline_placeholder(evidence)
+    ):
+        return False
+    return bool(
+        EVIDENCE_SOURCE_RE.search(prose)
+        and EVIDENCE_TARGET_RE.search(prose)
+        and EVIDENCE_PROOF_RE.search(prose)
+    )
+
+
+def has_inline_placeholder(value: str) -> bool:
+    return any(PLACEHOLDER_CODE_RE.search(match.group(1).strip()) for match in INLINE_CODE_RE.finditer(value))
 
 
 def meaningful_plan_cell(row: list[str]) -> bool:
@@ -482,7 +593,11 @@ def validate_metadata_phases(
 
 def validate_goal_metadata(state: dict[str, Any], request_dir: Path, errors: list[str]) -> None:
     goal_status = str(state.get("goal_status") or "").strip()
+    v2 = is_v2(state)
     if not goal_status:
+        if v2:
+            errors.append("`state.json` v2 requests require `goal_status`")
+            validate_v2_approval_metadata(state, "", request_dir, errors)
         return
     if goal_status not in GOAL_STATUSES:
         errors.append(f"`state.json` goal_status `{goal_status}` is not allowed")
@@ -496,12 +611,43 @@ def validate_goal_metadata(state: dict[str, Any], request_dir: Path, errors: lis
     if incompatible:
         errors.append(f"`state.json` phase `{phase}` is incompatible with goal_status `{goal_status}`")
     fingerprint = str(state.get("goal_plan_fingerprint") or "").strip().lower()
+    if goal_status == "pending" and fingerprint and not FINGERPRINT_RE.fullmatch(fingerprint):
+        errors.append("`state.json` goal_plan_fingerprint must use `sha256:<hex>`")
     if goal_status in {"active", "completing", "completed"} and not FINGERPRINT_RE.fullmatch(fingerprint):
         errors.append(
             "`state.json` active/completing/completed goal_status requires `goal_plan_fingerprint: sha256:<hex>`"
         )
-    elif goal_status in {"active", "completing", "completed"} and fingerprint.removeprefix("sha256:") != plan_fp(request_dir):
+    elif not v2 and goal_status in {"active", "completing", "completed"} and fingerprint.removeprefix("sha256:") != plan_fp(request_dir):
         errors.append("`state.json` goal_plan_fingerprint must match the current `plan.md`")
+    if not v2:
+        return
+    validate_v2_approval_metadata(state, goal_status, request_dir, errors)
+
+
+def validate_v2_approval_metadata(
+    state: dict[str, Any],
+    goal_status: str,
+    request_dir: Path,
+    errors: list[str],
+) -> None:
+    approval_status = str(state.get("plan_approval_status") or "").strip()
+    if approval_status not in PLAN_APPROVAL_STATUSES:
+        errors.append("`state.json` v2 requests require plan_approval_status `pending` or `approved`")
+    if goal_status == "pending" and approval_status and approval_status != "pending":
+        errors.append("`state.json` v2 pending goal_status requires plan_approval_status `pending`")
+    approved = str(state.get("approved_plan_fingerprint") or "").strip().lower()
+    if approved and not FINGERPRINT_RE.fullmatch(approved):
+        errors.append("`state.json` approved_plan_fingerprint must use `sha256:<hex>`")
+    if goal_status in {"active", "completing", "completed"} and not FINGERPRINT_RE.fullmatch(approved):
+        errors.append(
+            "`state.json` v2 active/completing/completed goal_status requires `approved_plan_fingerprint: sha256:<hex>`"
+        )
+    elif approval_status == "approved" and goal_status in {"active", "completing", "completed"} and approved.removeprefix("sha256:") != plan_fp(request_dir):
+        errors.append("`state.json` approved_plan_fingerprint must match the current `plan.md` when approved")
+
+
+def is_v2(state: dict[str, Any]) -> bool:
+    return type(state.get("workflow_version")) is int and state.get("workflow_version") == 2
 
 
 def plan_fp(request_dir: Path) -> str:
