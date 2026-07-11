@@ -2,11 +2,11 @@
 
 ## Responsibility
 
-This reference defines atom line IDs, required atom sections, judgment evidence, forbidden shapes, and atomicity rules.
+This reference defines selective atom IDs, required atom sections, judgment evidence, forbidden shapes, and atomicity rules.
 
 ## Atom Line ID Policy
 
-Every `*-atom.md` file must assign a stable unique ID to each judgment-relevant meaning line. A meaning line is a bullet, paragraph, table row, source evidence row, planned-change item, gap item, or reviewable behavior statement that can be referenced by a change plan, review finding, judgment label, or source evidence mapping.
+Assign a stable unique AID only to a durable, independently referenceable meaning used by implementation planning, compliance review, change judgment, or conflict analysis. Typical AID-bearing items are confirmed intent, business rules, observable contracts, changed required behavior, active judgments, and gaps. Do not assign AIDs to routine explanatory prose, mechanical source summaries, every evidence row, or every table row merely because it can be numbered.
 
 Use this format:
 
@@ -47,9 +47,9 @@ Each atom file must preserve these sections:
 
 `Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining.
 
-Every AID-bearing confirmed required `Intent`, required `Rules`, or `approved_required_change` meaning item must include an observable verification condition or a verifiable invariant in that same item. Include the applicable precondition/input, expected result, refusal/failure result, state/storage/external effect, or explicit exclusion needed to judge the requirement. Do not accept generic wording such as "works correctly" or a test name without expected behavior. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning.
+Every changed in-scope required AID used as an implementation basis must include an observable verification condition or a verifiable invariant in that same item. Include only the precondition, result, refusal/failure, state/effect, or exclusion needed to judge that change. Historical descriptions outside the implementation scope do not need acceptance detail added merely for completeness. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning.
 
-`Current Implementation` records source-observed implementation facts with source evidence such as files, classes, functions, states, payload fields, storage effects, or integration points, and expresses those facts as natural-language service logic. A bare list of source identifiers, endpoints, controllers, service classes, or methods is not sufficient.
+`Current Implementation` records source-observed implementation context needed to find and understand the documented decisions. Include important entry points, states, storage effects, integration points, non-obvious constraints, and source identifiers as applicable. Do not mirror every source branch, method call, DTO field, or internal structure. A bare list of identifiers is not sufficient, but a concise decision-oriented explanation may point the reader back to source for mechanics.
 
 For Korean managed docs, write the prose under `Current Implementation` with Korean-first structure when that structure helps the atom explain behavior. Recommended subheadings are:
 
@@ -60,7 +60,7 @@ For Korean managed docs, write the prose under `Current Implementation` with Kor
 - `### 실패와 복구 동작`
 - `### Source Evidence`
 
-Do not force every atom to include every subheading. Use only the applicable subsections, but make the implementation readable as behavior criteria: input conditions, branches or refusals, state changes, stored or external effects, and failure results. Do not write `Current Implementation` as a translated English skeleton or as a method-call sequence such as "class A calls method B and then saves C" unless the atom also states the service behavior, decision rule, state effect, and failure outcome that the call implements.
+Do not force every atom to include every subheading. Use only the subsections needed to preserve decisions and orient source inspection. Do not write `Current Implementation` as a translated English skeleton or a method-call sequence. Include conditions, state/effects, and failures only when they affect a product rule, observable contract, verification result, or change impact.
 
 `Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, `implemented_pending_confirmation`, or `deferred_decision`. A user-confirmed future implementation or behavior change is not `confirmation_needed`; record the concrete future behavior as `approved_required_change` or `approved_optional_change`. A user-confirmed plan to decide a policy, boundary, condition, API contract, or permission mapping later is `deferred_decision`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, deferred-decision blockers, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries.
 
@@ -98,8 +98,8 @@ Approved project documents may provide context such as non-goals or terminology 
 
 An atom is too broad when it covers unrelated behaviors, policies, rules, states, planned changes, or gap boundaries. Split or propose a split before writing confirmed docs. If the split is ambiguous, keep candidates in the change plan or `Gaps` and ask the user.
 
-An atom is over-compressed when it bundles independent entry points, user actions, save/delete scopes, API contracts, state transitions, persistence effects, or failure/recovery paths that can be implemented and judged separately. Do not keep those responsibilities inside one generic atom only because they share a domain, screen, service class, or folder. Use context atoms for broad boundaries, then promote concrete source-observed workflows, policies, contracts, and state transitions into behavior atoms with their own owned behavior and excluded behavior.
+An atom is over-compressed when it bundles responsibilities that have independent product decisions, change approval, verification, ownership, or conflict boundaries. Shared entry points, methods, states, or persistence effects do not require separate atoms by themselves. Do not keep genuinely independent decisions inside one generic atom only because they share a domain, screen, service class, or folder.
 
-Choose split boundaries from implementation and judgment independence, not from a project-specific domain list. Entry point, user action, saved aggregate, API contract, state transition, failure/recovery path, and persistence side effect are valid split evidence when they create different implementation decisions or review findings.
+Choose split boundaries from decision, ownership, change, and judgment independence, not from a project-specific domain list or source structure. Entry point, user action, saved aggregate, API contract, state transition, failure/recovery path, and persistence side effect are split evidence only when they create different durable decisions or review findings.
 
 Do not write a vague split gap that says more precision is needed without concrete evidence. A split proposal must name candidate atom keys, tentative paths or slugs, owning domain path, source files/classes/functions or other source identifiers, the split criterion, each candidate atom's behavior/state/rule responsibility, and unresolved questions. If that evidence is missing, record the missing evidence as a `Gaps` item instead of pretending the split is already specified.

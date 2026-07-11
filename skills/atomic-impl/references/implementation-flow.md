@@ -28,35 +28,35 @@ Before writing implementation code, ensure the requested behavior has an accepte
 
 ## 3. Write Requirements As Implementation-Basis Docs
 
-Write or update managed docs so the accepted behavior can be implemented from docs without rereading source for meaning.
+Write or update managed docs so the accepted product behavior and verification basis are explicit without duplicating source mechanics.
 
 For each meaningful behavior, preserve:
 
 - user intent, confirmed rules, inferred rules marked as inferred, and explicit non-goals
-- an observable verification condition or verifiable invariant inside each in-scope confirmed required AID meaning item; do not require a separate acceptance AID unless it is an independently reviewable meaning
+- an observable verification condition or verifiable invariant inside each changed in-scope required AID meaning item; do not require a separate acceptance AID unless it is an independently reviewable meaning
 - new requested behavior as `Planned Changes` until it is implemented and approved by the user
 - existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists
-- input conditions, branches, validation/refusal/defaulting, permission or guard behavior
-- state transitions, persistence effects, external calls, events, and side effects
-- UI or API contract details, payload fields, forms, routes, empty/loading/error states, and save/delete scopes when applicable
-- failure, retry, fallback, recovery, and runtime exception behavior
+- input conditions, validation/refusal/defaulting, permissions, and branches when they change a product decision or observable result
+- state transitions, persistence effects, external calls, events, and side effects when they are part of the required contract
+- UI or API details only when fields, routes, states, payloads, or save/delete scope affect required behavior or verification
+- failure, retry, fallback, recovery, and runtime exception behavior when the requirement assigns a specific outcome
 - source evidence, judgment labels, `Gaps`, related `atom_key`, AID, and graph relationships required by `atomic-docs`
 
 Use `Intent` and `Rules` for confirmed purpose and policy. Use `Gaps` or `confirmation_needed` for missing decisions, uncertain behavior, or source evidence that does not yet prove a confirmed rule. Do not write not-yet-implemented requested behavior as `Current Implementation`.
 
-Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences as substitutes for natural-language service logic.
+Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences as substitutes for development decisions. Also avoid copying behavior-neutral source detail merely to make the docs look complete.
 
 ## 4. Review And User Approval Before Code
 
 After the docs write/review gates pass, summarize the docs for the user before coding.
 
-The relevant domain reconstruction reviewer must have PASSed from managed docs and approved project context without source access. If that reviewer needs source or an unstated implementation decision, return to docs writing rather than approving implementation.
+The required domain development-quality reviewer and any applicable risk/contract reviewer must have PASSed using the docs, requirements, and relevant source evidence. If implementation would still require an unstated product decision, return to docs writing rather than approving implementation. Needing source for internal mechanics is expected.
 
 The summary must include:
 
 - changed docs paths and which path the user should inspect
 - behavior that will be implemented from the docs
-- important conditions, branches, validations, state changes, side effects, and failures
+- important decisions, contracts, validations, state changes, side effects, failures, and verification conditions
 - unresolved `Gaps`, `confirmation_needed`, or out-of-scope behavior
 - whether the docs are a partial-scope or full-scope implementation basis
 

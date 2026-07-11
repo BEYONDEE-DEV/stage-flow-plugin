@@ -44,7 +44,7 @@ Keep source convention and service logic judgment separate:
 
 ## Domain Discovery Policy
 
-Choose domain paths from project evidence, not from a fixed project-specific list.
+Choose domain paths from project evidence, not from a fixed project-specific list. For targeted work, inspect the requested behavior and adjacent ownership or shared-contract surfaces. Do not require project-wide domain discovery unless the accepted operation is full-project or seeks a global baseline.
 
 Use this priority order:
 
@@ -120,18 +120,18 @@ Criteria-review must also fail a criteria draft that rejects a broad source root
 
 ## Core Business Term Coverage Gate
 
-Before writing or refreshing atom files, identify source-repeated business nouns from type/interface names, collection keys, UI titles, API payloads, and existing domain atoms. Each core business term must be defined in `project/project-glossary.md` or in an appropriate domain atom before derived behavior is treated as covered.
+Before writing or refreshing atom files, identify business terms whose meaning is ambiguous, shared across domains, ownership-sensitive, or necessary to understand the accepted decision. Define those terms in `project/project-glossary.md` or an appropriate domain atom. Do not create glossary entries for every repeated type, collection key, UI title, or payload noun.
 
 Do not document a derived concept while its parent business term is missing or underdefined. If the parent meaning is uncertain, put the missing definition and source evidence in the change plan or `Gaps` instead of writing confirmed intent.
 
 Do not force admin, operator, or screen-centric language when the source project is not an admin UI. For non-UI services, libraries, jobs, agents, or APIs, describe the relevant caller, service, job, policy, or system flow instead of inventing an operator workflow. When a UI or command entry point exists, include that entry point as source evidence.
 
-Each covered core business term should state:
+Each covered core business term should state the applicable fields only:
 
 - business meaning
 - owning domain
 - primary actor, user, or system action
 - source of truth
-- stored input fields versus API/computed output fields
-- related status, hold, deduction, threshold, display, or availability rules
-- aliases, related source identifiers, forbidden conflations, and uncertainty
+- stored input versus computed output only when the distinction changes behavior
+- related status, threshold, display, or availability rule only when needed for the documented decision
+- aliases, forbidden conflations, source identifiers, and uncertainty when they prevent confusion or conflict

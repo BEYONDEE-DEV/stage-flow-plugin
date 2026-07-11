@@ -44,8 +44,8 @@ If a domain candidate or category grouping looks broad instead of being a durabl
 Read these sibling references directly from `SKILL.md` as needed:
 
 - `criteria-flow.md` for the first setup step, `project/atomization-criteria.md`, Criteria Structure Review Gate, criteria approval summary, and criteria approval handoff.
-- `docs-generation-flow.md` for Atomic Docs Goal Gate, sequential domain bundles, and project-wide final review orchestration.
-- `reviewer-perspectives.md` for the four independent domain reviewers and four cross-domain final reviewers.
+- `docs-generation-flow.md` for Atomic Docs Goal Gate, sequential domain bundles, conditional risk review, and conditional project-wide review.
+- `reviewer-perspectives.md` for the required development-quality reviewer, conditional risk/contract reviewer, and project-wide integration/baseline reviewer.
 - `project-documents-and-inventory.md` for `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, `project/source-convention.md`, and service logic inventory rules.
 - `source-baseline-and-change-plan.md` for source-code commit baseline metadata, full refresh sequencing, targeted docs scope, change plan requirements, and inference/gap judgment rules.
 - `validation-contract.md` for plugin-bundled structural validator phases and limits.

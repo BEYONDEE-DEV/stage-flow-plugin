@@ -114,8 +114,8 @@ Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/proje
 Project document writing rules:
 
 - `project-goal.md` records the service or product purpose, target users or callers, success criteria, non-goals, confirmed business direction, and source-unverifiable items as `confirmation_needed`. It must not turn config paths, baseline metadata paths, cache paths, reset notes, deletion notes, reviewer logs, or docs-operation status into the service goal.
-- `project-glossary.md` records each core term with structured fields for meaning, owning domain, actor/system action, source of truth, stored vs computed, related rules/status, aliases, forbidden conflations, and uncertainty. A glossary that only contains one-line term definitions is not enough to support core term coverage.
-- A service logic inventory is writer/reviewer input, not a service logic atom. Keep it as operation-local state by default. If `<doc-root>/project/service-logic-inventory.md` is explicitly retained as a final coverage index, each behavior item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. One-line behavior summaries are not enough for baseline readiness.
+- `project-glossary.md` records only ambiguous, shared, ownership-sensitive, or decision-critical terms. Each entry must explain meaning and source of truth, plus ownership, actors, stored/computed distinction, related rules, aliases, forbidden conflations, or uncertainty only when applicable.
+- A service logic inventory is lightweight writer/reviewer input, not a service logic atom. Keep it as operation-local state by default. If `<doc-root>/project/service-logic-inventory.md` is explicitly retained as a final coverage index, each behavior aggregate must record its decision summary, source identifiers, owner or disposition, and only the rules, state/effects, risk, related AID, or judgment fields that apply. Do not duplicate the atom body in the inventory.
 - `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related service logic atom_key and AID, or to a coverage gap when no atom exists yet. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
 - `atomization-criteria.md` records generation criteria, domain/category boundary semantics, accepted scope semantics, and approval state. It is not direct code suitability evidence.
 
@@ -124,7 +124,7 @@ Project document review rules:
 - Do not fail a project document only because it omits atom required sections, frontmatter `atom_key`, AID values, or `graph_edges`.
 - Fail when a project document directly claims code is implemented, missing, buggy, matching, or out of scope as if it were a service logic atom.
 - Fail when `project-goal.md` treats docs configuration, baseline paths, plugin cache paths, reset/delete notes, or operation logs as service/product goals.
-- Fail when `project-glossary.md` is only a list of one-line term definitions without the structured fields required above.
+- Fail when a glossary entry is too shallow to resolve the ambiguity, ownership question, or conflict for which it was created.
 - Fail when a retained `service-logic-inventory.md` is only a one-line summary, lacks behavior-level fields needed by writer/reviewer work, or is not synced to real atom_key/AID references; do not write or update baseline metadata while the inventory is in that state.
 - Fail when `source-convention.md` records runtime-impacting behavior without a related atom_key/AID or a coverage gap.
 
@@ -134,5 +134,5 @@ Keep this reference under 200 lines as the structural entrypoint. Load the sibli
 
 - `references/atomization-criteria-contract.md` for the first criteria document, approved criteria shape, and criteria-review contract.
 - `references/source-convention-and-domain-policy.md` for source convention documents, domain discovery, hybrid naming, domain boundary review, and core business term coverage.
-- `references/service-logic-coverage.md` for natural-language service logic coverage, implementation reconstruction coverage, source fact fidelity, and Goal boundary rules.
+- `references/service-logic-coverage.md` for decision-complete service logic coverage, proportional depth, source fact fidelity, and Goal boundary rules.
 - `references/atom-format-and-judgment.md` for AID policy, required atom sections, judgment evidence, forbidden shapes, and atomicity rules.

@@ -29,7 +29,8 @@ class DocsSkillTests(unittest.TestCase):
     def test_skill_entry_routes_every_direct_reference(self) -> None:
         text = read(SKILL)
         self.assertIn("name: atomic-docs", text)
-        self.assertIn("same-functional-behavior reconstruction", text)
+        self.assertIn("development decisions, implementation review, and change-impact analysis", text)
+        self.assertIn("they do not replace the source tree", text)
         expected = {
             "docs-root-and-config.md",
             "atomic-document-contract.md",
@@ -64,19 +65,40 @@ class DocsSkillTests(unittest.TestCase):
                 f"{path.name} exceeds the direct-reference line budget",
             )
 
-    def test_ui_metadata_matches_source_reconstruction_goal(self) -> None:
+    def test_ui_metadata_matches_development_decision_goal(self) -> None:
         text = read(OPENAI_YAML)
         assert_all(
             self,
             text,
             (
                 'display_name: "Atomic Docs"',
-                'short_description: "Docs for same-behavior reconstruction and review."',
+                'short_description: "Docs for development decisions and implementation review."',
                 'default_prompt: "Use $atomic-docs',
-                "same-functional-behavior reconstruction",
-                "fresh docs-only reviewer",
+                "product intent",
+                "without mirroring the source tree",
             ),
         )
+
+    def test_skill_does_not_use_source_replacement_as_quality_target(self) -> None:
+        text = read(SKILL) + read(OPENAI_YAML) + "\n".join(
+            read(path) for path in sorted(REFS.glob("*.md"))
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "they do not replace the source tree",
+                "decision completeness",
+                "internal technical choices remain free",
+            ),
+        )
+        for obsolete in (
+            "same-functional-behavior reconstruction",
+            "docs-only reconstruction reviewer",
+            "implementation-reconstruction-ready",
+            "exactly four independent draft reviewers",
+        ):
+            self.assertNotIn(obsolete, text)
 
     def test_plugin_manifest_exposes_atomic_docs(self) -> None:
         text = read(PLUGIN_JSON)
@@ -164,7 +186,7 @@ class DocsSkillTests(unittest.TestCase):
                 "must not require frontmatter `atom_key`",
                 "must not require AID values",
                 "must not use `graph_edges`",
-                "one-line term definitions",
+                "glossary entry is too shallow to resolve",
             ),
         )
 
@@ -200,6 +222,19 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_aids_are_selective_instead_of_line_level_inventory(self) -> None:
+        text = read(REFS / "atom-format-and-judgment.md")
+        assert_all(
+            self,
+            text,
+            (
+                "durable, independently referenceable meaning",
+                "Do not assign AIDs to routine explanatory prose",
+                "mechanical source summaries",
+                "every evidence row",
+            ),
+        )
+
     def test_compact_criteria_uses_shared_rules_and_result_table(self) -> None:
         text = refs("atomization-criteria-contract.md", "criteria-flow.md")
         for heading in (
@@ -230,9 +265,10 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "durable domain/category boundary map",
-                "full discovery candidate map",
+                "discovery candidate map proportional to the requested scope",
                 "behavior-level `Atom 후보 맵`",
                 "accepted-scope rules",
+                "project-wide source feature inventory only when",
                 "project-native",
                 "broad roots",
                 "concrete business aggregates",
@@ -258,26 +294,24 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_source_coverage_is_behavior_oriented_and_reconstructable(self) -> None:
+    def test_source_coverage_is_decision_complete_and_proportional(self) -> None:
         text = refs("service-logic-coverage.md", "atom-format-and-judgment.md")
         assert_all(
             self,
             text,
             (
-                "natural-language service logic standard",
-                "conditions, branches, state transitions, validation",
-                "transaction or idempotency behavior",
-                "persistence side effects",
-                "external calls",
-                "recovery behavior",
-                "same functional behavior from the docs without rereading source",
-                "A bare list of source identifiers",
-                "Context atoms are not a shortcut for behavior coverage",
-                "over-compressed",
+                "durable development-decision standard",
+                "must not rediscover from scattered code or invent during implementation",
+                "observable verification condition",
+                "related domains, shared contracts, graph relationships, and conflicts",
+                "Do not narrate every function call",
+                "Stop adding detail when every remaining choice is an internal technical choice",
+                "Do not use atom count, file count, line count, or source-surface count",
+                "Use tables or structured lists only when compact prose would obscure",
             ),
         )
 
-    def test_reconstruction_review_is_docs_only_and_source_fidelity_is_separate(self) -> None:
+    def test_semantic_reviewers_use_source_and_do_not_treat_source_access_as_failure(self) -> None:
         text = refs(
             "service-logic-coverage.md",
             "docs-generation-flow.md",
@@ -287,20 +321,14 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "fresh docs-only reviewer",
-                "managed docs in scope",
-                "approved criteria/project context",
-                "Do not give it the source tree",
-                "operation inventory",
-                "source evidence packet",
-                "actual source access",
-                "must FAIL when it needs source",
-                "do not create a separate probe artifact",
-                "Partial reconstruction PASS applies only",
-                "must not be reported as project-wide readiness",
+                "Reviewers may inspect source",
+                "Source access is required when checking fidelity",
+                "docs preserve the decisions needed for implementation, verification, and conflict analysis",
+                "Do not FAIL merely because internal code structure",
+                "Review must not fail merely because the reader needs source for internal mechanics",
             ),
         )
-        self.assertNotIn("reconstruction-probe.json", text)
+        self.assertNotIn("docs-only reviewer", text)
 
     def test_required_aids_keep_verification_conditions_inline(self) -> None:
         text = read(REFS / "atom-format-and-judgment.md")
@@ -308,10 +336,10 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "confirmed required `Intent`",
-                "`approved_required_change`",
+                "changed in-scope required AID",
                 "observable verification condition",
                 "in that same item",
+                "Historical descriptions outside the implementation scope",
                 "Do not require a separate acceptance AID",
                 "independently reviewable meaning",
             ),
@@ -334,8 +362,6 @@ class DocsSkillTests(unittest.TestCase):
                 "`work-state.json`",
                 "affected AID rows",
                 "changed in-scope required AIDs",
-                "drafts this section after implementation review",
-                "finalizes the same section after final docs/code compliance",
             ),
         )
         self.assertNotIn("verification-trace.json", text)
@@ -360,30 +386,32 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "supporting evidence rather than a substitute for reachable production behavior",
                 "Exclude generated, build, vendor, formatting",
-                "owned by a real `atom_key`/AID, recorded as a coverage gap",
+                "behavior aggregate in the accepted scope",
+                "do not require a separate inventory row or AID for every mechanical source surface",
             ),
         )
 
-    def test_high_risk_behavior_requires_structured_coverage(self) -> None:
+    def test_high_risk_behavior_adds_conditional_depth_and_review(self) -> None:
         text = read(REFS / "service-logic-coverage.md")
         for category in (
-            "Account/auth/admin management",
-            "delete/approve actions",
-            "payment/refund behavior",
-            "external integration",
-            "persistence mutation",
-            "idempotency",
-            "failure recovery",
+            "authentication, authorization, security, privacy",
+            "money, billing, refund, settlement",
+            "delete, approve, publish",
+            "external integration, webhook, event delivery",
+            "irreversible, high-impact, or concurrency-sensitive state transition",
+            "shared payload, storage, permission, integration",
         ):
             self.assertIn(category, text)
         assert_all(
             self,
             text,
             (
-                "payload/field matrix",
-                "branch matrix",
-                "state/persistence effect matrix",
-                "failure/recovery matrix",
+                "Apply additional detail and the independent risk/contract reviewer",
+                "Add a matrix only when the alternatives cannot be reviewed reliably in prose",
+                "A trigger does not require unrelated detail",
+                "Ordinary CRUD, reversible preference persistence",
+                "authoritative local or user-approved provider evidence",
+                "record `confirmation_needed`",
             ),
         )
 
@@ -394,19 +422,16 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "operation-local by default",
-                "behavior-oriented, not method-oriented",
-                "conditions and branches",
-                "validation or permission checks",
-                "state transitions",
-                "persistence side effects",
-                "error handling",
-                "recovery behavior",
-                "owning `atom_key`/AID",
+                "lightweight operation inventory",
+                "grouped by meaningful behavior aggregate",
+                "Do not require every inventory row",
+                "Do not create one inventory row per route",
+                "candidate or final owning `atom_key`",
                 "delete or ignore the operation-local inventory",
             ),
         )
 
-    def test_domain_bundles_use_one_writer_and_four_reviewers(self) -> None:
+    def test_domain_bundles_use_one_writer_and_risk_scaled_review(self) -> None:
         flow = read(REFS / "docs-generation-flow.md")
         reviewers = read(REFS / "reviewer-perspectives.md")
         assert_all(
@@ -414,18 +439,21 @@ class DocsSkillTests(unittest.TestCase):
             flow,
             (
                 "sequential queue",
-                "exactly one writer and exactly four independent draft reviewers",
+                "Each domain bundle uses exactly one writer",
+                "exactly one independent development-quality reviewer",
+                "If any recorded risk trigger applies",
+                "exactly one independent risk/contract reviewer",
+                "Ordinary CRUD or preference persistence is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
                 "Do not rerun unaffected PASS results",
-                "Do not start the next bundle until all four perspectives PASS",
+                "every reviewer applicable to the active bundle PASSes",
                 "reopen that bundle",
             ),
         )
         for role in (
-            "Domain Draft Atom Boundary / Context Hygiene Reviewer",
-            "Domain Draft Source Closure / Fact Fidelity Reviewer",
-            "Domain Draft Implementation Reconstruction / High-Risk Reviewer",
-            "Domain Draft Reporting Reviewer",
+            "Required Domain Development-Quality Reviewer",
+            "Conditional Risk / Contract Reviewer",
+            "Conditional Project-Wide Integration / Baseline Reviewer",
         ):
             self.assertIn(role, reviewers)
 
@@ -448,49 +476,49 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "principle files reviewed",
-                "Can the same domain behavior be implemented from these docs alone?",
-                "AID claim -> checked entry path -> null/blank/default/fallback/exception branch -> source evidence",
-                "cannot replace a missing reviewer",
+                "decision completeness",
+                "proportional depth",
+                "source fact fidelity",
+                "accepted-scope closure",
+                "cannot replace a required independent reviewer",
+                "구현자가 임의로 정하면 안 되는 내용",
+                "검증 가능한 결과",
             ),
         )
 
-        final_reconstruction = text.split(
-            "### Final Implementation Reconstruction / High-Risk Reviewer", 1
-        )[1].split("### Final Baseline / Reporting Reviewer", 1)[0]
+        project_review = text.split(
+            "## Conditional Project-Wide Integration / Baseline Reviewer", 1
+        )[1].split("## Reviewer Selection Examples", 1)[0]
         for reference in (
             "service-logic-coverage.md",
-            "atom-format-and-judgment.md",
-            "atomic-document-contract.md",
+            "source-baseline-and-change-plan.md",
+            "atomic-graph.md",
         ):
-            self.assertIn(reference, final_reconstruction)
+            self.assertIn(reference, project_review)
 
         assert_all(
             self,
             text,
             (
-                "operation-state evidence for reporting or ownership checks",
-                "Never provide operation-state evidence to a docs-only reconstruction reviewer",
+                "Reviewers may inspect source",
+                "Source access is required when checking fidelity",
+                "`source basis`: the inspected commit or explicitly recorded source revision",
             ),
         )
 
-    def test_final_reviewers_are_cross_domain_not_duplicate_domain_reviews(self) -> None:
+    def test_project_wide_reviewer_is_conditional_and_not_duplicate_domain_review(self) -> None:
         text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
-        for role in (
-            "Final Atom Boundary / Context Hygiene Reviewer",
-            "Final Source Closure / Fact Fidelity Reviewer",
-            "Final Implementation Reconstruction / High-Risk Reviewer",
-            "Final Baseline / Reporting Reviewer",
-        ):
-            self.assertIn(role, text)
         assert_all(
             self,
             text,
             (
-                "do not repeat every row-level or branch-level domain check",
-                "Do not redo isolated domain matrices",
+                "Run one project-wide integration/baseline reviewer",
+                "Do not run a project-wide reviewer for an ordinary targeted single-domain operation",
+                "does not repeat complete domain review",
                 "cross-domain ownership",
-                "end-to-end flows that cross domains",
-                "only reviewer perspective that can approve global baseline",
+                "shared payload/state/storage/permission/integration contracts",
+                "operation's recorded `source_commit_observed`",
+                "only semantic reviewer that can approve global baseline",
                 "reopen the affected bundle",
             ),
         )
@@ -526,6 +554,22 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_compact_write_plan_reuses_prior_scope_approval(self) -> None:
+        text = refs("docs-generation-flow.md", "source-baseline-and-change-plan.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Record a compact domain-grouped write plan",
+                "lists only applicable items",
+                "Do not add placeholder rows",
+                "no second user approval is required",
+                "inside the user-accepted docs scope and approved boundaries",
+                "expands source/docs scope",
+                "creates or moves a domain boundary",
+            ),
+        )
+
     def test_goal_gate_precedes_docs_generation(self) -> None:
         text = read(REFS / "docs-generation-flow.md")
         assert_all(
@@ -534,7 +578,8 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "Bootstrap criteria drafting and criteria-review/revision do not require a Codex Goal",
                 "call `create_goal` before creating project docs, inventory, atom files, graph edges",
-                "source-to-docs-to-code reconstruction requirement",
+                "decision-complete documentation requirement",
+                "applicable domain/risk/project review gates",
                 "If Goal creation is unavailable or fails, stop before docs generation",
                 "Complete the Goal only after",
             ),
@@ -555,7 +600,8 @@ class DocsSkillTests(unittest.TestCase):
                 "Partial or targeted operations must not create, replace, or advance baseline metadata",
                 "source_commit_observed",
                 "Never use this operation-local value to advance",
-                "four draft-review PASS results",
+                "required development-quality review and applicable risk review PASS",
+                "project-wide integration/baseline reviewer PASSes",
             ),
         )
         self.assertIn("or partial scope are invalid", validation)

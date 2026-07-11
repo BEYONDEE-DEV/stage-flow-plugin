@@ -2,44 +2,55 @@
 
 ## Source Convention Document Flow
 
-When the user asks for a separate source convention format, or when repeated source interpretation conventions would otherwise be mixed into service logic atoms, propose a separate write scope for `<doc-root>/project/source-convention.md`.
+When repeated source interpretation conventions would otherwise leak into service logic atoms, propose a separate write scope for `<doc-root>/project/source-convention.md`.
 
-The source convention document is not part of the pre-approval criteria bootstrap scope. The first bootstrap scope remains limited to `.stageflow/atomic-docs.json` when needed and `<doc-root>/project/atomization-criteria.md`. Do not create `project/source-convention.md` during criteria bootstrap or before criteria approval.
+The source convention document is not part of criteria bootstrap. Create or update it only after criteria approval, accepted docs scope, and the Atomic Docs Goal Gate.
 
-For normal docs generation, create or update `project/source-convention.md` only after the criteria document is approved, the accepted docs write scope includes the source convention document, and the Atomic Docs Goal Gate is satisfied. Use it as source interpretation context, not as service behavior evidence.
+Separate behavior-neutral code style from runtime-impacting conventions. Formatting, naming, package placement, imports, and layer placement belong only in source convention docs. Validation activation, authorization wiring, error mapping, transaction behavior, lock ordering, or persistence ordering may be summarized there, but any resulting product rule or observable contract belongs in the related atom.
 
-The document should separate non-runtime code style from runtime-impacting conventions. Formatting, naming, package placement, layer placement, import ordering, and similar non-runtime conventions belong in `project/source-convention.md` and should not be written as service logic atom behavior. Runtime-impacting conventions such as transaction activation, validation activation, authorization wiring, error response mapping, lock ordering, persistence ordering, or framework wiring may be summarized in `project/source-convention.md`, but the relevant service logic atom must still record the natural-language behavior and source evidence before any service judgment label is considered supported.
-
-Reviewer subagents must fail or request correction when a service logic atom mixes in simple code convention, source folder taxonomy, formatting, naming, import order, or layer-placement notes as if they were runtime behavior. If a runtime-impacting convention appears only in `project/source-convention.md` and is missing from the relevant service logic atom, record a coverage gap or `confirmation_needed` rather than treating the convention document as enough for `bug_or_regression`, `missing_required_behavior`, `matches_confirmed_intent`, `unapproved_implemented_behavior`, or `out_of_scope_behavior`.
+Review must fail when an atom treats code taxonomy or formatting as service behavior. If a runtime convention creates a decision or contract and appears only in `source-convention.md`, record a gap instead of treating the convention document as enough for an implementation judgment.
 
 ## Project Document Workflow
 
-Project documents are non-atom documents. Use `project/project-goal.md`, `project/project-glossary.md`, `project/source-convention.md`, and `project/atomization-criteria.md` for durable project-level control, context, terminology, criteria, and source interpretation. Do not give these files frontmatter `atom_key`, AID values, `graph_edges`, or required atom sections unless an explicit accepted migration converts a specific file into an atom.
+Project documents are non-atom documents. Use:
 
-A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` while writer/reviewer cycles are running. Write or retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final coverage index; then it is a non-atom project document and must stay synced to real `atom_key` and AID references.
+- `project/project-goal.md` for product purpose, users/callers, success criteria, non-goals, and unresolved project intent
+- `project/project-glossary.md` for ambiguous or shared term meaning, ownership, source of truth, aliases, forbidden conflations, and uncertainty
+- `project/source-convention.md` for source interpretation
+- `project/atomization-criteria.md` for durable documentation criteria and boundaries
 
-`project/project-goal.md` must describe the service or product purpose, target users or callers, success criteria, non-goals, and `confirmation_needed` project intent. It must not describe docs-root config, baseline metadata paths, plugin cache paths, reset/delete logs, reviewer-agent logs, or current operation status as if they were service goals.
+Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom sections unless an explicit accepted migration converts one into an atom.
 
-`project/project-glossary.md` must describe core terms with structured fields for meaning, owning domain, actor/system action, source of truth, stored vs computed, related rules/status, aliases, forbidden conflations, and uncertainty. A one-line glossary entry does not make derived behavior judgment-ready.
+A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` while writer/reviewer cycles run. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final coverage index.
 
-A retained `project/service-logic-inventory.md` must remain a behavior-level input for writers and reviewers, not a progress log. Each inventory item must include source identifiers, conditions/branches, validation/guard, state transition, persistence side effect, external call, error/recovery, basis, owning atom_key, related AID, and judgment label when applicable. It must also expose reconstruction-critical fields when relevant: entry/screen/route or API/job entry, data contract/payload, authorization/permission, validation/refusal/defaulting, state persistence, transaction or idempotency behavior, external integration/event/job behavior, failure/retry/recovery, UI basic design/state presentation, and backend service/DB/DTO behavior that changes runtime meaning. If the inventory is missing those fields, only contains one-line summaries, or is stale against atom files, do not record source-baseline metadata and do not present the docs as judgment-ready.
+A retained inventory is a decision-level coverage index, not a progress log or a second copy of every atom. Each behavior aggregate records:
 
-Each retained inventory row must be closed to an owning `atom_key`/AID, a labeled coverage gap, `out_of_scope`, or not-applicable. Rows with blank owners, vague future split notes, or source identifiers without natural-language behavior remain unmapped and must block reviewer PASS, Goal completion, source-baseline metadata updates, and judgment-ready claims.
+- concise behavior or decision summary
+- inspected source identifiers
+- candidate or final owning `atom_key`, or explicit gap/`out_of_scope`/not-applicable disposition
+- related AIDs and judgment label only when they exist
+- risk trigger, rule, state/effect, external contract, or unresolved decision only when applicable
 
-`project/source-convention.md` may help interpret source structure, but runtime-impacting conventions must link to a related service logic atom_key and AID or to a coverage gap. The source convention document alone cannot make a service behavior `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, or `out_of_scope_behavior`.
+Do not require every inventory row to contain fields for validation, state, persistence, integration, failure, UI, backend, schema, transaction, and recovery. Include a field only when it changes the documented decision, risk, verification, or ownership.
 
-Project document review must fail when a project document directly judges implementation status like a service logic atom, when it relies on atom-only metadata as required structure, when glossary terms are one-line-only, when inventory items are too shallow to support writer/reviewer work, or when runtime-impacting source conventions have no atom_key/AID or coverage-gap linkage.
+Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, when a retained inventory is stale or lacks ownership/disposition, or when a runtime-impacting source convention has no related atom/gap for the decision it changes.
 
-## Service Logic Inventory
+## Lightweight Operation Inventory
 
-When documenting source behavior, create an operation-local service logic inventory before drafting domain atoms. The inventory is behavior-oriented, not method-oriented: group source observations by meaningful runtime behavior rather than by endpoint, controller, service class, method, or file.
+Before domain drafting, create a lightweight operation inventory grouped by meaningful behavior aggregate, not endpoint, class, method, component, or file.
 
-For each inventory item, record the inspected source identifiers, the natural-language behavior, conditions and branches, validation or permission checks, state transitions, persistence side effects, integration calls, emitted events, error handling, recovery behavior, inferred or confirmed basis, candidate owning atom key, candidate or assigned AID, and judgment label when applicable. Include reconstruction-critical fields such as entry/screen/route or API/job entry, data contract/payload, authorization/permission, validation/refusal/defaulting, state persistence, transaction or idempotency behavior, external integration/event/job behavior, failure/retry/recovery, UI basic design/state presentation, and backend service/DB/DTO behavior when they affect implementation.
+The minimum row is:
 
-Map every meaningful application, service, and domain logic item to an owning atom before claiming docs coverage. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`; do not treat unmapped source behavior as healthy or covered.
+```text
+동작/결정 | 소스 근거 | 후보 소유 atom_key 또는 disposition | 관련 AID/판정 | 위험 트리거/미해결
+```
 
-Domain atom drafting must use the service logic inventory as input. A domain atom is incomplete when it only lists source files, endpoints, controllers, service classes, or method names without explaining the behavior in natural language.
+Add short notes for consequential rules, state/effects, contracts, or failures only when the writer needs them to avoid losing a decision. The atom is the durable explanation; the inventory is routing and closure state.
 
-A service logic inventory that only summarizes source files or behaviors in one line is not sufficient input for domain atom drafting, reviewer PASS, Goal completion, or baseline metadata update; it also cannot support an implementation-reconstruction-ready scope. After the accepted atom docs are written and reviewed, delete or ignore the operation-local inventory unless the user explicitly approved retaining it as a synced final coverage index.
+One behavior aggregate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, or setting when they implement the same decision.
 
-Reviewers must verify row-level closure against inspected source surfaces instead of accepting the writer's inventory rows at face value. If a route/controller/service/policy/persistence/workflow aggregate is missing from the inventory or has no `atom_key`/AID, gap, `out_of_scope`, or not-applicable disposition, the review must fail.
+Every meaningful aggregate in accepted scope must close to an owner or explicit disposition before review PASS. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`.
+
+The required development-quality reviewer checks aggregate-level closure against source and may identify an omitted aggregate. It must not demand row-level duplication of source mechanics.
+
+After accepted atom docs are written and reviewed, delete or ignore the operation-local inventory unless the user explicitly approved retaining a synced project coverage index.

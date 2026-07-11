@@ -25,7 +25,8 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("final docs/code compliance", text)
         self.assertIn("Read `references/implementation-flow.md` before taking action", text)
         self.assertIn("skills/atomic-docs/SKILL.md", text)
-        self.assertIn("Treat the written or updated atomic docs as the implementation source of truth", text)
+        self.assertIn("source of truth for product decisions, required behavior, verification conditions, and boundaries", text)
+        self.assertIn("Use project source and conventions for internal implementation mechanics", text)
         self.assertIn("Do not implement code before the relevant atomic docs are written or updated", text)
         self.assertIn("put new requested behavior mainly in `Planned Changes`", text)
         self.assertIn("`Current Implementation` only for behavior already observed in source", text)
@@ -59,29 +60,32 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval", text)
         self.assertIn("Do not start code implementation until the user explicitly approves", text)
 
-    def test_implementation_flow_requires_reconstruction_ready_detail(self) -> None:
+    def test_implementation_flow_requires_decision_complete_proportional_detail(self) -> None:
         text = read(FLOW)
 
         for required_detail in [
             "user intent, confirmed rules, inferred rules marked as inferred",
             "new requested behavior as `Planned Changes`",
             "existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists",
-            "input conditions, branches, validation/refusal/defaulting",
-            "state transitions, persistence effects, external calls, events, and side effects",
-            "UI or API contract details, payload fields, forms, routes",
-            "failure, retry, fallback, recovery, and runtime exception behavior",
+            "when they change a product decision or observable result",
+            "when they are part of the required contract",
+            "only when fields, routes, states, payloads, or save/delete scope affect required behavior or verification",
+            "when the requirement assigns a specific outcome",
             "source evidence, judgment labels, `Gaps`, related `atom_key`, AID, and graph relationships",
             "Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences",
+            "avoid copying behavior-neutral source detail",
         ]:
             self.assertIn(required_detail, text)
 
-    def test_implementation_requires_inline_verification_and_docs_only_pass(self) -> None:
+    def test_implementation_requires_inline_verification_and_source_aware_review(self) -> None:
         text = read(SKILL) + read(FLOW)
         for required in (
             "observable verification condition or verifiable invariant",
             "do not require a separate acceptance AID",
-            "docs-only reconstruction reviewer",
-            "without source access",
+            "domain development-quality reviewer",
+            "applicable risk/contract reviewer",
+            "relevant source evidence",
+            "Needing source for internal mechanics is expected",
             "return to docs writing rather than approving implementation",
         ):
             self.assertIn(required, text)
@@ -109,7 +113,7 @@ class AtomicImplSkillTests(unittest.TestCase):
 
         self.assertIn("changed docs paths and which path the user should inspect", text)
         self.assertIn("behavior that will be implemented from the docs", text)
-        self.assertIn("important conditions, branches, validations, state changes, side effects, and failures", text)
+        self.assertIn("important decisions, contracts, validations, state changes, side effects, failures, and verification conditions", text)
         self.assertIn("unresolved `Gaps`, `confirmation_needed`, or out-of-scope behavior", text)
         self.assertIn("partial-scope or full-scope implementation basis", text)
 

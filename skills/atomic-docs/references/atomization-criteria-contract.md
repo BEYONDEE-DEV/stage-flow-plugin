@@ -39,17 +39,17 @@ Do not use English visible criteria headings such as `Purpose`, `Approval Status
 
 The criteria document records:
 
-- atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, failure/recovery, and implementation reconstruction
+- atomization perspectives reviewed with the user, such as domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, failure/recovery, and implementation decision/verifiability
 - one shared `공통 Atom 후보 기준`, `공통 소스 근거 기준`, `공통 분리/병합 기준`, and `공통 해당 없음/미해결 처리` under `Atom화 관점`; do not repeat these rules for every perspective
 - one perspective result table with exactly these columns: `관점 | 적용 상태 | 프로젝트 근거/후보 | 공통 기준 예외 | 미해결 질문`
 - `적용 상태` values limited to `Atom 후보`, `소스 근거만`, `해당 없음`, and `미해결`
-- one row for every reviewed perspective; `해당 없음` requires a project-specific reason in `프로젝트 근거/후보`, and `미해결` requires a concrete question and next decision
+- one row for every perspective relevant to the requested scope; `해당 없음` requires a project-specific reason in `프로젝트 근거/후보`, and `미해결` requires a concrete question and next decision
 - which perspectives create atom candidates, which remain source evidence, which are not applicable, and which remain unresolved for the current source shape
 - domain partitioning criteria for deciding domain paths, category boundaries, and durable ownership boundaries
 - project-native feature/root language as the default starting point for domain candidates before any capability renaming or promotion
 - each domain or category candidate with `project-native name`, `source feature root`, `optional capability alias`, `promotion reason`, and `approval state`
-- a full discovery candidate map separated from accepted-scope rules, so discovered possibilities do not masquerade as accepted domain structure
-- source discovery closure/disposition for each meaningful source feature, surface, or aggregate: atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable with reason
+- a discovery candidate map proportional to the requested scope and separated from accepted-scope rules; require a project-wide discovery map only for full-project docs or baseline work
+- accepted-scope closure/disposition for each meaningful behavior aggregate: atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable with reason; mechanical source surfaces do not require separate rows
 - accepted-scope rules that explain how a later write scope is chosen without storing the current per-run scope, bundle queue, writer/reviewer state, or post-write gate result in the durable criteria document
 - a candidate or approved domain map that records only durable domain or category boundaries, not behavior-level atom candidates, and records each domain name with Korean field labels for `승인 상태`, `소유 동작`, `제외 동작`, `인접 도메인 경계`, `함께 변경되는 이유`, `소스 근거`, `근거 성격`, and `미해결 질문`
 - domain-boundary evidence that includes observed behavior summary, excluded behavior, adjacent boundary, why the records change together, and whether the basis is user-confirmed, source-inferred, or blocked by `needs_confirmation`
@@ -59,9 +59,9 @@ The criteria document records:
 - source evidence requirements for each atom candidate
 - forbidden vague split gaps and the minimum evidence needed for a concrete split proposal
 - one shared writer/reviewer quality standard that future docs operations must use both for drafting and reviewing atom files
-- service logic coverage requirements and shared writer/reviewer quality criteria that include implementation reconstruction coverage, applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons, and blockers that prevent docs-only implementation
+- service logic coverage requirements and shared writer/reviewer quality criteria that define decision completeness, proportional frontend/UI and backend/API/service/job/integration detail, conditional risk triggers, and blockers that prevent implementation or verification without an unstated product decision
 - shared atom identity rules, including mandatory frontmatter `atom_key` for new atoms, AID values in the form `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key` as the target atom's `atom_key`, and graph `target_path` as a mutable locator
-- subagent role mapping that explains how writer subagents produce artifacts for the shared standard and how reviewer subagents verify that same standard
+- subagent role mapping that explains how writers satisfy the shared standard, how the required development-quality reviewer verifies it, and when a risk/contract or project-wide reviewer is additionally required
 
 These perspectives are not fixed document types. Entry surfaces discovered in the target source may be evidence, but the criteria document must not force a separate atom merely because that surface exists.
 
@@ -82,19 +82,21 @@ Do not approve a domain solely from a code folder name, endpoint, controller, se
 
 Criteria source evidence does not need to describe every service logic branch at atom-level depth. However, source identifiers alone are not valid domain-boundary evidence. If a candidate has only source paths, endpoint names, class names, or method names without observed behavior summary and boundary rationale, criteria-review must fail it as identifier-only evidence.
 
-The criteria document must not maintain separate writer-only and reviewer-only quality rules. The sections `서비스 로직 커버리지 요구사항` and `작성/리뷰 공통 품질 기준` must make implementation reconstruction coverage an explicit shared standard before user approval. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map and atom-candidate-map use, the shared atomization rules and perspective result table, service logic inventory, natural-language implementation coverage, implementation reconstruction coverage, applicable frontend/UI and backend/API/service/job/integration coverage, explicit not-applicable reasons, source evidence, inferred/confirmed basis, frontmatter `atom_key`, AID assignment with `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key`/`target_path` rules, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
+The criteria document must not maintain separate writer-only and reviewer-only quality rules. The sections `서비스 로직 커버리지 요구사항` and `작성/리뷰 공통 품질 기준` must make decision completeness and proportional depth an explicit shared standard before user approval. The section `작성/리뷰 공통 품질 기준` is the single acceptance standard. It should cover domain-map and atom-candidate-map use, shared atomization rules, lightweight behavior inventory, natural-language decision coverage, applicable frontend/UI and backend/API/service/job/integration detail, risk triggers, source evidence, inferred/confirmed basis, frontmatter `atom_key`, selective AID assignment with `[AID:<atom_key>.<section-code>.<NNN>]`, graph `target_key`/`target_path` rules, judgment labels, Korean-first wording, no example leakage, accepted scope, and Goal Gate requirements when applicable.
 
 The section `서브에이전트 역할 분담` may describe workflow roles only:
 
-- writer subagents produce service logic inventories, evidence packets, and atom drafts that satisfy each item in `작성/리뷰 공통 품질 기준`
-- reviewer subagents verify the same items in `작성/리뷰 공통 품질 기준` and report missing or unsupported evidence
+- writer subagents produce lightweight inventories, evidence, and atom drafts that satisfy each item in `작성/리뷰 공통 품질 기준`
+- every bundle uses one independent development-quality reviewer for the same shared criteria
+- a separate risk/contract reviewer runs only for recorded high-risk or shared-contract triggers
+- one project-wide integration/baseline reviewer runs only for project-wide, multi-domain, shared-contract, or global-baseline work
 - criteria-review subagents verify whether the criteria draft itself contains enough shared criteria before user approval
 
 Every writer obligation must be reviewable by the same shared criterion, and every reviewer FAIL condition must map to the same shared criterion or an explicit phase gate such as criteria approval, accepted scope, or Goal Gate. Do not add hidden reviewer-only quality bars or writer-only obligations that the reviewer does not check.
 
 Do not accept a criteria document that only lists perspective or domain names. Criteria-review must fail when a shared atomization rule is missing or placeholder-only; when the perspective result table is missing a required column or perspective row; when `적용 상태` uses another value; when an `Atom 후보` or `소스 근거만` row lacks project evidence; when `해당 없음` lacks a project-specific reason; when `미해결` lacks a concrete question; when a Korean criteria draft uses English visible labels; or when writer and reviewer rules diverge from the shared quality standard.
 
-Criteria-review must also fail when full discovery candidates, approved domain/category boundaries, accepted-scope rules, and behavior-level atom candidates are mixed together; when durable domain approval status is used to encode operation-local write scope; when a source feature inventory aggregate has no disposition into `Atom 후보 맵`, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item; when a leaf behavior candidate appears directly in the domain/category boundary map without durable boundary rationale; when a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`; when category structure hides a broad grouping; when domain-boundary evidence is only source identifiers without observed behavior summary and boundary rationale; when the shared quality criteria omit frontmatter `atom_key`, AID, graph `target_key`, or graph `target_path` rules; or when `서비스 로직 커버리지 요구사항` or `작성/리뷰 공통 품질 기준` omits implementation reconstruction coverage, applicable or not-applicable frontend/UI coverage, backend/API/service/job/integration coverage, or blockers that prevent docs-only implementation.
+Criteria-review must also fail when full discovery candidates, approved domain/category boundaries, accepted-scope rules, and behavior-level atom candidates are mixed together; when durable domain approval status is used to encode operation-local write scope; when a meaningful behavior aggregate has no disposition into `Atom 후보 맵`, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item; when a leaf behavior candidate appears directly in the domain/category boundary map without durable boundary rationale; when a broad domain or broad category grouping is marked `candidate`, `approved`, or `needs_confirmation`; when category structure hides a broad grouping; when domain-boundary evidence is only source identifiers without observed behavior summary and boundary rationale; when the shared quality criteria omit frontmatter `atom_key`, selective AID, graph `target_key`, or graph `target_path` rules; or when `서비스 로직 커버리지 요구사항` or `작성/리뷰 공통 품질 기준` omits decision completeness, proportional detail, conditional risk triggers, or blockers that prevent implementation and verification.
 
 Before a criteria document is marked approved, remove one-off operation logs such as plugin cache paths, reset/delete notes, reviewer agent names, bundle queues, writer/reviewer status, post-write review results, baseline-ready decisions, and transient "currently none" or `현재 없음` status notes unless they are active approval blockers. Approved criteria should contain durable criteria, approved or unresolved boundary information, and active blockers, not the draft execution diary or current run state.
 

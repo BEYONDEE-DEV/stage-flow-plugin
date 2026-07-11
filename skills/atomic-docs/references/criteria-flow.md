@@ -28,9 +28,9 @@ Write user-stated criteria, prohibitions, atomization concerns, and pending appr
 
 ## Source Enrichment
 
-After the draft exists, inspect source and enrich the criteria document itself. Build a source feature inventory from project-native feature/root language, existing docs, API or UI entry surfaces, and user vocabulary. Continue beneath broad roots through route/controller/service/policy/persistence/workflow aggregates so a broad rejection does not hide concrete business responsibility.
+After the draft exists, inspect enough source to enrich the criteria for the requested scope. For targeted work, inspect the requested feature roots and adjacent contracts needed to avoid a false boundary. Build a project-wide source feature inventory only when the user is preparing full-project docs or a global baseline. Continue beneath any inspected broad root so a broad rejection does not hide concrete business responsibility.
 
-Keep these structures separate:
+Keep these structures separate when they are applicable:
 
 - durable domain/category boundary map
 - full discovery candidate map
@@ -52,11 +52,11 @@ Then use one result table:
 관점 | 적용 상태 | 프로젝트 근거/후보 | 공통 기준 예외 | 미해결 질문
 ```
 
-Include a row for domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, failure/recovery, and implementation reconstruction. Use only `Atom 후보`, `소스 근거만`, `해당 없음`, or `미해결` as `적용 상태`.
+Include rows for the perspectives evidenced by the requested scope, choosing from domain capability, entry surface, service/application flow, state transition, policy/rule, integration contract, persistence/side effect, core business term, failure/recovery, and implementation decision/verifiability. Do not add placeholder rows for perspectives that were not inspected. Use only `Atom 후보`, `소스 근거만`, `해당 없음`, or `미해결` as `적용 상태`.
 
 Do not repeat the shared atom/evidence/split/not-applicable rules inside every row. Each row records only project-specific results, exceptions, and unresolved questions.
 
-Keep implementation reconstruction, applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons, and docs-only implementation blockers in `서비스 로직 커버리지 요구사항` and the shared writer/reviewer standard.
+Keep decision completeness, proportional frontend/UI and backend/API/service/job/integration detail, conditional risk triggers, and blockers that force unstated product decisions in `서비스 로직 커버리지 요구사항` and the shared writer/reviewer standard.
 
 ## Criteria Structure Review Gate
 
@@ -66,10 +66,10 @@ Apply every failure rule in `atomization-criteria-contract.md`. In particular, F
 
 - common atomization rules or required perspective rows are missing
 - the result table has wrong columns, invalid state values, placeholder content, unsupported candidates, or unexplained not-applicable/unresolved rows
-- source inventory is too shallow to find concrete aggregates beneath broad roots
+- source inspection for the requested scope is too shallow to find concrete aggregates beneath an inspected broad root
 - domain, discovery, atom-candidate, and operation-scope concepts are mixed
 - broad groupings are treated as valid domains or project-native language is silently replaced
-- service reconstruction or shared writer/reviewer quality requirements are incomplete
+- decision completeness, proportional depth, risk selection, or shared writer/reviewer quality requirements are incomplete
 - runtime state, bundle queues, reviewer logs, cache paths, or stale draft notes leak into durable criteria
 - reference examples, unsupported inferred intent, or destructive migration claims appear
 
@@ -85,7 +85,7 @@ After criteria-review PASS, provide the criteria path and a decision-ready Korea
 - `아직 불확실한 점과 승인 차단 항목`
 - `지금 승인하면 허용되는 것과 아직 허용되지 않는 것`
 
-Also summarize project-native candidates, capability/common promotion proposals, durable boundaries, compact perspective results, shared quality criteria, service-logic reconstruction requirements, and judgment-label usage. Do not ask for approval with only a path and generic request.
+Also summarize project-native candidates, capability/common promotion proposals, durable boundaries, compact perspective results, shared quality criteria, service-logic decision requirements, risk triggers, and judgment-label usage. Do not ask for approval with only a path and generic request.
 
 Wait until the user approves the criteria content. Then set its approval state to user-approved and remove obsolete draft/pending/current-run notes.
 

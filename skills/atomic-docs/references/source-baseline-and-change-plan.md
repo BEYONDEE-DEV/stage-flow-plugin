@@ -26,11 +26,11 @@ The baseline records the source commit used for a complete confirmed project-wid
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
-Create or update baseline metadata only when the accepted scope is the whole project, every discovered domain bundle has four draft-review PASS results, every project-wide final perspective PASSes at the same source commit, structural baseline validation PASSes, and no blocker prevents project-wide judgment or implementation reconstruction readiness.
+Create or update baseline metadata only when the accepted scope is the whole project, every discovered domain bundle has its required development-quality review and applicable risk review PASS at the same source commit, the project-wide integration/baseline reviewer PASSes, structural baseline validation PASSes, and no blocker prevents project-wide development judgment.
 
 Partial or targeted operations must not create, replace, or advance baseline metadata. Record their inspected commit as `source_commit_observed` in `.stageflow/atomic-docs/requests/<request-id>/work-state.json` and report the result as partial scope. That operation-local value is audit/resume state, not a global freshness claim.
 
-Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide judgment and implementation reconstruction readiness.
+Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide decision coverage, source fidelity, applicable risk review, and integration consistency.
 
 ## Full Refresh
 
@@ -40,16 +40,16 @@ A full refresh is a first-class operation when the user explicitly asks for it.
 2. Read the docs-root source commit baseline metadata.
 3. If atomization criteria are needed and no approved criteria document exists, create or update the draft criteria document through the file-first flow before domain atom work.
 4. After criteria approval and accepted docs write scope, satisfy the Atomic Docs Goal Gate before docs generation work.
-5. Inspect changed source behavior files since the stored source commit hash and map baseline diffs to affected atoms through source-to-atom discovery and graph traversal.
+5. Inspect changed source behavior since the stored source commit hash and map decision-relevant diffs to affected atoms through source-to-atom discovery and graph traversal.
 6. Classify every changed source surface by runtime relevance. Inspect DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they define or disambiguate runtime behavior. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files only when they have no runtime or product/operations meaning.
 7. Inspect project, common, and relevant domain context atoms when they exist.
 8. Use source-to-atom seed discovery to find likely domain and atom candidates.
-9. Build an operation-local service logic inventory for meaningful changed or targeted source behavior.
+9. Build a lightweight operation-local inventory of meaningful changed behavior aggregates and decisions.
 10. Expand affected scope through atomic graph traversal.
 11. Stop graph expansion when related atom files no longer create modification candidates.
 12. Present a domain-grouped change plan before writing domain atom docs.
 13. Write confirmed updates only after the change plan is accepted.
-14. Update the docs-root source baseline only when the accepted operation is project-wide and all domain/final reviews and baseline validation PASS. For partial or targeted work, leave the baseline untouched and store only operation-local `source_commit_observed`.
+14. Update the docs-root source baseline only when the accepted operation is project-wide and all required domain/risk reviews, the project-wide reviewer, and baseline validation PASS. For partial or targeted work, leave the baseline untouched and store only operation-local `source_commit_observed`.
 
 ## Targeted Docs Operation
 
@@ -59,7 +59,7 @@ For domain-level work, update the domain context atom when the domain goal, resp
 
 ## Change Plan Requirements
 
-A change plan should group by domain and list:
+A compact change plan groups by domain and lists only applicable items from the following set. Do not add placeholder rows for unaffected artifacts, judgments, identities, or gates:
 
 - the limited first write action for draft criteria creation or update at `project/atomization-criteria.md` when criteria are new or changed
 - the criteria document's `Atom화 관점` section, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
@@ -70,9 +70,10 @@ A change plan should group by domain and list:
 - atomic-docs operation state updates under `.stageflow/atomic-docs/requests/<request-id>/`, including accepted write scope, bundle queue, temporary inventory/evidence/review paths, and post-write gate status
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
-- operation-local service logic inventory items, including natural-language behavior, source identifiers, candidate owning atom key, and coverage gaps
-- implementation reconstruction readiness for the accepted scope, including frontend/UI coverage, backend/API/service coverage, runtime-relevant schema/settings/test evidence, unresolved `confirmation_needed` blockers, and separate `deferred_decision` blockers that prevent docs-only implementation
-- AID assignments for new or changed atom meaning lines, and explicit AID migrations when existing IDs cannot be preserved
+- operation-local inventory items, including the behavior/decision, source identifiers, candidate owning atom key, and coverage gaps
+- decision completeness for the accepted scope, including only applicable frontend/UI or backend/API/service details, observable verification conditions, risk triggers, and unresolved decisions that would force arbitrary product behavior
+- applicable review gates: required development-quality reviewer, conditional risk/contract reviewer, and conditional project-wide integration/baseline reviewer
+- AID assignments for new or changed durable referenceable meanings, and explicit AID migrations when existing IDs cannot be preserved
 - affected atom files
 - affected atom sections
 - judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `deferred_decision`, `confirmation_needed`, or `docs_stale`
@@ -90,7 +91,7 @@ A change plan should group by domain and list:
 - global source-baseline metadata and docs-root config writes; baseline updates are allowed only for project-wide coverage, while partial operations list `source_commit_observed` as operation state and explicitly leave the baseline unchanged
 - unresolved boundary questions that must be accepted before writing confirmed structure
 
-The accepted change plan defines the only paths and write actions allowed for the current docs operation. Do not write atom files, graph corrections, source-baseline metadata, docs-root config, or managed docs root structure before that acceptance.
+The compact change plan defines the paths and write actions for the current docs operation. If every item is already inside the user-accepted docs scope and approved boundaries, that scope acceptance also authorizes the plan and no second approval is required. Stop for user approval when the plan expands source/docs scope, creates or moves a domain boundary, performs deletion or migration, changes config/baseline outside the accepted action, or otherwise exceeds the prior authorization.
 
 ## Inference And Gaps
 
@@ -100,4 +101,4 @@ When a user answers a confirmation question, do not turn that same answer back i
 
 If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
 
-Docs may only judge source behavior against service logic that is actually recorded in natural language. Source behavior absent from the docs is not implicitly correct and must not be treated as matching confirmed intent. Record it as a coverage gap, `confirmation_needed`, or `docs_stale` depending on the accepted scope, baseline, and evidence. If missing frontend/UI or backend/API/service details would force an implementer to reread source or make arbitrary behavior choices, do not call the scope implementation-reconstruction-ready; record the missing details and next action instead.
+Docs may only judge source behavior against decisions and service logic actually recorded in natural language. Source behavior absent from the accepted documentation scope is not implicitly correct and must not be treated as matching confirmed intent. Record a coverage gap, `confirmation_needed`, or `docs_stale` when an omitted detail hides a product rule, observable contract, verification result, or change impact. Needing source for internal mechanics is not itself a gap.

@@ -58,7 +58,7 @@ The validator must not decide:
 - whether a domain boundary is meaningful
 - whether source discovery is complete
 - whether natural-language behavior is sufficiently detailed
-- whether implementation reconstruction is possible
+- whether development decisions are complete enough for the accepted implementation or review scope
 - whether user intent or a judgment label is correct
 - whether a global baseline is semantically authorized by reviewer PASS results
 

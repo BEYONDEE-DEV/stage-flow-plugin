@@ -1,4 +1,4 @@
 interface:
   display_name: "Atomic Docs"
-  short_description: "Docs for same-behavior reconstruction and review."
-  default_prompt: "Use $atomic-docs to create or refresh project docs that a fresh docs-only reviewer can use for same-functional-behavior reconstruction and implementation judgment."
+  short_description: "Docs for development decisions and implementation review."
+  default_prompt: "Use $atomic-docs to preserve product intent, business rules, implementation context, verification conditions, and change impacts without mirroring the source tree."

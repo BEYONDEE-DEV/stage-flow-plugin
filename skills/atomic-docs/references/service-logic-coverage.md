@@ -2,84 +2,89 @@
 
 ## Responsibility
 
-This reference defines natural-language service logic coverage, implementation reconstruction readiness, source fact fidelity, and the Codex Goal boundary.
+This reference defines decision-complete service logic coverage, proportional documentation depth, source fact fidelity, and the Codex Goal boundary.
 
-## Service Logic Natural-Language Coverage
+## Development Decision Coverage
 
-Atomic docs are a natural-language service logic standard, not a source index. Generated docs should let a reviewer understand the meaningful runtime behavior without rereading every source file first.
+Atomic docs are a durable development-decision standard, not a source index or source replacement. They preserve the product, business, contract, and operational decisions that developers must not rediscover from scattered code or invent during implementation.
 
-Document all meaningful application, service, and domain logic that affects product behavior, operational behavior, or integration behavior. This includes conditions, branches, state transitions, validation, permission checks, policy rules, transaction or idempotency behavior, persistence side effects, external calls, emitted events, error handling, and recovery behavior.
+For each meaningful behavior aggregate in the accepted scope, document the applicable items:
 
-Do not treat endpoint lists, controller lists, service class names, method names, file paths, or terse class-role summaries as service logic coverage. These identifiers are source evidence only until the atom explains in natural language what the source behavior does, when it does it, what it refuses, what it stores or changes, what it calls, and what result or failure it produces.
+- why the behavior exists and what outcome it must preserve
+- confirmed rules, invariants, explicit non-goals, and unresolved decisions
+- user, caller, API, event, job, or operational entry points that establish the contract
+- inputs and outputs whose values or shape affect observable behavior
+- authorization, validation, refusal, defaulting, and consequential branches
+- state transitions, persistence effects, external calls, emitted events, or destructive effects
+- failure, retry, fallback, recovery, and runtime exception behavior when it changes the contract
+- an observable verification condition for changed requirements being used as an implementation basis
+- related domains, shared contracts, graph relationships, and conflicts that can change the decision
+- source identifiers sufficient to find and verify the relevant implementation
 
-For each meaningful service logic item, the docs must record:
+Not every item applies to every atom. Omit an item when it has no product, contract, safety, operational, verification, or change-impact meaning. Do not add placeholder matrices or repetitive not-applicable rows merely to satisfy a template.
 
-- source identifiers that were inspected
-- owning atom or a coverage gap when ownership is unresolved
-- natural-language behavior description
-- input conditions, guards, branches, and failure conditions that affect the behavior
-- state, persistence, integration, emitted-event, or external side effects
-- confirmed or inferred basis for intent, rule, requirement, exclusion, or boundary
-- judgment readiness: whether the item can be judged from the docs or must remain `confirmation_needed` or a coverage gap
+`Current Implementation` orients a developer to how the decision is currently realized. Record important entry points, storage or integration ownership, non-obvious constraints, and source locations. Do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose only meaning is already clear from source.
 
-Complex logic should be split into multiple atoms when separate behaviors, policies, states, or side effects need independent judgment. Splitting does not allow omission: each split atom must still describe the concrete conditions, outcomes, and side effects it owns.
+Context atoms preserve domain purpose, vocabulary, ownership, included/excluded behavior, and adjacent boundaries. They do not absorb concrete rules or workflows that need independent change or judgment.
 
-Context atoms are not a shortcut for behavior coverage. A context atom may preserve domain purpose, glossary terms, included and excluded behavior, and adjacent boundaries, but it must not own concrete endpoint flow, payload rules, state transitions, persistence effects, external integration behavior, or failure/recovery details that belong in behavior atoms. Review must fail context atom pollution instead of treating it as acceptable broad coverage.
+## Accepted-Scope Coverage
 
-Trivial getters, mechanical DTO copying, framework boilerplate, and generated wiring do not require standalone atoms when they carry no service meaning. If such code changes validation, permission, persistence, transaction, state, integration, error, idempotency, or recovery behavior, document that behavior in natural language.
+Maintain closure from each meaningful behavior aggregate in the accepted scope to one of: an owning `atom_key`/AID, a coverage gap, `out_of_scope`, or not-applicable with a reason.
 
-## Source Discovery Closure Gate
+A behavior aggregate may span routes, controllers, services, repositories, UI components, settings, schemas, tests, jobs, or integrations. Close the aggregate once at the decision level; do not require a separate inventory row or AID for every mechanical source surface. Tests and configuration are evidence when they change runtime meaning, but behavior-neutral wiring is not documentation work.
 
-For the accepted scope, maintain source discovery closure from inspected source surface/aggregate to documentation outcome. Every meaningful route, controller, service method, policy rule, persistence mutation/read model, workflow step, UI entry, job, event, external integration, runtime schema/migration, runtime setting, route configuration, or behavior-relevant test must close as one of: owned by a real `atom_key`/AID, recorded as a coverage gap, marked `out_of_scope`, or marked not-applicable with a reason. Tests support source interpretation but do not replace inspection of reachable production behavior.
+For full refresh, inspect all project-native feature roots and continue beneath rejected broad roots until each meaningful product or operational aggregate has a disposition. For targeted work, close only the accepted behavior and the adjacent contracts needed to judge its impact. Partial closure must not be reported as project-wide coverage.
 
-Unmapped or orphan source behavior is a blocking review finding when the docs claim judgment readiness, baseline readiness, or implementation reconstruction readiness. A rejected broad source root still needs sub-aggregate disposition; do not hide lower-level behavior behind the broad rejection.
+An endpoint list, class list, source path list, or one-line file summary is not decision coverage. Source identifiers become useful only when the docs explain the durable decision or behavior they support.
 
-High-risk atom coverage requires structured matrices when applicable. Account/auth/admin management, delete/approve actions, payment/refund behavior, external integration, persistence mutation, idempotency, and failure recovery must include payload/field matrix, branch matrix, state/persistence effect matrix, and failure/recovery matrix details, or a specific not-applicable reason. A label-only gap, endpoint summary, or generic "handled by service" sentence is not enough for these categories.
+## Proportional Depth
 
-## Implementation Reconstruction Coverage
+Document until all of these questions can be answered:
 
-Atomic docs must satisfy a source-to-docs-to-code implementation reconstruction standard for the accepted scope. A competent implementer should be able to implement the same functional behavior from the docs without rereading source. This does not require pixel-perfect visual design, exact CSS values, component internal structure, or library choice unless source or user requirements make them behavior-relevant. It does require basic design/state presentation, screen structure, and visual feedback guidance when they affect product behavior or the style the user asked to preserve.
+1. What product or operational behavior must an implementation preserve or change?
+2. What observable result proves success or failure?
+3. Which rules, states, permissions, contracts, or failure paths may not be chosen arbitrarily?
+4. Which other domain or shared contract could conflict with this decision?
 
-This is the default completion standard for every accepted behavior/contract scope, including targeted or partial work. Partial reconstruction PASS applies only to that accepted scope and must not be reported as project-wide readiness. Context atoms remain boundary/context documents and do not need behavior-atom detail unless they improperly own concrete behavior.
+Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure.
 
-For frontend/UI source, document app shell behavior, routing, route/hash/query handling, selected entity and persistence, permission/access/no-data guards, preload/fallback behavior, form field matrix, collection editor behavior, validation/refusal/defaulting, payload transforms, save/delete scopes, confirmation modals, readiness blocker order, detail routes, empty/loading/error states, and basic design/state presentation enough to implement the required style.
+Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification condition. Review must not fail merely because the reader needs source for internal mechanics.
 
-For backend/API/service/job/integration source, document API contract, request/response payload, authorization/authentication, validation/guard behavior, domain policy, transaction or idempotency behavior, persistence mutation/read model, DB schema/DTO fields that affect behavior, async job/event behavior, external integration behavior, and error/retry/recovery semantics.
+Do not use atom count, file count, line count, or source-surface count as a quality threshold. A short atom can preserve every relevant decision, while a long source narrative can still be shallow.
 
-A docs set is not implementation-reconstruction-ready when these behaviors are only endpoint identifiers, screen identifiers, source identifiers, method-call sequences, source convention notes, one-line inventory, or unresolved `confirmation_needed` without next action.
+Use tables or structured lists only when compact prose would obscure independently varying decisions. For example, a matrix may be useful when several fields have different validation outcomes, several states allow different actions, or several failure types have distinct recovery behavior. Do not require field, payload, branch, state, and failure matrices as a fixed set.
 
-The criteria document and writer/reviewer loop must make implementation reconstruction coverage an explicit shared standard before user approval. The shared standard must name applicable frontend/UI coverage, backend/API/service/job/integration coverage, explicit not-applicable reasons, and blockers that prevent docs-only implementation.
+For frontend/UI behavior, include fields, routes, screen states, access guards, persistence, payload transforms, feedback, and design constraints only when they affect product behavior, verification, or an explicitly requested style. Display-only fields and exact CSS values are normally source-level details.
 
-Review must fail when a criteria document or completed docs set omits implementation reconstruction coverage, applicable or not-applicable frontend/UI coverage, backend/API/service/job/integration coverage, or blockers that prevent docs-only implementation.
+For backend/API/service/job/integration behavior, include payload fields, authorization, validation, domain policy, transaction/idempotency, persistence, schema, events, integrations, and recovery only to the depth needed to preserve a decision or observable contract.
 
-Do not use atom count, file count, or line count as a quality threshold. A short context atom can be complete when it only records a boundary, and a long behavior atom can still fail when implementation choices are missing. Review the density of reconstruction-critical decisions instead.
+## Conditional Risk Depth
 
-Shallow atom review must fail a behavior, contract, or matrix atom when it mentions forms, editors, routes, access guards, payloads, validations, readiness, save/delete behavior, API/service contracts, or state transitions but omits the concrete fields, branches, rules, payload shape, contract semantics, state effects, or failure outcomes an implementer would otherwise have to rediscover from source. If an atom uses terms such as `field matrix`, `payload`, `validation`, `contract`, `readiness`, or `state transition`, include a table or structured list for the applicable fields and branches, or record an explicit not-applicable reason. A sentence such as "handles local validation", "maps payload", or "calls the API" is not enough.
+Apply additional detail and the independent risk/contract reviewer when the accepted bundle includes any of these triggers:
 
-Implementation reconstruction review must not be combined with atom-boundary or source-closure review. Run each domain reconstruction/high-risk reviewer as a fresh docs-only reviewer. Its inputs are the managed docs in scope, approved criteria/project context, and required plugin principle files. Do not give it the source tree, operation inventory, or source evidence packet. Source identifiers already written in managed docs may remain visible, but the reviewer must not open source to fill a documentation gap.
+- authentication, authorization, security, privacy, or sensitive-data handling
+- money, billing, refund, settlement, quota, or entitlement
+- delete, approve, publish, irreversible mutation, or destructive operation
+- external integration, webhook, event delivery, or third-party dependency
+- irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
+- shared payload, storage, permission, integration, or policy contract used by another domain
 
-The docs-only reviewer must FAIL when it needs source, unstated product decisions, or arbitrary implementation choices. Do not add a separate probe file, input manifest, path-access audit, or reviewer solely for this check; record the verdict and missing decisions in the existing reviewer report. The separate source-closure/fact-fidelity reviewer compares the completed natural-language docs with actual source.
+Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and verification evidence. Add a matrix only when the alternatives cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom.
 
-Run the final reconstruction reviewer with docs-only input as well. It checks end-to-end behavior crossing domain or frontend/backend boundaries and does not redo unchanged local matrices. The reconstruction perspective must FAIL when applicable high-risk categories lack required matrices or specific not-applicable reasons.
+For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. If the accepted evidence cannot establish a behavior-affecting contract, record `confirmation_needed` instead of allowing reviewer PASS from local assumptions alone.
 
-## Source Fact Fidelity Gate
+## Source Fact Fidelity
 
-Within each domain bundle, local source fact fidelity is owned by the `Domain Draft Source Closure / Fact Fidelity Reviewer`, which compares judgment-bearing claims with the actual inspected source branch. In the project-wide final gate, the corresponding final reviewer checks cross-domain source ownership, project-wide closure, changed shared evidence, and contradictions that could invalidate an earlier domain PASS; it does not repeat every unchanged local claim.
+The development-quality reviewer compares judgment-bearing docs with the actual reachable source path. Do not infer runtime behavior from a field annotation, method name, type, endpoint name, or service class alone.
 
-Atom `Rules`, `Current Implementation`, `Gaps`, evidence packets, and review findings must preserve the source-observed behavior actually reachable through the inspected entry path. Do not simplify a branch into the behavior that a field annotation, method name, service class name, or DTO type seems to imply.
+When validation, refusal, defaulting, fallback, exception, read-only behavior, or storage effects matter, inspect the relevant caller binding, runtime guard, null/blank path, default, transaction mode, persistence call, and exception path. Record only the distinctions that affect a documented decision or contract.
 
-When documenting validation, refusal, defaulting, fallback, exception, read-only, or storage-effect behavior, compare the relevant source branches instead of relying on one identifier. Inspect the endpoint or caller binding, validator activation, service guard, null handling, blank handling, optional dependency fallback, default value fallback, explicit exception branches, runtime exception possibility, transaction mode, and persistence calls when those details affect product, operation, or integration behavior.
+If source allows a fallback instead of refusing input, preserve that observable branch or record uncertainty. Do not describe a path as recovered when source can throw an unhandled runtime exception. When source cannot prove intent, use `confirmation_needed` rather than promoting observed behavior into a confirmed rule.
 
-If source allows a null, blank, optional dependency, fallback value, or runtime path instead of refusing it, the docs must preserve that branch as observed behavior or record it as `confirmation_needed`. Do not rewrite an allowed fallback path as a guaranteed validation failure. Conversely, do not describe a behavior as safe or recovered when the source can throw an unhandled runtime exception.
-
-If an observed behavior depends on both declarative metadata and runtime wiring, describe both sides. For example, a request field annotation is not enough to claim that the endpoint rejects the request unless the controller or caller path actually activates validation. Use a generic coverage gap or `confirmation_needed` when the inspected source does not prove the stronger claim.
-
-Judgment-bearing `Gaps` and review findings are not sufficient when they only contain a label. Each such item must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key` and AID values when the affected atom lines are known.
+Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key`/AID values when known.
 
 ## Atomic Docs Goal Boundary
 
-The Codex Goal used after criteria approval is an execution scope for performing the accepted docs operation. It does not replace criteria approval, accepted docs write scope, atom content, judgment labels, source evidence, user review, or source-baseline metadata.
+The Codex Goal after criteria approval is an execution scope for the accepted docs operation. It does not replace criteria approval, docs write scope, atom content, judgment labels, source evidence, user review, or baseline metadata.
 
-Do not write Goal status or Goal completion as atom-level status, per-atom freshness, or judgment evidence. Code suitability judgments still come from approved criteria, generated atoms, source evidence, graph relationships, baseline metadata, and controlled judgment labels.
-
-If the Goal is incomplete, waiting for user input, or blocked by a user-decision, tool, or runtime blocker, preserve that state in the operation summary or change plan rather than in atom judgment labels. Required reviewer/gate execution that has not run yet and review FAIL that can be corrected inside the accepted scope are not Goal-blocked states; run, revise, and rerun the required gate first. Atom files should continue to describe intent, rules, current implementation, planned changes, and gaps.
+Do not write Goal status into atom meaning. If execution is waiting or blocked, preserve that state in operation state or the change plan. A correctable review FAIL is not Goal-blocked; revise and rerun the applicable reviewer first.

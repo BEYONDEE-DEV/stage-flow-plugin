@@ -11,10 +11,10 @@ Required path: `requirements -> implementation-basis atomic docs -> user approva
 
 ## Core Contract
 
-- Treat the written or updated atomic docs as the implementation source of truth for this request.
+- Treat the written or updated atomic docs as the source of truth for product decisions, required behavior, verification conditions, and boundaries in this request. Use project source and conventions for internal implementation mechanics.
 - Do not implement code before the relevant atomic docs are written or updated, summarized for the user, and explicitly approved as the implementation basis.
 - During the initial implementation-basis docs write, put new requested behavior mainly in `Planned Changes`; use `Intent` and `Rules` for purpose and policy, `Gaps` or `confirmation_needed` for uncertainty, and `Current Implementation` only for behavior already observed in source.
-- Before code, require every in-scope confirmed required AID to include an observable verification condition or invariant in the same meaning item, and require the relevant docs-only reconstruction reviewer to PASS without source access.
+- Before code, require every changed in-scope required AID to include an observable verification condition or invariant in the same meaning item, and require the domain development-quality reviewer plus any applicable risk/contract reviewer to PASS.
 - Do not bypass `atomic-docs` setup, docs-root discovery, criteria approval, docs write scope approval, Goal gate, writer/reviewer cycle, post-write gate, language policy, source-baseline, judgment label, AID, `atom_key`, or graph rules.
 - If `.stageflow/atomic-docs.json`, the managed docs root, or `project/atomization-criteria.md` is missing or unapproved, follow the `atomic-docs` bootstrap/criteria flow and stop for approval before docs generation or code implementation.
 - Keep the managed docs write scope separate from code implementation approval. Writing docs does not automatically approve code changes.
@@ -44,7 +44,7 @@ Then ask for explicit approval to implement from those docs. Continue to code on
 
 ## Implementation Basis
 
-During code implementation, compare every behavior change against the approved docs. If implementation reveals the docs are stale, incomplete, contradictory, or too shallow to implement safely, return to the docs update/approval step instead of guessing in code.
+During code implementation, compare every product decision and observable behavior change against the approved docs. Read source for architecture and implementation mechanics. If implementation reveals an unstated product rule, contract, verification condition, or conflict, return to the docs update/approval step instead of guessing in code.
 
 The implementation-verification table is scoped to the changed required AIDs, not every atom or AID in the project. If the docs or implementation basis changes, recheck only affected rows.
 

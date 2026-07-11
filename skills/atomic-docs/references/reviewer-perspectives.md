@@ -2,94 +2,113 @@
 
 ## Responsibility
 
-This reference defines the four independent domain draft reviewers and the four independent project-wide final reviewers. Domain reviewers prove local completeness. Final reviewers prove cross-domain coherence without repeating unchanged domain detail.
+This reference defines the required domain development-quality reviewer, the conditional risk/contract reviewer, and the conditional project-wide integration/baseline reviewer. Review effort scales with the accepted scope and risk instead of using a fixed reviewer count.
 
 ## Shared Report Contract
 
 Every reviewer report must include:
 
-- `review scope`: the domain bundle or project-wide cross-domain surface reviewed
-- `perspective`: exactly one assigned perspective
-- `principle files reviewed`: every required principle file for that perspective
+- `review scope`
+- `review role`
+- `principle files reviewed`
+- `source basis`: the inspected commit or explicitly recorded source revision
+- `risk triggers` that apply or `none`
 - `verdict`: `PASS`, `FAIL`, or `provisional`
-- blocking findings with perspective-appropriate evidence: docs evidence for reconstruction/boundary checks, source evidence for source-review perspectives, and operation-state evidence for reporting or ownership checks
+- blocking findings with docs, source, operation-state, or validation evidence appropriate to the role
 - affected `atom_key`/AID when known
-- evidence that changed since the previous run
-- rerun requirement and affected perspectives
+- evidence changed since the previous run
+- rerun requirement and affected reviewers
 
-A reviewer must not issue PASS when a required principle file was not read. The main agent aggregates reports but cannot replace a missing reviewer or issue that perspective's PASS itself.
+A reviewer must not issue PASS when a required principle file was not read. The main agent aggregates reports but cannot replace a required independent reviewer or issue that reviewer's PASS itself.
 
-Provide operation inventory or other operation-state evidence only to reporting, source, or ownership checks that require it. Never provide operation-state evidence to a docs-only reconstruction reviewer.
+Reviewers may inspect source. Source access is required when checking fidelity, missing decisions, accepted-scope coverage, or impact. The quality test is not whether a reviewer can reproduce code without source; it is whether the docs preserve the decisions needed for implementation, verification, and conflict analysis.
 
-## Domain Draft Reviewers
+## Required Domain Development-Quality Reviewer
 
-Each active domain bundle uses exactly one writer followed by these four independent reviewers.
+Every active domain bundle uses one writer followed by one independent development-quality reviewer.
 
-### Domain Draft Atom Boundary / Context Hygiene Reviewer
+Read:
 
-Read `atomic-document-contract.md`, `atom-format-and-judgment.md`, `atomization-criteria-contract.md`, and `source-convention-and-domain-policy.md`.
+- `atomic-document-contract.md`
+- `atom-format-and-judgment.md`
+- `atomization-criteria-contract.md`
+- `source-convention-and-domain-policy.md`
+- `service-logic-coverage.md`
+- `change-judgment-policy.md`
+- `project-documents-and-inventory.md`
 
-FAIL when the bundle hides behavior in context atoms, mixes domains and behavior candidates, keeps a broad grouping, uses unsupported naming, produces an over-compressed atom, or leaves a vague split proposal.
+Check all of the following in one coherent pass:
 
-### Domain Draft Source Closure / Fact Fidelity Reviewer
+- domain and context hygiene: no broad catch-all, context pollution, unsupported naming, vague split, or duplicated ownership
+- decision completeness: intent, rules, observable contract, consequential branch/state/side effect, verification condition, dependency, and unresolved decision are recorded when applicable
+- proportional depth: source mechanics are not copied into docs, and matrices or field lists exist only where prose would leave a decision ambiguous
+- source fact fidelity: judgment-bearing claims match the actual reachable source behavior and stronger intent is not inferred from identifiers alone
+- accepted-scope closure: every meaningful behavior aggregate in scope has an atom/AID or explicit disposition without requiring one row per mechanical source surface
+- judgment and identity integrity: inferred/confirmed basis, labels, selective AIDs, graph relationships, and operation reporting are consistent
 
-Read `service-logic-coverage.md`, `change-judgment-policy.md`, and `atom-format-and-judgment.md`.
+FAIL when a developer still must invent product behavior, a reviewer cannot derive an observable verification result, an important contract conflict is hidden, or docs contradict source. Do not FAIL merely because internal code structure, framework mechanics, exact CSS, or behavior-neutral mappings remain in source.
 
-FAIL when a meaningful source surface lacks an atom/AID or explicit disposition, source identifiers replace natural-language behavior, or a documented validation, fallback, state, persistence, integration, error, or recovery claim disagrees with the inspected source path.
+Use an answer sheet equivalent to:
 
-### Domain Draft Implementation Reconstruction / High-Risk Reviewer
+```text
+결정 또는 관련 AID | 확인한 소스/요구사항 | 구현자가 임의로 정하면 안 되는 내용 | 검증 가능한 결과 | 영향받는 계약/도메인 | 판정
+```
 
-Read `service-logic-coverage.md`, `atom-format-and-judgment.md`, and `atomic-document-contract.md`.
+The answer sheet may summarize several related AIDs in one row when they form one decision. Do not create one review row per source file or per AID mechanically.
 
-Run this perspective as a fresh docs-only reviewer. Give it managed docs in scope, approved criteria/project context, and the required principle files only. Do not give it the source tree, operation inventory, or source evidence packet. FAIL when implementing the domain from docs requires arbitrary choices or source access, or when applicable forms, payloads, branches, state effects, transactions, permissions, integrations, or failure paths are absent. Require the applicable high-risk matrices or a specific not-applicable reason. Record missing decisions in the existing reviewer report; do not create a separate probe artifact.
+## Conditional Risk / Contract Reviewer
 
-### Domain Draft Reporting Reviewer
+Run one additional independent reviewer only when `service-logic-coverage.md` identifies at least one risk trigger. Record the trigger in operation state before review.
 
-Read `source-baseline-and-change-plan.md`, `docs-generation-flow.md`, `change-judgment-policy.md`, and `project-documents-and-inventory.md`.
+Read:
 
-FAIL when domain evidence, operation state, labels, unresolved decisions, or partial-scope wording is inconsistent. This reviewer may confirm that the bundle is ready to join the project-wide final review, but it must not approve or update the global source baseline.
+- `service-logic-coverage.md`
+- `change-judgment-policy.md`
+- `atom-format-and-judgment.md`
+- `atomic-graph.md`
 
-## Domain Reviewer Answer Sheet
+Review only the triggered concerns. Check adverse branches, permission or security boundaries, irreversible effects, money/entitlement changes, transaction/idempotency, retries/recovery, external contracts, sensitive data, and shared cross-domain contracts as applicable. For an external contract, require authoritative local or user-approved provider evidence; otherwise require a supported `confirmation_needed` gap.
 
-The reconstruction reviewer answers from managed docs only:
+FAIL when the risky decision, refusal/failure path, side effect, rollback/recovery behavior, or observable verification evidence is missing or contradicted. Require a structured matrix only when the alternatives cannot be reviewed reliably in prose.
 
-- Can the same domain behavior be implemented from these docs alone?
-- Which fields, branches, validations, state effects, or failures still require source?
-- Do any source identifiers appear without natural-language behavior?
+Do not repeat the complete domain review. A risk reviewer PASS is additional evidence and cannot replace the required development-quality reviewer PASS.
 
-The source reviewer answers with actual source access:
+## Conditional Project-Wide Integration / Baseline Reviewer
 
-- Does every meaningful source surface have an atom/AID, gap, `out_of_scope`, or not-applicable result?
-- Which judgment-bearing claims were checked against their actual entry and branch paths?
+Run one project-wide reviewer only when at least one condition applies:
 
-Use a claim audit shape equivalent to `AID claim -> checked entry path -> null/blank/default/fallback/exception branch -> source evidence` where the claim needs source fidelity review.
+- the accepted scope is project-wide
+- more than one domain bundle changed
+- a shared cross-domain contract or graph relationship changed
+- the operation seeks to create or update the global source baseline
 
-## Project-Wide Final Reviewers
+Read:
 
-Run these four independent reviewers only after every accepted domain bundle has four PASS results. Final reviewers trust unchanged domain-level evidence and focus on project-wide relationships. They do not repeat every row-level or branch-level domain check.
+- `atomic-graph.md`
+- `source-baseline-and-change-plan.md`
+- `docs-generation-flow.md`
+- `service-logic-coverage.md`
+- `project-documents-and-inventory.md`
 
-### Final Atom Boundary / Context Hygiene Reviewer
+Check cross-domain ownership, duplicate responsibility, glossary source of truth, graph consistency, shared payload/state/storage/permission/integration contracts, changed evidence after domain PASS, accepted-scope reporting, and baseline eligibility. Require every participating domain review to use the operation's recorded `source_commit_observed`; if source changed, reopen affected bundles before PASS.
 
-Check cross-domain ownership, duplicate responsibilities, hidden shared behavior, project/common promotion, context boundaries, and graph consistency. Before trusting graph closure, inspect relevant glossary source-of-truth terms and shared payload/state/storage/permission/integration contracts for missing relationship candidates. Reopen a domain when the project-wide view exposes a local boundary defect.
+For a global baseline, also verify that every project behavior aggregate has a disposition, all required domain and risk reviews PASSed at the same source commit, structural baseline validation PASSed, and no blocker prevents project-wide development judgment.
 
-### Final Source Closure / Fact Fidelity Reviewer
+Do not repeat unchanged domain detail. If the project-wide view exposes a local defect, reopen the affected bundle, rerun its writer and affected reviewers, then rerun this reviewer.
 
-Check project-wide inventory closure, source surfaces that cross domains, shared persistence or integration ownership, and evidence changed after a domain PASS. Recheck local source claims only when cross-domain evidence changed or reveals a contradiction.
+This reviewer is the only semantic reviewer that can approve global baseline creation or update.
 
-### Final Implementation Reconstruction / High-Risk Reviewer
+## Reviewer Selection Examples
 
-Read `service-logic-coverage.md`, `atom-format-and-judgment.md`, and `atomic-document-contract.md`.
-
-Run this perspective with accepted managed docs, criteria/project context, and required principle files only, without source or operation evidence. Check end-to-end flows that cross domains, frontend/backend contract continuity, shared state transitions, error propagation, recovery, and high-risk behavior spanning more than one bundle. Do not redo isolated domain matrices that remain unchanged and already PASSed.
-
-### Final Baseline / Reporting Reviewer
-
-Decide whether the accepted scope is actually project-wide, every domain and final perspective PASSed at one source commit, no blocker prevents project-wide reconstruction/judgment readiness, and user-facing completion claims match that state. This is the only reviewer perspective that can approve global baseline creation or update.
+- Targeted, ordinary single-domain change: development-quality reviewer only.
+- Targeted high-risk single-domain change: development-quality reviewer plus risk/contract reviewer.
+- Multi-domain or shared-contract change: applicable domain reviews plus project-wide integration reviewer.
+- Full project baseline: every domain's applicable reviews plus project-wide integration/baseline reviewer.
 
 ## Rerun Policy
 
-- After a domain FAIL, rerun the failed perspective and any perspective whose evidence changed.
-- Do not rerun unaffected perspectives merely because another perspective failed.
-- When a final reviewer finds a domain-specific defect, reopen that bundle, rerun its writer and affected domain reviewers, then rerun every final perspective whose basis changed.
-- Reviewer FAIL is not completion and is not a Goal blocker when it can be corrected inside the accepted scope.
+- After a FAIL, revise the affected bundle and rerun the failed reviewer plus any reviewer whose evidence changed.
+- Do not rerun unaffected PASS results.
+- Do not start the next sequential bundle until every reviewer applicable to the active bundle PASSes or a user decision is required.
+- Reviewer FAIL is not completion and is not a Goal blocker when it can be corrected inside accepted scope.
 - Ask the user only when PASS requires a user decision or a separately authorized destructive or external action.
