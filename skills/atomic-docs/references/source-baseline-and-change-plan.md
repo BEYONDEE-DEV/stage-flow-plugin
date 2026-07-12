@@ -26,7 +26,9 @@ The baseline records the source commit used for a complete confirmed project-wid
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
-Create or update baseline metadata only when the accepted scope is the whole project, every discovered domain bundle has its required development-quality review and applicable risk review PASS at the same source commit, the project-wide integration/baseline reviewer PASSes, structural baseline validation PASSes, and no blocker prevents project-wide development judgment.
+Create the first baseline only when the accepted scope is the whole project, every discovered domain bundle has its required development-quality review and applicable risk review PASS at the same source commit, the project-wide integration/baseline reviewer PASSes, structural baseline validation PASSes, and no blocker prevents project-wide development judgment.
+
+Advance an existing trusted baseline through `baseline-diff-refresh` without rerunning unaffected domain reviewers. Required reviews for impacted bundles must PASS at the new `source_commit_observed`. The project-wide reviewer may carry prior PASS results forward only after verifying a complete old-to-new source diff, ownership and graph expansion, shared-contract and criteria impact, and an operation-state record of prior/new commits, affected bundles, unchanged bundle classes, and carry-forward rationale. Carry-forward means the reviewed decision basis is unchanged; it is not a claim that an old review ran at the new commit.
 
 Partial or targeted operations must not create, replace, or advance baseline metadata. Record their inspected commit as `source_commit_observed` in `.stageflow/atomic-docs/requests/<request-id>/work-state.json` and report the result as partial scope. That operation-local value is audit/resume state, not a global freshness claim.
 

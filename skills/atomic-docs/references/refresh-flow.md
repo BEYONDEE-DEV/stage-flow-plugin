@@ -7,6 +7,7 @@ This reference routes full refresh and targeted docs operations against source c
 ## Contents
 
 - [Refresh Operation Shape](#refresh-operation-shape)
+- [Operation Profiles](#operation-profiles)
 - [Domain Context Discovery](#domain-context-discovery)
 - [Reference Routing](#reference-routing)
 
@@ -21,6 +22,18 @@ For refresh or targeted docs work:
 3. Inspect existing project, common, and domain context before assigning source behavior to a domain.
 4. Use source-to-atom seed discovery to find likely domain and atom candidates.
 5. Follow criteria, Goal, inventory, writer/reviewer, graph, source-baseline, and change-plan rules from the sibling references below.
+
+## Operation Profiles
+
+Select one profile before source discovery and record it in operation state:
+
+- `initial-baseline`: no trusted global baseline exists and the accepted scope is the whole project. Run project-wide ownership/evidence prepass, process every discovered bundle, run the project-wide reviewer, and create baseline metadata only after full PASS.
+- `baseline-diff-refresh`: a trusted global baseline exists and the user wants it advanced. Start from `git diff <source_commit>..HEAD`, seed impacted atoms, expand through shared ownership/graph, process affected bundles only, then run the project-wide reviewer before updating the baseline. Record the prior/new commits, changed source surfaces, affected bundles, and rationale for carrying forward each unaffected bundle class.
+- `change-impact-refresh`: inspect a source or requirement change and update affected bundles without claiming a new global baseline. Use diff/seed/graph impact and leave global baseline metadata unchanged.
+- `targeted`: process only the user-accepted domain/feature plus adjacent contracts required for ownership and conflict judgment. Do not widen to project-wide work automatically.
+- `inspection`: read and report without managed-doc writes, writer queues, or baseline changes unless the user later accepts a write operation.
+
+Do not run the initial-baseline procedure for an ordinary refresh. Existing unchanged bundle PASS results remain reusable when they come from the trusted baseline and complete diff/ownership/shared-contract/graph/criteria impact analysis shows their basis is unaffected. This carry-forward is approved once by the baseline reviewer; it does not rerun unchanged domain reviewers at the new commit.
 
 ## Domain Context Discovery
 

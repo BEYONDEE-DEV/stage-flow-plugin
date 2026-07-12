@@ -431,6 +431,48 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_shared_owner_prepass_orders_queue_without_freezing_all_owners(self) -> None:
+        text = refs(
+            "project-documents-and-inventory.md",
+            "atomic-graph.md",
+            "docs-generation-flow.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "Ownership And Evidence Prepass",
+                "shared payload, storage, permission, policy, integration, transaction",
+                "confirm owners whose later change would reopen several bundles",
+                "keep ordinary single-domain owners provisional",
+                "shared-owner bundles before direct dependents",
+                "Do not build a complete semantic graph or freeze every aggregate owner",
+                "Reference count is a scheduling hint, not proof of ownership",
+                "targeted single-domain operation checks only the target owner and adjacent contracts",
+                "record its reviewed revision as the owner basis",
+                "must not redefine the owner or shared contract silently",
+            ),
+        )
+
+    def test_operation_evidence_index_is_reused_but_not_trusted_as_proof(self) -> None:
+        text = refs(
+            "project-documents-and-inventory.md",
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "operation-local `evidence.md`",
+                "pin it to `source_commit_observed`",
+                "reuse it as a source-navigation index",
+                "Start from the operation evidence index",
+                "Independently reopen changed or risk-bearing claims",
+                "Do not reread every cited line mechanically",
+            ),
+        )
+
     def test_domain_bundles_use_one_writer_and_risk_scaled_review(self) -> None:
         flow = read(REFS / "docs-generation-flow.md")
         reviewers = read(REFS / "reviewer-perspectives.md")
@@ -441,11 +483,11 @@ class DocsSkillTests(unittest.TestCase):
                 "sequential queue",
                 "Each domain bundle uses exactly one writer",
                 "exactly one independent development-quality reviewer",
-                "If any recorded risk trigger applies",
+                "when a risk trigger applies",
                 "exactly one independent risk/contract reviewer",
                 "Ordinary CRUD or preference persistence is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
-                "Do not rerun unaffected PASS results",
+                "change-type rerun routing",
                 "every reviewer applicable to the active bundle PASSes",
                 "reopen that bundle",
             ),
@@ -453,16 +495,50 @@ class DocsSkillTests(unittest.TestCase):
         for role in (
             "Required Domain Development-Quality Reviewer",
             "Conditional Risk / Contract Reviewer",
-            "Conditional Project-Wide Integration / Baseline Reviewer",
+            "Conditional Integration / Baseline Reviewer",
         ):
             self.assertIn(role, reviewers)
+
+    def test_bundle_preflight_precedes_parallel_semantic_review(self) -> None:
+        text = refs("docs-generation-flow.md", "validation-contract.md")
+        assert_all(
+            self,
+            text,
+            (
+                "After each writer and before semantic review",
+                "--expect-atom-key <key>",
+                "scopes this preflight to the active bundle",
+                "Unrelated pre-existing structural findings do not block the bundle",
+                "Run unscoped docs validation after the accepted queue finishes",
+                "Compare keys and dispositions, not raw document counts",
+                "If preflight FAILs, return to the writer without spending a semantic review",
+                "same revision and source basis",
+                "in parallel",
+                "This is not a project-wide semantic review",
+            ),
+        )
+
+    def test_review_reruns_are_routed_by_change_type(self) -> None:
+        text = read(REFS / "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Route reruns by what changed",
+                "structural preflight only",
+                "narrowed source-evidence check",
+                "development-quality reviewer for affected bundle(s)",
+                "risk/contract reviewer; also development reviewer",
+                "Graph `reason` wording or inventory count alone",
+                "Do not rerun unaffected PASS results",
+            ),
+        )
 
     def test_reviewer_principle_files_and_answer_sheet_are_explicit(self) -> None:
         text = read(REFS / "reviewer-perspectives.md")
         for reference in (
             "atomic-document-contract.md",
             "atom-format-and-judgment.md",
-            "atomization-criteria-contract.md",
             "source-convention-and-domain-policy.md",
             "service-logic-coverage.md",
             "change-judgment-policy.md",
@@ -483,11 +559,12 @@ class DocsSkillTests(unittest.TestCase):
                 "cannot replace a required independent reviewer",
                 "구현자가 임의로 정하면 안 되는 내용",
                 "검증 가능한 결과",
+                "Read only the additional principle files implicated by the bundle",
             ),
         )
 
         project_review = text.split(
-            "## Conditional Project-Wide Integration / Baseline Reviewer", 1
+            "## Conditional Integration / Baseline Reviewer", 1
         )[1].split("## Reviewer Selection Examples", 1)[0]
         for reference in (
             "service-logic-coverage.md",
@@ -506,20 +583,77 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_project_wide_reviewer_is_conditional_and_not_duplicate_domain_review(self) -> None:
+    def test_integration_reviewer_scales_from_affected_closure_to_baseline(self) -> None:
         text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
         assert_all(
             self,
             text,
             (
-                "Run one project-wide integration/baseline reviewer",
-                "Do not run a project-wide reviewer for an ordinary targeted single-domain operation",
+                "Run one integration reviewer",
+                "inspect only the affected closure",
+                "Independent changes in several domains do not require this reviewer",
+                "expand the review to the whole project",
                 "does not repeat complete domain review",
                 "cross-domain ownership",
                 "shared payload/state/storage/permission/integration contracts",
-                "operation's recorded `source_commit_observed`",
-                "only semantic reviewer that can approve global baseline",
+                "newly run domain review uses the operation's `source_commit_observed`",
+                "Only the project-wide form of this reviewer can approve global baseline",
                 "reopen the affected bundle",
+            ),
+        )
+
+    def test_operation_profiles_keep_refresh_work_incremental(self) -> None:
+        text = read(REFS / "refresh-flow.md")
+        for profile in (
+            "`initial-baseline`",
+            "`baseline-diff-refresh`",
+            "`change-impact-refresh`",
+            "`targeted`",
+            "`inspection`",
+        ):
+            self.assertIn(profile, text)
+        assert_all(
+            self,
+            text,
+            (
+                "process every discovered bundle",
+                "Start from `git diff <source_commit>..HEAD`",
+                "process affected bundles only",
+                "Do not run the initial-baseline procedure for an ordinary refresh",
+                "Existing unchanged bundle PASS results remain reusable",
+                "does not rerun unchanged domain reviewers at the new commit",
+            ),
+        )
+
+    def test_baseline_diff_refresh_carries_only_proven_unaffected_reviews(self) -> None:
+        text = refs(
+            "refresh-flow.md",
+            "source-baseline-and-change-plan.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "complete old-to-new source diff",
+                "impacted bundle reviews at the new commit",
+                "carrying each unaffected bundle class",
+                "trusted prior baseline",
+                "Do not claim carried reviews ran at the new commit",
+            ),
+        )
+
+    def test_repeated_no_progress_cycles_are_diagnosed_not_retried_blindly(self) -> None:
+        text = read(REFS / "docs-generation-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Do not use a fixed wall-clock timeout",
+                "none of the planned artifact/evidence changes",
+                "same blocking finding fingerprint recurs twice",
+                "do not launch the same cycle again",
+                "dependency-independent bundles",
             ),
         )
 
@@ -712,6 +846,11 @@ class DocsSkillTests(unittest.TestCase):
                 "--phase bootstrap",
                 "--phase docs",
                 "--phase baseline",
+                "--expect-atom-key",
+                "valid standard YAML",
+                "validated atom and AID totals",
+                "unrelated pre-existing defects do not block the bundle",
+                "invalid for bootstrap and baseline phases",
                 "Never search for or invoke",
                 "The validator is read-only",
                 "semantic quality remains the responsibility",

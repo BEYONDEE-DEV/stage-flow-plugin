@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover - exercised only in incomplete runtimes
+    yaml = None
+
 PHASES = ("bootstrap", "docs", "baseline")
 REQUIRED_CONFIG = ("storage_mode", "docs_root", "source_root", "baseline_metadata_path")
 REQUIRED_SECTIONS = (
@@ -55,21 +60,60 @@ class Atom:
     body_lines: list[str]
 
 
+if yaml is not None:
+    class UniqueKeyLoader(yaml.SafeLoader):
+        """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+    def construct_unique_mapping(
+        loader: UniqueKeyLoader, node: Any, deep: bool = False
+    ) -> dict[Any, Any]:
+        loader.flatten_mapping(node)
+        mapping: dict[Any, Any] = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+
+    UniqueKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        construct_unique_mapping,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate plugin-managed atomic docs without modifying the target project."
     )
     parser.add_argument("--root", default=".", help="Target project root")
     parser.add_argument("--phase", choices=PHASES, default="docs")
+    parser.add_argument(
+        "--expect-atom-key",
+        action="append",
+        default=[],
+        help="Atom key expected from the active bundle; repeat for multiple atoms",
+    )
     args = parser.parse_args(argv)
 
     errors: list[str] = []
+    if args.expect_atom_key and args.phase != "docs":
+        errors.append("`--expect-atom-key` requires `--phase docs`")
     config = load_config(Path(args.root).resolve(), errors)
     atoms: list[Atom] = []
+    aid_count = 0
     if config is not None:
         validate_bootstrap(config, errors)
         if args.phase in {"docs", "baseline"}:
-            atoms = validate_docs(config, errors)
+            scope_keys = args.expect_atom_key if args.phase == "docs" else []
+            atoms, aid_count = validate_docs(config, errors, scope_keys)
         if args.phase == "baseline":
             validate_baseline(config, errors)
 
@@ -79,7 +123,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {error}")
         return 1
 
-    detail = f" ({len(atoms)} atoms)" if atoms else ""
+    scope = " scoped" if args.expect_atom_key else ""
+    detail = f" ({len(atoms)}{scope} atoms, {aid_count}{scope} AIDs)" if atoms else ""
     print(f"PASS {args.phase}: {Path(args.root).resolve()}{detail}")
     return 0
 
@@ -132,27 +177,49 @@ def validate_bootstrap(config: Config, errors: list[str]) -> None:
         errors.append(f"missing configured source root `{rel(config.project_root, config.source_root)}`")
 
 
-def validate_docs(config: Config, errors: list[str]) -> list[Atom]:
+def validate_docs(
+    config: Config, errors: list[str], expected_atom_keys: list[str]
+) -> tuple[list[Atom], int]:
     paths = sorted(config.docs_root.rglob("*-atom.md")) if config.docs_root.is_dir() else []
     if not paths:
         errors.append("managed docs root contains no `*-atom.md` files")
-        return []
+        return [], 0
 
-    atoms = [parse_atom(path, config, errors) for path in paths]
-    parsed = [atom for atom in atoms if atom is not None]
-    by_key: dict[str, Atom] = {}
+    parsed_with_errors: list[tuple[Atom | None, list[str]]] = []
+    for path in paths:
+        local_errors: list[str] = []
+        parsed_with_errors.append((parse_atom(path, config, local_errors), local_errors))
+    parsed = [atom for atom, _ in parsed_with_errors if atom is not None]
+
+    expected = set(expected_atom_keys)
+    scoped = bool(expected)
+    selected = [atom for atom in parsed if not scoped or atom.atom_key in expected]
+    for atom, local_errors in parsed_with_errors:
+        if not scoped or (atom is not None and atom.atom_key in expected):
+            errors.extend(local_errors)
+
+    by_key_members: dict[str, list[Atom]] = {}
     for atom in parsed:
-        prior = by_key.get(atom.atom_key)
-        if prior is not None:
-            errors.append(
-                f"duplicate atom_key `{atom.atom_key}` in `{prior.rel_path}` and `{atom.rel_path}`"
-            )
-        else:
-            by_key[atom.atom_key] = atom
+        by_key_members.setdefault(atom.atom_key, []).append(atom)
+    by_key = {key: members[0] for key, members in by_key_members.items()}
 
-    validate_aids(parsed, errors)
-    validate_graph(parsed, by_key, config, errors)
-    return parsed
+    relevant_keys = set(expected)
+    for atom in selected:
+        relevant_keys.update(edge.get("target_key", "") for edge in atom.edges)
+    for key, members in by_key_members.items():
+        if len(members) > 1 and (not scoped or key in relevant_keys):
+            paths_text = "`, `".join(atom.rel_path for atom in members)
+            errors.append(f"duplicate atom_key `{key}` in `{paths_text}`")
+
+    for expected_key in sorted(expected):
+        if not ATOM_KEY_RE.fullmatch(expected_key):
+            errors.append(f"expected atom key `{expected_key}` must be lower-kebab-case")
+        elif expected_key not in by_key:
+            errors.append(f"expected atom key `{expected_key}` does not exist in managed docs")
+
+    aid_count = validate_aids(parsed, errors, expected if scoped else None)
+    validate_graph(selected, by_key, config, errors)
+    return selected, aid_count
 
 
 def parse_atom(path: Path, config: Config, errors: list[str]) -> Atom | None:
@@ -171,9 +238,9 @@ def parse_atom(path: Path, config: Config, errors: list[str]) -> Atom | None:
         errors.append(f"`{label}` has unterminated YAML frontmatter")
         return None
 
-    top, edges = parse_controlled_frontmatter(lines[1:end], label, errors)
+    top, edges = parse_yaml_frontmatter(lines[1:end], label, errors)
     atom_key = top.get("atom_key", "")
-    if not atom_key:
+    if not isinstance(atom_key, str) or not atom_key:
         errors.append(f"`{label}` frontmatter must include `atom_key`")
         return None
     if not ATOM_KEY_RE.fullmatch(atom_key):
@@ -188,61 +255,51 @@ def parse_atom(path: Path, config: Config, errors: list[str]) -> Atom | None:
     return Atom(path, path.relative_to(config.docs_root).as_posix(), atom_key, edges, body)
 
 
-def parse_controlled_frontmatter(
+def parse_yaml_frontmatter(
     lines: list[str], label: str, errors: list[str]
 ) -> tuple[dict[str, str], list[dict[str, str]]]:
-    top: dict[str, str] = {}
+    if yaml is None:
+        errors.append("standard YAML validation requires the `PyYAML` package")
+        return {}, []
+    try:
+        data = yaml.load("\n".join(lines), Loader=UniqueKeyLoader)
+    except yaml.YAMLError as exc:
+        errors.append(f"invalid YAML frontmatter in `{label}`: {exc}")
+        return {}, []
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        errors.append(f"`{label}` frontmatter must contain a YAML mapping")
+        return {}, []
+
+    top = {key: value for key, value in data.items() if isinstance(key, str)}
+    raw_edges = data.get("graph_edges", [])
+    if not isinstance(raw_edges, list):
+        errors.append(f"`{label}` graph_edges must be a YAML list or `[]`")
+        return top, []
+
     edges: list[dict[str, str]] = []
-    graph_active = False
-    current_edge: dict[str, str] | None = None
-
-    for raw in lines:
-        if not raw.strip() or raw.lstrip().startswith("#"):
+    for index, raw_edge in enumerate(raw_edges, start=1):
+        if not isinstance(raw_edge, dict):
+            errors.append(f"`{label}` graph edge {index} must be a YAML mapping")
             continue
-        indent = len(raw) - len(raw.lstrip(" "))
-        stripped = raw.strip()
-        if indent == 0:
-            graph_active = False
-            current_edge = None
-            key, value = key_value(stripped, label, errors)
-            if key is None:
+        edge: dict[str, str] = {}
+        for key, value in raw_edge.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                errors.append(f"`{label}` graph edge {index} keys and values must be strings")
                 continue
-            if key == "graph_edges":
-                if value not in {"", "[]"}:
-                    errors.append(f"`{label}` graph_edges must use a block list or `[]`")
-                graph_active = value == ""
-                continue
-            if key in top:
-                errors.append(f"`{label}` frontmatter repeats `{key}`")
-            top[key] = scalar(value)
-            continue
-
-        if not graph_active:
-            continue
-        if indent == 2 and stripped.startswith("-"):
-            current_edge = {}
-            edges.append(current_edge)
-            remainder = stripped[1:].strip()
-            if remainder:
-                key, value = key_value(remainder, label, errors)
-                if key is not None:
-                    current_edge[key] = scalar(value)
-            continue
-        if indent >= 4 and current_edge is not None:
-            key, value = key_value(stripped, label, errors)
-            if key is not None:
-                if key in current_edge:
-                    errors.append(f"`{label}` graph edge repeats `{key}`")
-                current_edge[key] = scalar(value)
-            continue
-        errors.append(f"`{label}` has unsupported graph_edges indentation")
-
+            edge[key] = value
+        edges.append(edge)
     return top, edges
 
 
-def validate_aids(atoms: list[Atom], errors: list[str]) -> None:
-    seen: dict[str, str] = {}
+def validate_aids(
+    atoms: list[Atom], errors: list[str], scoped_keys: set[str] | None = None
+) -> int:
+    seen: dict[str, tuple[str, bool]] = {}
+    count = 0
     for atom in atoms:
+        in_scope = scoped_keys is None or atom.atom_key in scoped_keys
         current_section: str | None = None
         for line in atom.body_lines:
             if line.startswith("## "):
@@ -251,19 +308,27 @@ def validate_aids(atoms: list[Atom], errors: list[str]) -> None:
             for token in AID_TOKEN_RE.findall(line):
                 match = AID_RE.fullmatch(token)
                 if match is None:
-                    errors.append(f"`{atom.rel_path}` has malformed AID `{token}`")
+                    if in_scope:
+                        errors.append(f"`{atom.rel_path}` has malformed AID `{token}`")
                     continue
+                if in_scope:
+                    count += 1
                 prior = seen.get(token)
-                if prior is not None:
-                    errors.append(f"duplicate AID `{token}` in `{prior}` and `{atom.rel_path}`")
-                else:
-                    seen[token] = atom.rel_path
+                if prior is not None and (in_scope or prior[1]):
+                    errors.append(
+                        f"duplicate AID `{token}` in `{prior[0]}` and `{atom.rel_path}`"
+                    )
+                if prior is None:
+                    seen[token] = (atom.rel_path, in_scope)
+                elif in_scope and not prior[1]:
+                    seen[token] = (prior[0], True)
                 expected = SECTION_CODES[match.group("section")]
-                if current_section != expected:
+                if in_scope and current_section != expected:
                     errors.append(
                         f"`{atom.rel_path}` AID `{token}` belongs under `## {expected}`, "
                         f"not `{current_section or 'no required section'}`"
                     )
+    return count
 
 
 def validate_graph(
@@ -367,27 +432,6 @@ def safe_relative(value: str) -> Path | None:
     if path.is_absolute() or ".." in path.parts:
         return None
     return path
-
-
-def key_value(text: str, label: str, errors: list[str]) -> tuple[str | None, str]:
-    key, separator, value = text.partition(":")
-    key = key.strip()
-    if not separator or not key:
-        errors.append(f"`{label}` has unsupported frontmatter line `{text}`")
-        return None, ""
-    return key, value.strip()
-
-
-def scalar(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] == '"':
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, str) else value
-        except json.JSONDecodeError:
-            return value
-    if len(value) >= 2 and value[0] == value[-1] == "'":
-        return value[1:-1].replace("''", "'")
-    return value.split(" #", 1)[0].strip()
 
 
 def git_commit_exists(source_root: Path, commit: str) -> bool:

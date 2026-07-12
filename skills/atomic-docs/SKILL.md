@@ -20,8 +20,12 @@ Create and maintain source-based project documentation that preserves the decisi
 - After criteria approval, say that the writing criteria are approved but actual service-logic docs are not written, then ask for a user-enterable scope such as `전체 문서 작성 시작`, `특정 도메인만 작성`, `특정 기능/흐름만 작성`, or `기준을 더 수정`.
 - Require a Codex Goal after criteria approval and accepted docs write scope, before inventory, writer/reviewer, graph, project-document, atom, or baseline work. A Goal does not replace user approval, evidence, or review.
 - Treat required criteria, writer, reviewer, rerun, and post-write subagents as authorized parts of the accepted operation. Ask again only for deletion, migration, push, an external service call, or a blocker that cannot PASS without a user decision.
-- Process multi-domain work sequentially. Each domain bundle uses one writer and one independent development-quality reviewer. Add one independent risk/contract reviewer only when the bundle includes authorization or security, money, destructive actions, external integration, irreversible/high-impact or concurrency-sensitive state transitions, transaction/idempotency, async retry/recovery, privacy-sensitive data, or a shared cross-domain contract. Ordinary CRUD or preference persistence is not a risk trigger by itself.
-- Run one project-wide integration/baseline reviewer only when the accepted operation is project-wide, changes more than one domain, changes a shared contract, or seeks a global source baseline. A targeted single-domain operation without those conditions does not need a final reviewer.
+- Before a multi-domain queue starts, run one lightweight ownership/evidence prepass. Confirm shared or high-fan-out owners that would reopen dependent bundles, keep ordinary local owners provisional, and order shared-owner bundles before their dependents. Do not freeze every aggregate owner before writing.
+- Process multi-domain bundles sequentially. Each bundle uses one writer and one independent development-quality reviewer. Add one independent risk/contract reviewer only when the bundle includes authorization or security, money, destructive actions, external integration, irreversible/high-impact or concurrency-sensitive state transitions, transaction/idempotency, async retry/recovery, privacy-sensitive data, or a shared cross-domain contract. Ordinary CRUD or preference persistence is not a risk trigger by itself.
+- Build one operation-local source evidence index pinned to `source_commit_observed` and reuse it as a navigation seed. Reviewers independently recheck changed or risk-bearing claims and sample unchanged high-consequence claims; they do not rediscover every entry point or reread every cited line.
+- After each writer, run structural bundle preflight before semantic review. When both domain and risk reviews apply, run them in parallel against the same recorded bundle attempt. Route reruns by the changed evidence; structural-only changes do not trigger full semantic review.
+- Once a reviewed shared owner is consumed by a dependent bundle, the dependent writer must reference it rather than silently redefine it. A contradiction reopens the shared-owner bundle and only dependents whose PASS basis changed.
+- Run one affected-closure integration reviewer when a shared cross-domain contract, ownership, or graph relationship changes. Expand that review to the whole project only for `initial-baseline` or `baseline-diff-refresh`; unrelated multi-domain changes do not require a final semantic reviewer merely because of bundle count.
 - Give semantic reviewers both managed docs and the source/evidence needed to check decisions, fidelity, and impact. Do not deny source access as a quality test.
 - Measure document depth by decision completeness, not source coverage volume, atom count, line count, or whether source can be discarded. Record why the behavior exists, required rules, observable contracts, consequential branches, state/side effects, failures, verification conditions, dependencies, and unresolved decisions when applicable.
 - Keep project-native feature language visible, reject broad roots as domains, and continue below rejected roots to promote concrete business aggregates, workflows, policies, contracts, or state transitions.
@@ -33,7 +37,9 @@ Create and maintain source-based project documentation that preserves the decisi
 - Only Atomic Impl or an explicit docs/code compliance operation writes an implementation-verification table. Use `## 구현 검증` in `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` and list only changed in-scope required AIDs with implementation evidence, validation evidence, and verdict or gap.
 - Use frontmatter `atom_key` as stable atom identity. Assign AIDs only to durable, independently referenceable intent, rule, contract, required change, judgment, or gap items. Preserve existing AIDs when their meaning remains stable; resolve current ownership from frontmatter, not the AID prefix.
 - Keep `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps` separate. Mark inferred intent/rules and use controlled judgment labels from `change-judgment-policy.md`.
-- Create or update `source-baseline.json` only after project-wide scope is complete at one source commit and every required domain, risk, and project-wide review PASSes. Partial work records `source_commit_observed` in operation state and never advances the global baseline.
+- Distinguish initial baseline, baseline diff refresh, change-impact refresh, targeted work, and inspection. Only an initial/global baseline uses every project bundle; later refreshes start from source diff and graph impact and process affected bundles only.
+- Create `source-baseline.json` initially only after every required review PASSes at one source commit. A later `baseline-diff-refresh` may carry forward unaffected PASS results from that trusted baseline only when complete diff/ownership/graph impact evidence and the baseline reviewer prove their basis unchanged. Partial work never advances the global baseline.
+- Track bundle attempt, changed artifacts, and finding fingerprint in operation state. A completed writer run with no expected artifact/evidence change or the same blocking finding repeated without basis change must trigger diagnosis and queue adjustment, not another blind review cycle.
 - Use the selected docs language. Korean docs use Korean-first prose and labels around fixed schema headings, identifiers, AIDs, and controlled labels.
 - Run the plugin-bundled validator from `<plugin-root>/scripts/validate_atomic_docs.py`; never look for that validator under the target project's `scripts/` directory.
 - During local plugin iteration, use a fresh cachebuster, reinstall the plugin, and verify installed skill/reference/validator files match the source tree before testing in a new task.
@@ -66,15 +72,16 @@ Read only the direct references needed for the current operation:
 2. Read config and confirm storage mode, managed docs root, source root, language, and accepted write action.
 3. When criteria are missing or changing, write only config and the compact criteria draft, inspect source to enrich it, and run criteria-review/revision to PASS.
 4. Summarize criteria in user language and stop for user approval. After approval, ask for the docs write scope.
-5. Create or reuse a matching Codex Goal, then create or resume operation state and a lightweight behavior/decision inventory.
-6. Discover the decision-relevant behavior aggregates in scope and close each to an atom/AID or explicit disposition.
-7. Record a compact domain-grouped write plan. Continue without a second approval when it stays inside the already accepted paths/actions and approved boundaries; ask only when it expands scope or changes a protected boundary/action.
-8. Process each domain bundle through one writer and the required development-quality reviewer. Run the additional risk/contract reviewer only when a recorded trigger applies.
-9. Reopen affected bundles when later work changes their evidence, ownership, graph, shared contract, or decision basis.
-10. Run one project-wide integration/baseline reviewer only for project-wide, multi-domain, shared-contract, or global-baseline work.
-11. Run structural validation at bootstrap, docs, and baseline phases as applicable.
-12. Update the global source baseline only for a complete project-wide PASS. Keep partial-scope commit evidence operation-local.
-13. Complete the Goal and report completion only when the accepted scope, applicable reviews, structural validation, and reporting conditions are satisfied.
+5. Create or reuse a matching Codex Goal, select the operation profile, then create or resume operation state pinned to `source_commit_observed`.
+6. Build a lightweight behavior/decision inventory and reusable source evidence index for the accepted scope.
+7. For initial-baseline or multi-domain work, run the ownership prepass, confirm only shared/high-fan-out owners, and order shared-owner bundles before dependents. For targeted work, inspect only the target's local owner and adjacent contracts.
+8. Record a compact domain-grouped write plan. Continue without a second approval when it stays inside the already accepted paths/actions and approved boundaries; ask only when it expands scope or changes a protected boundary/action.
+9. Process each bundle through one writer, structural preflight, and applicable semantic reviewers. Run development/risk reviewers in parallel when both apply to the same bundle attempt.
+10. Route reruns from the changed artifact/evidence type and reopen only bundles whose PASS basis changed.
+11. Run lightweight integration lint after shared-owner or cross-domain relationship changes. Run one affected-closure integration reviewer only when those relationships changed, and expand it to a project-wide baseline review only for a baseline profile.
+12. Run structural validation at bootstrap, docs, and baseline phases as applicable.
+13. Update the global source baseline only for a complete project-wide PASS. Keep partial-scope commit evidence operation-local.
+14. Complete the Goal and report completion only when the accepted scope, applicable reviews, structural validation, and reporting conditions are satisfied.
 
 ## Boundaries
 

@@ -42,12 +42,26 @@ Before domain drafting, create a lightweight operation inventory grouped by mean
 The minimum row is:
 
 ```text
-동작/결정 | 소스 근거 | 후보 소유 atom_key 또는 disposition | 관련 AID/판정 | 위험 트리거/미해결
+동작/결정 | 잠정/확정 owner | 공유 계약과 참조 도메인 | 소스 근거 | 관련 AID/판정 | 위험 트리거/미해결
 ```
 
 Add short notes for consequential rules, state/effects, contracts, or failures only when the writer needs them to avoid losing a decision. The atom is the durable explanation; the inventory is routing and closure state.
 
 One behavior aggregate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, or setting when they implement the same decision.
+
+## Ownership And Evidence Prepass
+
+For multi-domain or `initial-baseline` work, run one prepass over accepted behavior aggregates before the first writer. A targeted single-domain operation checks only the target owner and adjacent contracts; it does not perform project-wide ownership discovery.
+
+- identify shared payload, storage, permission, policy, integration, transaction, and glossary source-of-truth owners
+- record which domains reference each shared owner and use reference count only as queue-order evidence
+- confirm owners whose later change would reopen several bundles
+- keep ordinary single-domain owners provisional until their bundle is written and reviewed
+- order confirmed shared-owner bundles before direct dependents, then process independent bundles
+
+Do not build a complete semantic graph or freeze every aggregate owner before writing. Uncertain shared ownership remains an explicit blocker; uncertain local ownership may be resolved in its bundle.
+
+Create one operation-local `evidence.md` beside request state and pin it to `source_commit_observed`. For each aggregate, record source entry points and only applicable storage, transaction, integration, schema, setting, and test locations. Writers and reviewers reuse this index to navigate source. Reviewers reopen changed or risk-bearing claims, sample unchanged high-consequence claims, and update the index when evidence changes; they do not rediscover every entry point.
 
 Every meaningful aggregate in accepted scope must close to an owner or explicit disposition before review PASS. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`.
 
