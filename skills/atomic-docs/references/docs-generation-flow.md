@@ -78,7 +78,7 @@ Also check operation-local ownership closure, source basis, and planned atom key
 
 If preflight FAILs, return to the writer without spending a semantic review. After PASS, classify what changed:
 
-- new atom, `atom_key`, `Intent`, `Rules`, behavior/contract meaning, `Planned Changes`, `Gaps`, judgment, owner, graph `type`, or graph `target_key`: run the development-quality reviewer
+- new atom, `atom_key`, `Intent`, `Outcomes`, `Boundaries`, `Rules`, behavior/contract meaning, `Planned Changes`, `Gaps`, judgment, owner, graph `type`, or graph `target_key`: run the development-quality reviewer
 - Markdown formatting, file relocation, or graph `target_path` with unchanged meaning/key: scoped validator only
 - source locator/evidence correction with unchanged claim: narrowed source-evidence check by the development reviewer, not a complete domain review
 

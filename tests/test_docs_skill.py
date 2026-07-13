@@ -204,6 +204,8 @@ class DocsSkillTests(unittest.TestCase):
                 "globally unique across the docs set",
                 "lower-kebab-case",
                 "Intent",
+                "Outcomes",
+                "Boundaries",
                 "Rules",
                 "Current Implementation",
                 "Planned Changes",
@@ -237,6 +239,45 @@ class DocsSkillTests(unittest.TestCase):
                 "Plain `Current Implementation` observations",
                 "inventory/evidence rows",
                 "may contain zero AIDs",
+            ),
+        )
+
+    def test_atom_sections_have_single_information_owners(self) -> None:
+        text = refs(
+            "atom-format-and-judgment.md",
+            "service-logic-coverage.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "Each section owns one question",
+                "Why does this atom exist?",
+                "What normal result can a user, caller, operator, or system observe?",
+                "What behavior is included or excluded",
+                "Which conditions, invariants, refusals",
+                "A second specification of their complete conditions",
+                "A complete restatement of the owning rule",
+                "another section needs a short reference, not a paraphrase",
+            ),
+        )
+
+    def test_boundary_graph_and_gap_ownership_do_not_repeat_atom_meaning(self) -> None:
+        text = refs(
+            "atomic-document-contract.md",
+            "atomic-graph.md",
+            "atom-format-and-judgment.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "A domain context atom owns domain-wide purpose",
+                "behavior atom's `Boundaries` section owns only that behavior's local",
+                "Graph frontmatter owns the machine-traversable type",
+                "not the source of truth for a natural-language boundary",
+                "Point to the owning AID or section",
+                "Do not repeat the behavior narrative",
             ),
         )
 
@@ -554,7 +595,7 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "new atom, `atom_key`, `Intent`, `Rules`, behavior/contract meaning",
+                "new atom, `atom_key`, `Intent`, `Outcomes`, `Boundaries`, `Rules`, behavior/contract meaning",
                 "graph `type`, or graph `target_key`",
                 "Markdown formatting, file relocation, or graph `target_path`",
                 "scoped validator only",
@@ -562,6 +603,20 @@ class DocsSkillTests(unittest.TestCase):
                 "narrowed source-evidence check",
                 "An `initial-baseline` still requires development review for every domain bundle",
                 "Targeted structural-only single-domain change",
+            ),
+        )
+
+    def test_reviewers_fail_repeated_meaning_without_demanding_risk_copies(self) -> None:
+        text = read(REFS / "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "one meaning has one complete owner",
+                "substantively repeated across sections or ownership artifacts",
+                "A short reference plus the minimum local reading context is not duplication",
+                "Require the missing detail in its owning section",
+                "do not request a second full copy in `Current Implementation` or `Gaps`",
             ),
         )
 
@@ -812,7 +867,20 @@ class DocsSkillTests(unittest.TestCase):
                 "confirmed or inferred basis",
                 "next action",
                 "related AID values",
+                "intent, outcome, boundary, rule, current implementation, planned change, or gap",
                 "Do not collapse bug, missing required behavior",
+            ),
+        )
+
+    def test_source_conflict_routing_covers_every_semantic_owner(self) -> None:
+        text = read(REFS / "source-baseline-and-change-plan.md")
+        assert_all(
+            self,
+            text,
+            (
+                "conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`",
+                "preserve it as a `bug_or_regression` or another judgment-labeled gap",
+                "Do not classify behavior as healthy only because no related gap exists",
             ),
         )
 
@@ -886,8 +954,12 @@ class DocsSkillTests(unittest.TestCase):
                 "Source files are the default evidence source",
                 "must not be used to bypass or satisfy Stageflow gates",
                 "approved Stageflow artifact or user decision",
+                "remove the completed delta from `Planned Changes`",
+                "keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section",
+                "add only the concise source realization to `Current Implementation`",
             ),
         )
+        self.assertNotIn("move the confirmed implemented behavior", text)
 
     def test_validation_contract_points_to_plugin_bundled_read_only_tool(self) -> None:
         text = read(REFS / "validation-contract.md")

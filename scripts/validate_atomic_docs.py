@@ -20,6 +20,8 @@ PHASES = ("bootstrap", "docs", "baseline")
 REQUIRED_CONFIG = ("storage_mode", "docs_root", "source_root", "baseline_metadata_path")
 REQUIRED_SECTIONS = (
     "Intent",
+    "Outcomes",
+    "Boundaries",
     "Rules",
     "Current Implementation",
     "Planned Changes",
@@ -27,6 +29,8 @@ REQUIRED_SECTIONS = (
 )
 SECTION_CODES = {
     "intent": "Intent",
+    "outcome": "Outcomes",
+    "boundary": "Boundaries",
     "rules": "Rules",
     "impl": "Current Implementation",
     "source": "Current Implementation",
@@ -37,7 +41,7 @@ ATOM_KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AID_TOKEN_RE = re.compile(r"\[AID:[^\]\n]+\]")
 AID_RE = re.compile(
     r"^\[AID:(?P<key>[a-z0-9]+(?:-[a-z0-9]+)*)\."
-    r"(?P<section>intent|rules|impl|plan|gap|source)\."
+    r"(?P<section>intent|outcome|boundary|rules|impl|plan|gap|source)\."
     r"(?P<number>\d{3})\]$"
 )
 COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")

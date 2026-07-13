@@ -25,6 +25,8 @@ For example:
 Section codes are:
 
 - `intent` for `Intent`
+- `outcome` for `Outcomes`
+- `boundary` for `Boundaries`
 - `rules` for `Rules`
 - `impl` for `Current Implementation`
 - `plan` for `Planned Changes`
@@ -42,16 +44,32 @@ Preserve AID stability. If the same meaning line is edited, moved, split into an
 Each atom file must preserve these sections:
 
 - `Intent`
+- `Outcomes`
+- `Boundaries`
 - `Rules`
 - `Current Implementation`
 - `Planned Changes`
 - `Gaps`
 
-`Intent` and `Rules` describe confirmed user intent only when the user or approved workflow has confirmed them. AI-written intent or rules must be marked as inferred until confirmed and must be linked to `Gaps`. When intent or rules are confirmed, include the confirmation basis and whether the behavior is required, optional, excluded, or boundary-defining.
+Each section owns one question. Write the complete meaning only in its owning section. Another section may cite the owning AID, `atom_key`, or heading and add only the minimum local context needed to understand that reference. Repeating the same precondition, branch, result, state effect, failure, or evidence narrative across sections is invalid even when the wording differs.
+
+| Section | Question and owned meaning | Must not own |
+| --- | --- | --- |
+| `Intent` | Why does this atom exist? Record only the durable purpose. | Expected results, scope, rules, source realization, or unresolved questions. |
+| `Outcomes` | What normal result can a user, caller, operator, or system observe? | Preconditions, branch logic, invariants, implementation sequence, or failure analysis. |
+| `Boundaries` | What behavior is included or excluded, and which adjacent atom owns the next responsibility? | Domain-wide boundaries repeated from a context atom, graph metadata, source classes, or implementation flow. |
+| `Rules` | Which conditions, invariants, refusals, externally visible contracts, and required effects may not be chosen arbitrarily? | Purpose, normal-result summary, source mechanics, or unresolved findings. |
+| `Current Implementation` | Where and with what non-obvious constraints does current source realize the owned intent, outcomes, boundaries, and rules? | A second specification of their complete conditions, branches, results, or contracts. |
+| `Planned Changes` | Which approved or classified future delta is not yet current implementation? | Existing behavior, unresolved evidence, or unapproved ideas disguised as plans. |
+| `Gaps` | Which specific mismatch, uncertainty, missing evidence, or unresolved decision prevents a stronger judgment? | A complete restatement of the owning rule, outcome, boundary, implementation flow, or source inventory. |
+
+`Intent` answers only why the atom exists. Do not use it as a summary of every other section. `Outcomes` records the concise normal observable result; move conditions, alternative branches, refusals, invariants, and required side effects to `Rules`. `Boundaries` records only this atom's local inclusion, exclusion, and adjacent owner. A domain context atom owns domain-wide boundaries, while graph frontmatter owns only machine-traversable relationship metadata.
+
+`Intent`, `Outcomes`, `Boundaries`, and `Rules` describe confirmed meaning only when the user or approved workflow has confirmed it. AI-written meaning in these sections must be marked as inferred until confirmed and linked to a specific `Gaps` item. When confirmed, include the confirmation basis and whether the meaning is required, optional, excluded, or boundary-defining where applicable.
 
 Every changed in-scope required AID used as an implementation basis must include an observable verification condition or a verifiable invariant in that same item. Include only the precondition, result, refusal/failure, state/effect, or exclusion needed to judge that change. Historical descriptions outside the implementation scope do not need acceptance detail added merely for completeness. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning.
 
-`Current Implementation` records source-observed implementation context needed to find and understand the documented decisions. Include important entry points, states, storage effects, integration points, non-obvious constraints, and source identifiers as applicable. Do not mirror every source branch, method call, DTO field, or internal structure. A bare list of identifiers is not sufficient, but a concise decision-oriented explanation may point the reader back to source for mechanics.
+`Current Implementation` records source-observed implementation context needed to find and understand the documented decisions. Include important entry points, storage or integration owners, and non-obvious implementation constraints as applicable. Refer to the owning `Outcomes`, `Boundaries`, or `Rules` AID instead of restating its complete behavior. Do not mirror every source branch, method call, DTO field, or internal structure. A bare list of identifiers is not sufficient, but a concise decision-oriented explanation may point the reader back to source for mechanics.
 
 For Korean managed docs, write the prose under `Current Implementation` with Korean-first structure when that structure helps the atom explain behavior. Recommended subheadings are:
 
@@ -64,7 +82,11 @@ For Korean managed docs, write the prose under `Current Implementation` with Kor
 
 Do not force every atom to include every subheading. Use only the subsections needed to preserve decisions and orient source inspection. Do not write `Current Implementation` as a translated English skeleton or a method-call sequence. Include conditions, state/effects, and failures only when they affect a product rule, observable contract, verification result, or change impact.
 
-`Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, `implemented_pending_confirmation`, or `deferred_decision`. A user-confirmed future implementation or behavior change is not `confirmation_needed`; record the concrete future behavior as `approved_required_change` or `approved_optional_change`. A user-confirmed plan to decide a policy, boundary, condition, API contract, or permission mapping later is `deferred_decision`. `Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, deferred-decision blockers, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries.
+`Source Evidence` is a locator inside `Current Implementation`, not another semantic section. List the smallest authoritative file, test, schema, setting, or approved artifact identifiers needed to verify the owning claims. Do not repeat the behavior narrative, rule, boundary, or gap under each locator.
+
+`Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, `implemented_pending_confirmation`, or `deferred_decision`. A user-confirmed future implementation or behavior change is not `confirmation_needed`; record the concrete future behavior as `approved_required_change` or `approved_optional_change`. A user-confirmed plan to decide a policy, boundary, condition, API contract, or permission mapping later is `deferred_decision`.
+
+`Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, deferred-decision blockers, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries. Point to the owning AID or section, then record only the unresolved difference, evidence locator, impact, and decision or action needed. When a gap is resolved, put the resulting durable meaning in its proper owning section; do not preserve a resolved question by copying its full narrative into both places.
 
 ## Judgment Evidence Policy
 
@@ -90,7 +112,8 @@ Approved project documents may provide context such as non-goals or terminology 
 - Do not split state into type folders such as `current-state/`, `future-plan/`, or `gap/`.
 - Do not put per-atomic freshness/status fields inside atom files.
 - Do not store per-file commit status in the atomic document.
-- Do not collapse `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps` into one undifferentiated narrative.
+- Do not collapse `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps` into one undifferentiated narrative.
+- Do not repeat one meaning across sections as a completeness or review aid; keep one complete owner and use a short reference elsewhere.
 - Do not present AI inference as confirmed user intent.
 - Do not use project-specific example domain names as skill-level rules.
 - Do not leave an evasive split or coverage gap in place of documenting inspected service logic. A note that logic should be split later is invalid unless it also records the concrete source evidence, proposed owners, unresolved question, and the behavior already observed.

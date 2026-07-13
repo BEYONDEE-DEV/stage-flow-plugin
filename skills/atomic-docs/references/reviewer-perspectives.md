@@ -34,13 +34,14 @@ Read only the additional principle files implicated by the bundle: `atomic-docum
 Check all of the following in one coherent pass:
 
 - domain and context hygiene: no broad catch-all, context pollution, unsupported naming, vague split, or duplicated ownership
-- decision completeness: intent, rules, observable contract, consequential branch/state/side effect, verification condition, dependency, and unresolved decision are recorded when applicable
-- proportional depth: source mechanics are not copied into docs, and matrices or field lists exist only where prose would leave a decision ambiguous
+- decision completeness: intent, outcomes, boundaries, rules, observable contract, consequential branch/state/side effect, verification condition, dependency, and unresolved decision are recorded in their owning sections when applicable
+- section ownership: one meaning has one complete owner; other sections use a short AID/heading reference, behavior-local boundaries do not repeat domain context, graph reasons do not restate natural-language contracts, and `Gaps`/source evidence do not duplicate the owning narrative
+- proportional depth: source mechanics are not copied into docs, repeated across sections, or expanded into matrices or field lists unless compact prose in the owning section would leave a decision ambiguous
 - source fact fidelity: judgment-bearing claims match the actual reachable source behavior and stronger intent is not inferred from identifiers alone
 - accepted-scope closure: every meaningful behavior aggregate in scope has an atom/AID or explicit disposition without requiring one row per mechanical source surface
 - judgment and identity integrity: inferred/confirmed basis, labels, selective AIDs, graph relationships, and operation reporting are consistent
 
-FAIL when a developer still must invent product behavior, a reviewer cannot derive an observable verification result, an important contract conflict is hidden, or docs contradict source. Do not FAIL merely because internal code structure, framework mechanics, exact CSS, or behavior-neutral mappings remain in source.
+FAIL when a developer still must invent product behavior, a reviewer cannot derive an observable verification result, an important contract conflict is hidden, docs contradict source, or the same condition, branch, result, state effect, failure, boundary, or evidence narrative is substantively repeated across sections or ownership artifacts. A short reference plus the minimum local reading context is not duplication. Do not FAIL merely because internal code structure, framework mechanics, exact CSS, or behavior-neutral mappings remain in source.
 
 Do not persist an answer sheet for an ordinary development PASS. The reviewer may reason with one internally, but writes only the findings-only report. Use a decision table only when a blocking finding cannot be explained clearly without comparing several independently varying decisions.
 
@@ -67,7 +68,7 @@ Read `atom-format-and-judgment.md` when the finding changes an AID or judgment-b
 
 Review only the triggered concerns. Check adverse branches, permission or security boundaries, irreversible effects, money/entitlement changes, transaction/idempotency, retries/recovery, external contracts, sensitive data, and shared cross-domain contracts as applicable. For an external contract, require authoritative local or user-approved provider evidence; otherwise require a supported `confirmation_needed` gap.
 
-FAIL when the risky decision, refusal/failure path, side effect, rollback/recovery behavior, or observable verification evidence is missing or contradicted. Require a structured matrix only when the alternatives cannot be reviewed reliably in prose.
+FAIL when the risky decision, refusal/failure path, side effect, rollback/recovery behavior, or observable verification evidence is missing or contradicted. Require the missing detail in its owning section and references elsewhere; do not request a second full copy in `Current Implementation` or `Gaps`. Require a structured matrix only when the alternatives cannot be reviewed reliably in prose.
 
 Do not repeat the complete domain review. A risk reviewer PASS is additional evidence and cannot replace the required development-quality reviewer PASS. Persist a decision comparison table only when the risky alternatives cannot be judged reliably from concise findings.
 

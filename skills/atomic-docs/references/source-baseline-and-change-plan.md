@@ -84,7 +84,7 @@ A compact change plan groups by domain and lists only applicable items from the 
 - project goal, project glossary, service logic inventory, source convention, common context, or domain context changes
 - core business terms that require glossary or domain atom coverage before derived behavior is treated as covered
 - parent business terms missing or underdefined in the glossary, including their source evidence and whether they belong in `Gaps`
-- inferred `Intent` or `Rules` that require confirmation
+- inferred `Intent`, `Outcomes`, `Boundaries`, or `Rules` that require confirmation
 - natural-language `Current Implementation` changes
 - `Planned Changes` reconciliation candidates
 - `Gaps`, bug candidates, uncertain mappings, deferred decisions, rename/merge proposals, and implemented-plan candidates
@@ -96,10 +96,10 @@ The compact change plan defines the paths and write actions for the current docs
 
 ## Inference And Gaps
 
-The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent` or `Rules` from code. Inferred `Intent` and `Rules` remain inferred until confirmed by the user. Inferred `Intent` or inferred `Rules` alone cannot create confirmed required behavior, confirmed out-of-scope behavior, or `matches_confirmed_intent`; use `confirmation_needed` until the user or approved workflow confirms the basis.
+The skill may draft `Current Implementation`, `Gaps`, and inferred `Intent`, `Outcomes`, `Boundaries`, or `Rules` from code. Those inferred meanings remain inferred until confirmed by the user. They alone cannot create confirmed required behavior, confirmed out-of-scope behavior, or `matches_confirmed_intent`; use `confirmation_needed` until the user or approved workflow confirms the basis.
 
 When a user answers a confirmation question, do not turn that same answer back into `confirmation_needed`. If the answer confirms future implementation or behavior change, close the question as a `Planned Changes` item; use `approved_required_change` or `approved_optional_change` for the planned behavior, and use `missing_required_behavior` when current source does not implement that confirmed future behavior. If the answer explicitly defers deciding a concrete policy, boundary, condition, API contract, or permission mapping, close the question as `deferred_decision`; report it separately from `confirmation_needed` and count it separately in user-facing summaries. Create a new `confirmation_needed` item only for a different unresolved detail that is neither confirmed nor deliberately deferred.
 
-If observed code conflicts with confirmed intent or rules, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
+If observed code conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, do not resolve the conflict silently; preserve it as a `bug_or_regression` or another judgment-labeled gap. Do not write a generic gap when the issue is specifically missing required behavior, unapproved implementation, out-of-scope behavior, stale docs, or confirmation-needed uncertainty. Do not classify behavior as healthy only because no related gap exists.
 
 Docs may only judge source behavior against decisions and service logic actually recorded in natural language. Source behavior absent from the accepted documentation scope is not implicitly correct and must not be treated as matching confirmed intent. Record a coverage gap, `confirmation_needed`, or `docs_stale` when an omitted detail hides a product rule, observable contract, verification result, or change impact. Needing source for internal mechanics is not itself a gap.

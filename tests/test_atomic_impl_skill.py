@@ -28,7 +28,10 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("source of truth for product decisions, required behavior, verification conditions, and boundaries", text)
         self.assertIn("Use project source and conventions for internal implementation mechanics", text)
         self.assertIn("Do not implement code before the relevant atomic docs are written or updated", text)
-        self.assertIn("put new requested behavior mainly in `Planned Changes`", text)
+        self.assertIn("Put only the current-to-required unimplemented delta in `Planned Changes`", text)
+        self.assertIn("use `Intent` only for why the atom exists", text)
+        self.assertIn("`Outcomes` for the required normal observable result", text)
+        self.assertIn("`Boundaries` for accepted inclusion/exclusion", text)
         self.assertIn("`Current Implementation` only for behavior already observed in source", text)
         self.assertIn("explicitly approved as the implementation basis", text)
         self.assertIn("Do not bypass `atomic-docs` setup", text)
@@ -42,7 +45,8 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("blocking `confirmation_needed` gaps", text)
         self.assertIn("run `Intent Compliance Review` and `Flow / Unexpected Issue Review`", text)
         self.assertIn("require explicit user approval before final atomic-docs update", text)
-        self.assertIn("move completed approved items from `Planned Changes` to `Current Implementation`", text)
+        self.assertIn("remove the completed delta from `Planned Changes`", text)
+        self.assertIn("its durable meaning stays in the owning section", text)
         self.assertIn("Do not record out-of-plan changes", text)
         self.assertNotIn("TODO", text)
 
@@ -64,8 +68,11 @@ class AtomicImplSkillTests(unittest.TestCase):
         text = read(FLOW)
 
         for required_detail in [
-            "user intent, confirmed rules, inferred rules marked as inferred",
-            "new requested behavior as `Planned Changes`",
+            "the atom's reason in `Intent`",
+            "normal observable result in `Outcomes`",
+            "accepted local scope/handoffs in `Boundaries`",
+            "only the current-to-required delta as `Planned Changes`",
+            "reference owning AIDs instead of repeating the complete requirement",
             "existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists",
             "when they change a product decision or observable result",
             "when they are part of the required contract",
@@ -135,7 +142,8 @@ class AtomicImplSkillTests(unittest.TestCase):
 
         self.assertIn("Do not update final atomic docs until the user explicitly approves", text)
         self.assertIn("update atomic docs through the existing `atomic-docs` gates", text)
-        self.assertIn("Move completed approved items from `Planned Changes` to `Current Implementation`", text)
+        self.assertIn("Remove each completed delta from `Planned Changes`", text)
+        self.assertIn("keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section", text)
         self.assertIn("Add or refresh source evidence and validation basis", text)
         self.assertIn("Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes", text)
         self.assertIn("Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results", text)

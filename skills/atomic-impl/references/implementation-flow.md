@@ -32,9 +32,9 @@ Write or update managed docs so the accepted product behavior and verification b
 
 For each meaningful behavior, preserve:
 
-- user intent, confirmed rules, inferred rules marked as inferred, and explicit non-goals
+- the atom's reason in `Intent`, normal observable result in `Outcomes`, accepted local scope/handoffs in `Boundaries`, and confirmed or inferred conditions/contracts in `Rules`
 - an observable verification condition or verifiable invariant inside each changed in-scope required AID meaning item; do not require a separate acceptance AID unless it is an independently reviewable meaning
-- new requested behavior as `Planned Changes` until it is implemented and approved by the user
+- only the current-to-required delta as `Planned Changes` until it is implemented and approved by the user; reference owning AIDs instead of repeating the complete requirement
 - existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists
 - input conditions, validation/refusal/defaulting, permissions, and branches when they change a product decision or observable result
 - state transitions, persistence effects, external calls, events, and side effects when they are part of the required contract
@@ -42,7 +42,7 @@ For each meaningful behavior, preserve:
 - failure, retry, fallback, recovery, and runtime exception behavior when the requirement assigns a specific outcome
 - source evidence, judgment labels, `Gaps`, related `atom_key`, AID, and graph relationships required by `atomic-docs`
 
-Use `Intent` and `Rules` for confirmed purpose and policy. Use `Gaps` or `confirmation_needed` for missing decisions, uncertain behavior, or source evidence that does not yet prove a confirmed rule. Do not write not-yet-implemented requested behavior as `Current Implementation`.
+Use `Intent` only for why the atom exists, `Outcomes` for the required normal result, `Boundaries` for accepted inclusion/exclusion and adjacent ownership, and `Rules` for conditions, invariants, refusals, contracts, and required effects. Use `Gaps` or `confirmation_needed` for missing decisions, uncertain behavior, or source evidence that does not yet prove confirmed meaning. Do not write not-yet-implemented requested behavior as `Current Implementation`, and do not duplicate the owning sections in `Planned Changes`.
 
 Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences as substitutes for development decisions. Also avoid copying behavior-neutral source detail merely to make the docs look complete.
 
@@ -104,7 +104,7 @@ Ask whether to approve the implementation result and final docs update. Do not u
 After the user approves the implementation result, update atomic docs through the existing `atomic-docs` gates.
 
 - Keep docs write scope, writer/reviewer cycle, post-write gate, judgment labels, source evidence, AID, `atom_key`, and graph rules intact.
-- Move completed approved items from `Planned Changes` to `Current Implementation`.
+- Remove each completed delta from `Planned Changes`, add a concise realization under `Current Implementation`, and keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section.
 - Add or refresh source evidence and validation basis for the implemented behavior.
 - Keep unimplemented, deferred, or unapproved behavior in `Planned Changes`, `Gaps`, `confirmation_needed`, out-of-scope, or discovered pre-existing issue entries as appropriate.
 - Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes.

@@ -100,6 +100,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         frontmatter.append("---")
         sections = [
             ("Intent", "intent", "의도"),
+            ("Outcomes", "outcome", "관찰 결과"),
+            ("Boundaries", "boundary", "책임 경계"),
             ("Rules", "rules", "규칙"),
             ("Current Implementation", "impl", "현재 동작"),
             ("Planned Changes", "plan", "계획"),
@@ -136,7 +138,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         docs_result = self.run_validator("docs")
         self.assertEqual(0, docs_result.returncode, docs_result.stdout + docs_result.stderr)
         self.assertIn("1 atoms", docs_result.stdout)
-        self.assertIn("5 AIDs", docs_result.stdout)
+        self.assertIn("7 AIDs", docs_result.stdout)
 
         self.write_baseline()
         baseline_result = self.run_validator("baseline")
@@ -167,10 +169,10 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         self.assertIn("duplicate AID `[AID:shared-origin.intent.001]`", result.stdout)
 
     def test_missing_required_section_fails(self) -> None:
-        self.write_atom("domain/example-atom.md", "example", omit_section="Gaps")
+        self.write_atom("domain/example-atom.md", "example", omit_section="Outcomes")
         result = self.run_validator("docs")
         self.assertEqual(1, result.returncode)
-        self.assertIn("must contain exactly one `## Gaps` section", result.stdout)
+        self.assertIn("must contain exactly one `## Outcomes` section", result.stdout)
 
     def test_graph_target_must_exist_and_match_key(self) -> None:
         self.write_atom("domain/target-atom.md", "target")
@@ -214,12 +216,12 @@ class AtomicDocsValidatorTests(unittest.TestCase):
     def test_aid_section_code_must_match_containing_section(self) -> None:
         path = self.write_atom("domain/example-atom.md", "example")
         text = path.read_text(encoding="utf-8").replace(
-            "[AID:example.intent.001]", "[AID:example.gap.001]"
+            "[AID:example.outcome.001]", "[AID:example.boundary.001]"
         )
         path.write_text(text, encoding="utf-8")
         result = self.run_validator("docs")
         self.assertEqual(1, result.returncode)
-        self.assertIn("belongs under `## Gaps`, not `Intent`", result.stdout)
+        self.assertIn("belongs under `## Boundaries`, not `Outcomes`", result.stdout)
 
     def test_config_paths_cannot_escape_project(self) -> None:
         config_path = self.root / ".stageflow" / "atomic-docs.json"

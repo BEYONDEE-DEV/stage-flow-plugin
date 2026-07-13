@@ -18,7 +18,7 @@ For the current Korean workflow, managed docs prose, docs change plans, review n
 
 Keep these values unchanged even when the surrounding prose is written in another language:
 
-- schema headings such as `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
+- schema headings such as `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
 - frontmatter keys such as `atom_key`, `graph_edges`, `type`, `target_key`, `target_path`, and `reason`
 - config keys such as `storage_mode`, `docs_root`, `source_root`, and `baseline_metadata_path`
 - source-code identifiers, API names, file paths, enum values, commands, package names, and commit hashes
@@ -74,7 +74,7 @@ Controlled judgment labels, fixed headings, schema keys, `atom_key` values, AID 
 - Do not translate or localize AID tokens. Korean docs must preserve `[AID:...]` exactly.
 - If the existing managed docs root mixes languages, prefer the language used by the target domain or atomic document being edited.
 - If a document's language is ambiguous and the choice may affect user review, ask before writing confirmed docs.
-- AI-inferred `Intent` or `Rules` must still be marked as inferred in the selected docs language and connected to `Gaps` until confirmed.
+- AI-inferred `Intent`, `Outcomes`, `Boundaries`, or `Rules` must still be marked as inferred in the selected docs language and connected to `Gaps` until confirmed.
 
 ## Change Plan Language
 

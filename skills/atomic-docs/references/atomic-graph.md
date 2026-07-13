@@ -15,7 +15,7 @@ Minimum edge fields:
 - `target_path`
 - `reason`
 
-The `reason` is one human-readable sentence. Do not add relationship strength, priority, ranking score, source anchor, or numeric relevance fields.
+The `reason` is one human-readable sentence that explains why the relationship is needed for traversal. It is not the source of truth for a natural-language boundary or shared contract. Refer to the owning atom/AID when useful instead of restating the complete boundary, rule, or behavior. Do not add relationship strength, priority, ranking score, source anchor, or numeric relevance fields.
 
 Graph frontmatter is structural metadata. Do not assign atom line IDs to `graph_edges`; AID values belong to judgment-relevant meaning lines in atom body content.
 
@@ -41,7 +41,7 @@ Start with a small controlled vocabulary such as:
 
 All graph edges are directional. Add explicit inverse edges only when the inverse relationship is needed and meaningful.
 
-Create an edge only for a shared contract, cross-domain dependency/conflict/replacement, or another relationship required for ownership or impact traversal. Do not add same-domain `related_to` edges merely for navigation, shared folder placement, similar names, or general discoverability. Describe local context in the atom body instead.
+Create an edge only for a shared contract, cross-domain dependency/conflict/replacement, or another relationship required for ownership or impact traversal. Graph frontmatter owns the machine-traversable type, target, path, and concise traversal reason; a domain context atom or behavior `Boundaries` section owns the natural-language boundary. Do not add same-domain `related_to` edges merely for navigation, shared folder placement, similar names, or general discoverability. Describe local context in the atom body instead.
 
 ## Traversal Policy
 

@@ -34,6 +34,8 @@ Every atom uses this exact organization:
 
 Use generic context atoms to preserve project and domain intent without hardcoding project-specific folder names.
 
+A domain context atom owns domain-wide purpose, outcomes, included and excluded capabilities, and adjacent-domain boundaries. A behavior atom's `Boundaries` section owns only that behavior's local inclusion, exclusion, and handoff to an adjacent atom. The behavior atom references the context atom for a shared domain boundary instead of repeating it, and the context atom does not enumerate every behavior-local boundary.
+
 Default project-level documents:
 
 ```text
@@ -107,7 +109,7 @@ An explicitly retained project-level coverage index may also use:
 <doc-root>/project/service-logic-inventory.md
 ```
 
-These files must not follow the `*-atom.md` path contract, must not require frontmatter `atom_key`, must not require AID values, must not use `graph_edges`, and must not require the atom sections `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
+These files must not follow the `*-atom.md` path contract, must not require frontmatter `atom_key`, must not require AID values, must not use `graph_edges`, and must not require the atom sections `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`.
 
 Existing `<doc-root>/project/project-goal-atom.md` and `<doc-root>/project/project-glossary-atom.md` are legacy project-document artifacts. When they are present, read them as possible source material, then propose a migration or update to `project/project-goal.md` and `project/project-glossary.md` instead of continuing the atom-named defaults.
 

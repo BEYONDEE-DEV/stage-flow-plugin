@@ -8,7 +8,7 @@ This reference defines decision-complete service logic coverage, proportional do
 
 Atomic docs are a durable development-decision standard, not a source index or source replacement. They preserve the product, business, contract, and operational decisions that developers must not rediscover from scattered code or invent during implementation.
 
-For each meaningful behavior aggregate in the accepted scope, document the applicable items:
+For each meaningful behavior aggregate in the accepted scope, document the applicable items once in the section that owns them:
 
 - why the behavior exists and what outcome it must preserve
 - confirmed rules, invariants, explicit non-goals, and unresolved decisions
@@ -23,9 +23,9 @@ For each meaningful behavior aggregate in the accepted scope, document the appli
 
 Not every item applies to every atom. Omit an item when it has no product, contract, safety, operational, verification, or change-impact meaning. Do not add placeholder matrices or repetitive not-applicable rows merely to satisfy a template.
 
-`Current Implementation` orients a developer to how the decision is currently realized. Record important entry points, storage or integration ownership, non-obvious constraints, and source locations. Do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose only meaning is already clear from source.
+`Intent` owns only why the atom exists. `Outcomes` owns its concise normal observable result, `Boundaries` owns behavior-local inclusion/exclusion and handoff, and `Rules` owns conditions, invariants, refusals, contracts, and required effects. `Current Implementation` orients a developer to how those decisions are currently realized. Record important entry points, storage or integration ownership, non-obvious constraints, and source locations, then refer to the owning section rather than specifying the same behavior again. Do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose only meaning is already clear from source.
 
-Context atoms preserve domain purpose, vocabulary, ownership, included/excluded behavior, and adjacent boundaries. They do not absorb concrete rules or workflows that need independent change or judgment.
+Context atoms preserve domain-wide purpose, outcomes, vocabulary, ownership, included/excluded capabilities, and adjacent-domain boundaries. Behavior atoms reference that shared context and keep only behavior-local boundaries in their own `Boundaries`; context atoms do not absorb or enumerate concrete rules and workflow boundaries that need independent change or judgment.
 
 ## Accepted-Scope Coverage
 
@@ -46,7 +46,7 @@ Document until all of these questions can be answered:
 3. Which rules, states, permissions, contracts, or failure paths may not be chosen arbitrarily?
 4. Which other domain or shared contract could conflict with this decision?
 
-Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure.
+Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure. Also stop when a meaning is already complete in its owning section: another section needs a short reference, not a paraphrase.
 
 Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification condition. Review must not fail merely because the reader needs source for internal mechanics.
 
@@ -69,7 +69,7 @@ Apply additional detail and the independent risk/contract reviewer when the acce
 - irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
 - shared payload, storage, permission, integration, or policy contract used by another domain
 
-Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and verification evidence. Add a matrix only when the alternatives cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom.
+Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and verification evidence in the applicable owning section. Add a matrix only when the alternatives cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
 
 For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. If the accepted evidence cannot establish a behavior-affecting contract, record `confirmation_needed` instead of allowing reviewer PASS from local assumptions alone.
 
@@ -81,7 +81,7 @@ When validation, refusal, defaulting, fallback, exception, read-only behavior, o
 
 If source allows a fallback instead of refusing input, preserve that observable branch or record uncertainty. Do not describe a path as recovered when source can throw an unhandled runtime exception. When source cannot prove intent, use `confirmation_needed` rather than promoting observed behavior into a confirmed rule.
 
-Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key`/AID values when known.
+Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key`/AID values when known. Use the related AID or section for the complete behavior and keep the gap's source evidence to the locator and differential fact needed to support the unresolved finding.
 
 ## Atomic Docs Goal Boundary
 

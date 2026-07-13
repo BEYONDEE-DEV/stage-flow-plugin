@@ -13,7 +13,7 @@ Required path: `requirements -> implementation-basis atomic docs -> user approva
 
 - Treat the written or updated atomic docs as the source of truth for product decisions, required behavior, verification conditions, and boundaries in this request. Use project source and conventions for internal implementation mechanics.
 - Do not implement code before the relevant atomic docs are written or updated, summarized for the user, and explicitly approved as the implementation basis.
-- During the initial implementation-basis docs write, put new requested behavior mainly in `Planned Changes`; use `Intent` and `Rules` for purpose and policy, `Gaps` or `confirmation_needed` for uncertainty, and `Current Implementation` only for behavior already observed in source.
+- During the initial implementation-basis docs write, use `Intent` only for why the atom exists, `Outcomes` for the required normal observable result, `Boundaries` for accepted inclusion/exclusion and adjacent ownership, and `Rules` for required conditions, invariants, refusals, contracts, and effects. Put only the current-to-required unimplemented delta in `Planned Changes`, use `Gaps` or `confirmation_needed` for uncertainty, and use `Current Implementation` only for behavior already observed in source. Reference owning AIDs instead of restating the requested behavior in `Planned Changes`.
 - Before code, require every changed in-scope required AID to include an observable verification condition or invariant in the same meaning item, and require the domain development-quality reviewer plus any applicable risk/contract reviewer to PASS.
 - Do not bypass `atomic-docs` setup, docs-root discovery, criteria approval, docs write scope approval, Goal gate, writer/reviewer cycle, post-write gate, language policy, source-baseline, judgment label, AID, `atom_key`, or graph rules.
 - If `.stageflow/atomic-docs.json`, the managed docs root, or `project/atomization-criteria.md` is missing or unapproved, follow the `atomic-docs` bootstrap/criteria flow and stop for approval before docs generation or code implementation.
@@ -21,7 +21,7 @@ Required path: `requirements -> implementation-basis atomic docs -> user approva
 - If the written docs still contain blocking `confirmation_needed` gaps for the requested behavior, ask the user to resolve them before implementing that behavior.
 - After code implementation, run `Intent Compliance Review` and `Flow / Unexpected Issue Review`, summarize the implementation result for the user, and require explicit user approval before final atomic-docs update.
 - During implementation review, draft `## 구현 검증` in the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record docs and implementation basis once, then only changed in-scope required AIDs with implementation evidence, validation evidence, and verdict or gap.
-- After that approval, update final atomic docs through the existing `atomic-docs` gates; move completed approved items from `Planned Changes` to `Current Implementation` with source evidence and validation basis.
+- After that approval, update final atomic docs through the existing `atomic-docs` gates; remove the completed delta from `Planned Changes` and add a concise realization under `Current Implementation` with source evidence and validation basis, while preserving the durable meaning in its owning `Outcomes`, `Boundaries`, or `Rules` section.
 - After final docs update, finalize that same `## 구현 검증` section during docs/code compliance. Do not copy the table into atoms, project inventory, `work-state.json`, or a separate trace file.
 - Do not record out-of-plan changes, changed implementation behavior, or discovered pre-existing issues as confirmed behavior before user approval.
 
@@ -50,4 +50,4 @@ The implementation-verification table is scoped to the changed required AIDs, no
 
 ## Final Docs Update Gate
 
-After implementation review, show the user the implementation summary, items implemented exactly as approved docs specified, items changed from plan, out-of-plan changes or discovered pre-existing issues, and final atomic docs paths/update contents. Only after explicit approval may completed `Planned Changes` become `Current Implementation`.
+After implementation review, show the user the implementation summary, items implemented exactly as approved docs specified, items changed from plan, out-of-plan changes or discovered pre-existing issues, and final atomic docs paths/update contents. Only after explicit approval may a completed delta leave `Planned Changes` and receive its concise source realization in `Current Implementation`; its durable meaning stays in the owning section.

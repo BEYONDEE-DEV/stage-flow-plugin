@@ -35,7 +35,7 @@ Run docs phase after every bundle writer and before semantic reviewers. Pass eve
 
 - frontmatter is valid standard YAML with no duplicate mapping keys and contains one lower-kebab-case `atom_key`
 - `atom_key` values are globally unique
-- required atom sections exist: `Intent`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
+- required atom sections exist exactly once: `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
 - every discovered AID has valid `[AID:<key>.<section-code>.<NNN>]` shape and is globally unique
 - an AID's section code matches the required section containing it
 - a preserved AID may retain a historical key prefix after its meaning moves to another atom
