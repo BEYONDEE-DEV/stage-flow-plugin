@@ -6,7 +6,9 @@ This reference defines selective atom IDs, required atom sections, judgment evid
 
 ## Atom Line ID Policy
 
-Assign a stable unique AID only to a durable, independently referenceable meaning used by implementation planning, compliance review, change judgment, or conflict analysis. Typical AID-bearing items are confirmed intent, business rules, observable contracts, changed required behavior, active judgments, and gaps. Do not assign AIDs to routine explanatory prose, mechanical source summaries, every evidence row, or every table row merely because it can be numbered.
+Assign a stable unique AID only when a meaning must be referenced independently by implementation planning, compliance review, change judgment, conflict analysis, or another managed decision. Eligible items are confirmed important rules, observable or shared contracts, changed required behavior, active judgments/gaps, and decisions with an actual downstream reference need.
+
+Do not assign an AID merely because a statement is durable or appears under a required section. Plain `Current Implementation` observations, source locations, call summaries, inventory/evidence rows, explanatory prose, and behavior-neutral table rows have no AID by default. An atom with no currently referenceable decision may contain zero AIDs.
 
 Use this format:
 
@@ -33,7 +35,7 @@ Use `- [AID:...] 내용` for bullets, `[AID:...] 내용` for standalone paragrap
 
 Do not require AID values on frontmatter, `graph_edges`, blank lines, section headings, code fence markers, or purely structural Markdown. Project documents such as `project/atomization-criteria.md`, `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, and `project/source-convention.md` are not atoms and are not required to use AID values.
 
-Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. After a cross-atom move, the preserved AID prefix may identify the atom where the AID was created rather than the current owner; this is valid and must not be treated as an ownership mismatch. Category moves, file renames, path drift, atom slug changes, and cross-atom movement are not AID change reasons. Assign new AID values only to newly introduced meaning lines. Do not renumber existing AID values for cosmetic ordering. If an AID migration is unavoidable, record it explicitly in the change plan and review findings. Resolve current ownership from the containing file's frontmatter `atom_key`, never from an older preserved AID prefix.
+Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. After a cross-atom move, the preserved AID prefix may identify the atom where the AID was created rather than the current owner; this is valid and must not be treated as an ownership mismatch. Category moves, file renames, path drift, atom slug changes, and cross-atom movement are not AID change reasons. Assign new AID values only to newly introduced referenceable meanings. Do not clean up, remove, or renumber existing AIDs automatically merely because the current policy is narrower. If migration is unavoidable and accepted, record it explicitly in the change plan and review findings. Resolve current ownership from the containing file's frontmatter `atom_key`, never from an older preserved AID prefix.
 
 ## Required Atom Sections
 

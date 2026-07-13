@@ -82,6 +82,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         aid_key: str | None = None,
         edges: list[dict[str, str]] | None = None,
         omit_section: str | None = None,
+        with_aids: bool = True,
     ) -> Path:
         path = self.docs / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +109,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         for heading, code, prose in sections:
             if heading == omit_section:
                 continue
-            body.extend(["", f"## {heading}", "", f"- [AID:{prefix}.{code}.001] {prose}"])
+            content = f"- [AID:{prefix}.{code}.001] {prose}" if with_aids else f"- {prose}"
+            body.extend(["", f"## {heading}", "", content])
         path.write_text("\n".join(frontmatter + body) + "\n", encoding="utf-8")
         return path
 
@@ -140,6 +142,14 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         baseline_result = self.run_validator("baseline")
         self.assertEqual(0, baseline_result.returncode, baseline_result.stdout + baseline_result.stderr)
         self.assertIn("PASS baseline", baseline_result.stdout)
+
+    def test_atom_without_aids_is_valid(self) -> None:
+        self.write_atom("domain/context-atom.md", "context", with_aids=False)
+
+        result = self.run_validator("docs")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("1 atoms", result.stdout)
+        self.assertIn("0 AIDs", result.stdout)
 
     def test_duplicate_atom_key_and_aid_fail(self) -> None:
         self.write_atom("domain/first-atom.md", "duplicate")

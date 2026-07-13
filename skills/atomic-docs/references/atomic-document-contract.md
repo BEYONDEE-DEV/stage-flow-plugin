@@ -53,7 +53,7 @@ Default project-level criteria document:
 <doc-root>/project/atomization-criteria.md
 ```
 
-- `atomization-criteria.md` records draft or approved criteria used to decide domain boundaries, split/merge atom files, draft docs, review docs, and apply judgment policy.
+- `atomization-criteria.md` records compact draft or approved rules for deciding domain ownership, atom split/merge, documentation depth, selective identity, evidence, and review. Source-derived domain/atom candidates belong in operation state, not this file.
 - This criteria document is not a service-logic atom, not a graph target, and not direct code suitability evidence. Code suitability judgments come from generated natural-language service logic atoms, source evidence, graph relationships, baseline metadata, and judgment labels.
 - Existing `<doc-root>/project/atomization-criteria-atom.md` files are legacy artifacts. Treat them as migration/update candidates; do not use that path as the default for new criteria work.
 
@@ -117,7 +117,7 @@ Project document writing rules:
 - `project-glossary.md` records only ambiguous, shared, ownership-sensitive, or decision-critical terms. Each entry must explain meaning and source of truth, plus ownership, actors, stored/computed distinction, related rules, aliases, forbidden conflations, or uncertainty only when applicable.
 - A service logic inventory is lightweight writer/reviewer input, not a service logic atom. Keep it as operation-local state by default. If `<doc-root>/project/service-logic-inventory.md` is explicitly retained as a final coverage index, each behavior aggregate must record its decision summary, source identifiers, owner or disposition, and only the rules, state/effects, risk, related AID, or judgment fields that apply. Do not duplicate the atom body in the inventory.
 - `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related service logic atom_key and AID, or to a coverage gap when no atom exists yet. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
-- `atomization-criteria.md` records generation criteria, domain/category boundary semantics, accepted scope semantics, and approval state. It is not direct code suitability evidence.
+- `atomization-criteria.md` records durable generation rules, project exceptions, unresolved approval decisions, and approval state. It is not a candidate map, operation ledger, or direct code suitability evidence.
 
 Project document review rules:
 

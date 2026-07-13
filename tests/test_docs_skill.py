@@ -162,7 +162,11 @@ class DocsSkillTests(unittest.TestCase):
                 ".stageflow/atomic-docs/sessions/<session-id>/current.json",
                 ".stageflow/atomic-docs/requests/<request-id>/state.json",
                 ".stageflow/atomic-docs/requests/<request-id>/work-state.json",
-                "must not become the live progress ledger",
+                "request lookup only",
+                "the active request pointer only",
+                "request lifecycle and session/Goal links only",
+                "the only owner of operation profile",
+                "Do not duplicate queue position, source basis, agent identity, or reviewer state",
                 "operation-local by default",
                 "not a Stageflow request",
             ),
@@ -218,7 +222,7 @@ class DocsSkillTests(unittest.TestCase):
                 "preserved AID prefix may identify the atom where the AID was created",
                 "valid and must not be treated as an ownership mismatch",
                 "Resolve current ownership from the containing file's frontmatter `atom_key`",
-                "Do not renumber existing AID values",
+                "Do not clean up, remove, or renumber existing AIDs automatically",
             ),
         )
 
@@ -228,51 +232,57 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "durable, independently referenceable meaning",
-                "Do not assign AIDs to routine explanatory prose",
-                "mechanical source summaries",
-                "every evidence row",
+                "actual downstream reference need",
+                "Do not assign an AID merely because a statement is durable",
+                "Plain `Current Implementation` observations",
+                "inventory/evidence rows",
+                "may contain zero AIDs",
             ),
         )
 
-    def test_compact_criteria_uses_shared_rules_and_result_table(self) -> None:
+    def test_compact_criteria_contains_only_durable_rules(self) -> None:
         text = refs("atomization-criteria-contract.md", "criteria-flow.md")
         for heading in (
-            "공통 Atom 후보 기준",
-            "공통 소스 근거 기준",
-            "공통 분리/병합 기준",
-            "공통 해당 없음/미해결 처리",
+            "목적과 승인 상태",
+            "문서 저장 위치와 적용 범위",
+            "도메인과 문서 분리 기준",
+            "문서 깊이와 식별 기준",
+            "작성과 검토 기준",
+            "프로젝트 예외와 미해결 결정",
         ):
             self.assertIn(heading, text)
-        self.assertIn(
-            "관점 | 적용 상태 | 프로젝트 근거/후보 | 공통 기준 예외 | 미해결 질문",
+        assert_all(
+            self,
             text,
+            (
+                "Criteria record how documentation decisions are made",
+                "Do not copy the complete skill reference contracts into criteria",
+                "candidate or approved domain maps",
+                "atom candidate or split-proposal maps",
+                "perspective result tables or source-feature inventories",
+                "existing approved criteria file",
+                "valid superset",
+            ),
         )
-        for state in ("Atom 후보", "소스 근거만", "해당 없음", "미해결"):
-            self.assertIn(state, text)
-        self.assertIn("do not repeat these rules for every perspective", text)
-        self.assertIn("Do not repeat the shared atom/evidence/split/not-applicable rules", text)
-        self.assertNotIn("every entry under `Atom화 관점` with these exact visible subfields", text)
+        self.assertNotIn("관점 | 적용 상태 | 프로젝트 근거/후보", text)
 
-    def test_criteria_keeps_domain_discovery_and_atom_candidates_separate(self) -> None:
+    def test_domain_and_atom_discovery_start_after_criteria_approval(self) -> None:
         text = refs(
             "atomization-criteria-contract.md",
             "criteria-flow.md",
+            "project-documents-and-inventory.md",
             "source-convention-and-domain-policy.md",
         )
         assert_all(
             self,
             text,
             (
-                "durable domain/category boundary map",
-                "discovery candidate map proportional to the requested scope",
-                "behavior-level `Atom 후보 맵`",
-                "accepted-scope rules",
-                "project-wide source feature inventory only when",
-                "project-native",
-                "broad roots",
+                "Do not perform project-wide source discovery",
+                "Those belong after criteria approval, accepted docs scope, and the Goal handoff",
+                "first place where source-derived domain and atom candidates are recorded",
+                "do not copy this candidate map into criteria",
+                "project-native name",
                 "concrete business aggregates",
-                "leaf workflows",
             ),
         )
 
@@ -282,14 +292,15 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "independent criteria-review subagent",
+                "one independent criteria reviewer",
+                "Reuse that reviewer for revision cycles",
                 "Continue until PASS",
                 "PASS means ready for user review; it does not approve the criteria",
-                "문서 작성 기준에서 정한 핵심 원칙",
-                "도메인/범위 후보",
-                "실제 atom 후보 또는 분리 후보",
-                "아직 불확실한 점과 승인 차단 항목",
-                "지금 승인하면 허용되는 것과 아직 허용되지 않는 것",
+                "문서 작성 기준의 핵심 원칙",
+                "이 프로젝트에만 적용할 예외",
+                "아직 결정하지 못해 승인을 막는 내용",
+                "지금 승인하면 허용되는 작업과 아직 시작되지 않은 작업",
+                "actual domain candidates, atom candidates, and source evidence will be prepared after",
                 "문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다",
             ),
         )
@@ -423,7 +434,8 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "operation-local by default",
                 "lightweight operation inventory",
-                "grouped by meaningful behavior aggregate",
+                "grouped by durable domain candidate and meaningful behavior aggregate",
+                "first place where source-derived domain and atom candidates are recorded",
                 "Do not require every inventory row",
                 "Do not create one inventory row per route",
                 "candidate or final owning `atom_key`",
@@ -473,7 +485,7 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_domain_bundles_use_one_writer_and_risk_scaled_review(self) -> None:
+    def test_domain_bundles_reuse_persistent_writer_and_reviewers(self) -> None:
         flow = read(REFS / "docs-generation-flow.md")
         reviewers = read(REFS / "reviewer-perspectives.md")
         assert_all(
@@ -481,13 +493,15 @@ class DocsSkillTests(unittest.TestCase):
             flow,
             (
                 "sequential queue",
-                "Each domain bundle uses exactly one writer",
-                "exactly one independent development-quality reviewer",
-                "when a risk trigger applies",
-                "exactly one independent risk/contract reviewer",
+                "One bundle may own several atoms",
+                "Create one writer and one independent development-quality reviewer for the operation",
+                "record their agent IDs in `work-state.json`",
+                "Reuse them for every sequential bundle",
+                "create one risk/contract reviewer and reuse it",
+                "same-role replacement using a compact handoff",
+                "not the writer's private reasoning conversation",
                 "Ordinary CRUD or preference persistence is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
-                "change-type rerun routing",
                 "every reviewer applicable to the active bundle PASSes",
                 "reopen that bundle",
             ),
@@ -534,7 +548,39 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_reviewer_principle_files_and_answer_sheet_are_explicit(self) -> None:
+    def test_first_pass_review_routes_meaning_structure_and_source_locators(self) -> None:
+        text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "new atom, `atom_key`, `Intent`, `Rules`, behavior/contract meaning",
+                "graph `type`, or graph `target_key`",
+                "Markdown formatting, file relocation, or graph `target_path`",
+                "scoped validator only",
+                "source locator/evidence correction with unchanged claim",
+                "narrowed source-evidence check",
+                "An `initial-baseline` still requires development review for every domain bundle",
+                "Targeted structural-only single-domain change",
+            ),
+        )
+
+    def test_operation_reports_scale_without_blocking_or_fabricated_eta(self) -> None:
+        text = read(REFS / "docs-generation-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Report domain count, bundle count, risk-bundle count, shared-owner count",
+                "short non-blocking user update",
+                "Do not invent an ETA",
+                "After two bundles complete",
+                "measured completed/remaining bundle counts",
+                "This is informational and does not pause the queue",
+            ),
+        )
+
+    def test_reviewer_reports_are_findings_only_and_tables_are_conditional(self) -> None:
         text = read(REFS / "reviewer-perspectives.md")
         for reference in (
             "atomic-document-contract.md",
@@ -551,14 +597,18 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "principle files reviewed",
+                "Findings-Only Report Contract",
+                "Every PASS report contains only",
+                "검토 범위 | source/revision | verdict | 확인한 대표 근거 | 재실행 필요 여부",
+                "A FAIL report adds only blocking findings",
+                "do not repeat it in every PASS report",
                 "decision completeness",
                 "proportional depth",
                 "source fact fidelity",
                 "accepted-scope closure",
                 "cannot replace a required independent reviewer",
-                "구현자가 임의로 정하면 안 되는 내용",
-                "검증 가능한 결과",
+                "Do not persist an answer sheet for an ordinary development PASS",
+                "Persist a decision comparison table only when",
                 "Read only the additional principle files implicated by the bundle",
             ),
         )
@@ -579,7 +629,7 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "Reviewers may inspect source",
                 "Source access is required when checking fidelity",
-                "`source basis`: the inspected commit or explicitly recorded source revision",
+                "inspected commit and bundle attempt",
             ),
         )
 
@@ -697,10 +747,11 @@ class DocsSkillTests(unittest.TestCase):
                 "Record a compact domain-grouped write plan",
                 "lists only applicable items",
                 "Do not add placeholder rows",
-                "no second user approval is required",
-                "inside the user-accepted docs scope and approved boundaries",
+                "prior scope approval authorizes the plan",
+                "scope acceptance authorizes source-supported new domains",
                 "expands source/docs scope",
-                "creates or moves a domain boundary",
+                "moves/deletes/merges an existing boundary",
+                "ambiguous boundary requiring user judgment",
             ),
         )
 
@@ -817,6 +868,9 @@ class DocsSkillTests(unittest.TestCase):
                 "target atom's stable frontmatter `atom_key`",
                 "`target_path` is stale",
                 "Graph edges may only target existing atom files",
+                "`graph_edges: []` is valid",
+                "shared contract, cross-domain dependency/conflict/replacement",
+                "Do not add same-domain `related_to` edges merely for navigation",
                 "Do not create a root graph output by default",
             ),
         )

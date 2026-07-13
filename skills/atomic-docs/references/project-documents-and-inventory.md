@@ -17,7 +17,7 @@ Project documents are non-atom documents. Use:
 - `project/project-goal.md` for product purpose, users/callers, success criteria, non-goals, and unresolved project intent
 - `project/project-glossary.md` for ambiguous or shared term meaning, ownership, source of truth, aliases, forbidden conflations, and uncertainty
 - `project/source-convention.md` for source interpretation
-- `project/atomization-criteria.md` for durable documentation criteria and boundaries
+- `project/atomization-criteria.md` for durable documentation criteria, project exceptions, and unresolved approval decisions
 
 Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom sections unless an explicit accepted migration converts one into an atom.
 
@@ -37,7 +37,9 @@ Project document review must fail when a project document directly judges implem
 
 ## Lightweight Operation Inventory
 
-Before domain drafting, create a lightweight operation inventory grouped by meaningful behavior aggregate, not endpoint, class, method, component, or file.
+Only after criteria approval, accepted docs scope, and the Goal handoff, create a lightweight operation inventory grouped by durable domain candidate and meaningful behavior aggregate, not endpoint, class, method, component, or file. This is the first place where source-derived domain and atom candidates are recorded.
+
+For each domain candidate, record the project-native name, tentative path, owned and excluded behavior, adjacent boundary, source evidence, and whether it is accepted for this operation, rejected as broad, or blocked by a concrete ownership decision. Put reviewed durable boundaries in domain context atoms; do not copy this candidate map into criteria.
 
 The minimum row is:
 
@@ -45,7 +47,7 @@ The minimum row is:
 동작/결정 | 잠정/확정 owner | 공유 계약과 참조 도메인 | 소스 근거 | 관련 AID/판정 | 위험 트리거/미해결
 ```
 
-Add short notes for consequential rules, state/effects, contracts, or failures only when the writer needs them to avoid losing a decision. The atom is the durable explanation; the inventory is routing and closure state.
+Each aggregate row identifies its candidate `atom_key` or split proposal in the owner field. Add short notes for consequential rules, state/effects, contracts, or failures only when the writer needs them to avoid losing a decision. The atom is the durable explanation; the inventory is candidate routing and closure state.
 
 One behavior aggregate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, or setting when they implement the same decision.
 

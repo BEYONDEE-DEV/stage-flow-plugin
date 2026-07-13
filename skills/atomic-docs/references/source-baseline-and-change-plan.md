@@ -64,18 +64,17 @@ For domain-level work, update the domain context atom when the domain goal, resp
 A compact change plan groups by domain and lists only applicable items from the following set. Do not add placeholder rows for unaffected artifacts, judgments, identities, or gates:
 
 - the limited first write action for draft criteria creation or update at `project/atomization-criteria.md` when criteria are new or changed
-- the criteria document's `Atom화 관점` section, including user-visible criteria additions, removals, revisions, approval status, and whether the criteria document is draft or approved
-- user-conversation criteria that must be recorded in the criteria document before source-derived atom drafting
-- source exploration results that update the criteria document instead of remaining only in the change plan
+- durable criteria additions, removals, project exceptions, unresolved decisions, approval status, and whether the compact criteria document is draft or approved
+- user-conversation criteria that must be recorded before source-derived atom drafting; domain/atom candidates and source exploration results stay operation-local
 - Atomic Docs Goal Gate status, including whether `create_goal` was created or an active Goal already covers the accepted docs operation
 - project document creation, update, or legacy migration actions, including `project/project-goal.md`, `project/project-glossary.md`, `project/source-convention.md`, and `project/service-logic-inventory.md` only when the user explicitly retains a final coverage index
 - atomic-docs operation state updates under `.stageflow/atomic-docs/requests/<request-id>/`, including accepted write scope, bundle queue, temporary inventory/evidence/review paths, and post-write gate status
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
-- operation-local inventory items, including the behavior/decision, source identifiers, candidate owning atom key, and coverage gaps
+- operation-local domain and atom candidates, including owned/excluded behavior, adjacent boundary, behavior/decision, source identifiers, candidate owning atom key, split proposal, and coverage gaps
 - decision completeness for the accepted scope, including only applicable frontend/UI or backend/API/service details, observable verification conditions, risk triggers, and unresolved decisions that would force arbitrary product behavior
 - applicable review gates: required development-quality reviewer, conditional risk/contract reviewer, and conditional project-wide integration/baseline reviewer
-- AID assignments for new or changed durable referenceable meanings, and explicit AID migrations when existing IDs cannot be preserved
+- AID assignments only for new confirmed important rules, observable/shared contracts, required changes, active judgments/gaps, or decisions with an independent reference need; explicit AID migrations require accepted scope
 - affected atom files
 - affected atom sections
 - judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `deferred_decision`, `confirmation_needed`, or `docs_stale`
@@ -93,7 +92,7 @@ A compact change plan groups by domain and lists only applicable items from the 
 - global source-baseline metadata and docs-root config writes; baseline updates are allowed only for project-wide coverage, while partial operations list `source_commit_observed` as operation state and explicitly leave the baseline unchanged
 - unresolved boundary questions that must be accepted before writing confirmed structure
 
-The compact change plan defines the paths and write actions for the current docs operation. If every item is already inside the user-accepted docs scope and approved boundaries, that scope acceptance also authorizes the plan and no second approval is required. Stop for user approval when the plan expands source/docs scope, creates or moves a domain boundary, performs deletion or migration, changes config/baseline outside the accepted action, or otherwise exceeds the prior authorization.
+The compact change plan defines the paths and write actions for the current docs operation. If every item is inside the user-accepted docs scope and follows approved criteria, that scope acceptance authorizes source-supported new domains and no second approval is required. Stop when the plan expands source/docs scope, moves/deletes/merges an existing boundary, leaves an ambiguous boundary requiring user judgment, performs migration, changes config/baseline outside the accepted action, or otherwise exceeds prior authorization.
 
 ## Inference And Gaps
 

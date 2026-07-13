@@ -6,7 +6,7 @@ This reference defines graph relationships between atom files. The graph helps p
 
 ## Storage
 
-Store graph edges in each atom file frontmatter under `graph_edges`. Do not store the same edge set in both frontmatter and body sections.
+Store graph edges in each atom file frontmatter under `graph_edges`. Do not store the same edge set in both frontmatter and body sections. `graph_edges: []` is valid; an atom does not need an edge merely because another atom is related or nearby.
 
 Minimum edge fields:
 
@@ -40,6 +40,8 @@ Start with a small controlled vocabulary such as:
 - `conflicts_with`
 
 All graph edges are directional. Add explicit inverse edges only when the inverse relationship is needed and meaningful.
+
+Create an edge only for a shared contract, cross-domain dependency/conflict/replacement, or another relationship required for ownership or impact traversal. Do not add same-domain `related_to` edges merely for navigation, shared folder placement, similar names, or general discoverability. Describe local context in the atom body instead.
 
 ## Traversal Policy
 

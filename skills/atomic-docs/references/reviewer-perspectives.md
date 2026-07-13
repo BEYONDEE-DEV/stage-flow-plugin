@@ -4,36 +4,32 @@
 
 This reference defines the required domain development-quality reviewer, the conditional risk/contract reviewer, and the conditional affected-closure integration or project-wide baseline reviewer. Review effort scales with the accepted scope and risk instead of using a fixed reviewer count.
 
-## Shared Report Contract
+## Findings-Only Report Contract
 
-Every reviewer report must include:
+Every PASS report contains only these fields. For Korean operation reports, use this visible order:
 
-- `review scope`
-- `review role`
-- `principle files reviewed`
-- `source basis`: the inspected commit or explicitly recorded source revision
-- `review input revision`: the bundle attempt reviewed
-- `risk triggers` that apply or `none`
-- `verdict`: `PASS`, `FAIL`, or `provisional`
-- blocking findings with docs, source, operation-state, or validation evidence appropriate to the role
-- affected `atom_key`/AID when known
-- evidence changed since the previous run
-- rerun requirement and affected reviewers
+```text
+검토 범위 | source/revision | verdict | 확인한 대표 근거 | 재실행 필요 여부
+```
 
-A reviewer must not issue PASS when a required principle file was not read. The main agent aggregates reports but cannot replace a required independent reviewer or issue that reviewer's PASS itself.
+`source/revision` is the inspected commit and bundle attempt, `verdict` is `PASS` or `provisional`, representative evidence is the smallest sample supporting the verdict, and rerun need is normally `없음`. Use equivalent user-language labels for another selected docs language.
+
+A FAIL report adds only blocking findings, affected `atom_key`/AID when known, required docs/evidence correction, and the reviewer roles that must rerun. Do not repeat unchanged risk triggers, principle-file lists, source indexes, atom content, or a decision matrix in every PASS report. Keep applicable triggers and agent/reviewer state in `work-state.json`.
+
+A reviewer must not issue PASS when an applicable principle file was not read. The main agent aggregates reports but cannot replace a required independent reviewer or issue that reviewer's PASS itself.
 
 Reviewers may inspect source. Start from the operation evidence index instead of rediscovering every entry point. Independently reopen changed or risk-bearing claims and sample unchanged high-consequence claims whose error could alter the verdict. Do not reread every cited line mechanically. Source access is required when checking fidelity, missing decisions, accepted-scope coverage, or impact. The quality test is whether the docs preserve the decisions needed for implementation, verification, and conflict analysis.
 
 ## Required Domain Development-Quality Reviewer
 
-Every active domain bundle uses one writer followed by one independent development-quality reviewer.
+Reuse one independent development-quality reviewer across the operation. It reviews every domain bundle for `initial-baseline` and every new or meaning-changing bundle in other profiles. Structural-only work follows the routing policy without a complete domain review.
 
 Always read the approved project criteria plus:
 
 - `atom-format-and-judgment.md`
 - `service-logic-coverage.md`
 
-Read only the additional principle files implicated by the bundle: `atomic-document-contract.md` and `source-convention-and-domain-policy.md` for boundary/identity changes, `change-judgment-policy.md` for implementation judgments, and `project-documents-and-inventory.md` for ownership or inventory closure. The report lists which conditional files applied.
+Read only the additional principle files implicated by the bundle: `atomic-document-contract.md` and `source-convention-and-domain-policy.md` for boundary/identity changes, `change-judgment-policy.md` for implementation judgments, and `project-documents-and-inventory.md` for ownership or inventory closure. Record the applicable principle set once in operation state; do not repeat it in every PASS report.
 
 Check all of the following in one coherent pass:
 
@@ -46,7 +42,9 @@ Check all of the following in one coherent pass:
 
 FAIL when a developer still must invent product behavior, a reviewer cannot derive an observable verification result, an important contract conflict is hidden, or docs contradict source. Do not FAIL merely because internal code structure, framework mechanics, exact CSS, or behavior-neutral mappings remain in source.
 
-Use an answer sheet equivalent to:
+Do not persist an answer sheet for an ordinary development PASS. The reviewer may reason with one internally, but writes only the findings-only report. Use a decision table only when a blocking finding cannot be explained clearly without comparing several independently varying decisions.
+
+When such a table is needed, use an equivalent of:
 
 ```text
 결정 또는 관련 AID | 확인한 소스/요구사항 | 구현자가 임의로 정하면 안 되는 내용 | 검증 가능한 결과 | 영향받는 계약/도메인 | 판정
@@ -56,7 +54,7 @@ The answer sheet may summarize several related AIDs in one row when they form on
 
 ## Conditional Risk / Contract Reviewer
 
-Run one additional independent reviewer only when `service-logic-coverage.md` identifies at least one risk trigger. Record the trigger in operation state before review.
+Run one additional independent reviewer only when `service-logic-coverage.md` identifies at least one risk trigger. Record the trigger in operation state before review and reuse the same risk reviewer across triggered bundles.
 
 When both domain and risk reviews apply, they may run in parallel only against the same recorded review input revision and source basis. If either review causes a writer change, use the rerun routing below to decide which prior PASS remains valid.
 
@@ -71,7 +69,7 @@ Review only the triggered concerns. Check adverse branches, permission or securi
 
 FAIL when the risky decision, refusal/failure path, side effect, rollback/recovery behavior, or observable verification evidence is missing or contradicted. Require a structured matrix only when the alternatives cannot be reviewed reliably in prose.
 
-Do not repeat the complete domain review. A risk reviewer PASS is additional evidence and cannot replace the required development-quality reviewer PASS.
+Do not repeat the complete domain review. A risk reviewer PASS is additional evidence and cannot replace the required development-quality reviewer PASS. Persist a decision comparison table only when the risky alternatives cannot be judged reliably from concise findings.
 
 ## Conditional Integration / Baseline Reviewer
 
@@ -98,11 +96,14 @@ For `baseline-diff-refresh`, verify the complete old-to-new diff and ownership/g
 
 Do not repeat unchanged domain detail. If the project-wide view exposes a local defect, reopen the affected bundle, rerun its writer and affected reviewers, then rerun this reviewer.
 
+Use a cross-domain decision table only when ownership, contracts, or baseline carry-forward alternatives cannot be judged reliably in concise findings. The ordinary PASS report remains findings-only.
+
 Only the project-wide form of this reviewer can approve global baseline creation or update.
 
 ## Reviewer Selection Examples
 
-- Targeted, ordinary single-domain change: development-quality reviewer only.
+- Targeted structural-only single-domain change: scoped validator only.
+- Targeted decision-bearing ordinary single-domain change: development-quality reviewer only.
 - Targeted high-risk single-domain change: development-quality reviewer plus risk/contract reviewer.
 - Independent multi-domain changes: applicable domain reviews only.
 - Shared-contract change: applicable domain reviews plus affected-closure integration reviewer.

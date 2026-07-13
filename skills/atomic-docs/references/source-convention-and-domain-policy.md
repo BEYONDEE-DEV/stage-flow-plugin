@@ -59,23 +59,23 @@ Category and subdomain folders are allowed only as organization inside an approv
 
 When a broad source root or category/root surface is rejected, still inspect below it for concrete business aggregates. A concrete aggregate is a source-observed responsibility where routes, controllers, service methods, policy rules, persistence side effects, or user-visible workflow steps repeatedly describe the same capability, operation, lifecycle, or management task and tend to change together. Promote that aggregate to a concrete domain candidate or concrete split proposal with owned behavior, excluded behavior, adjacent boundary, and unresolved questions instead of stopping at the broad rejection.
 
-Rejected broad roots need concrete aggregate disposition. For each obvious sub-aggregate, record whether it becomes an atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item. A broad root rejection with no sub-aggregate disposition is not enough evidence for criteria approval or docs generation.
+Rejected broad roots need concrete aggregate disposition in the operation inventory. For each obvious sub-aggregate, record whether it becomes an atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item. A broad root rejection with no sub-aggregate disposition is not enough for domain writing or review PASS.
 
-Treat management/operational aggregate evidence as a domain discovery trigger when management verbs such as manage, register, approve, issue, settle, recover, disable, restore, or delete appear with an endpoint/service entry and a persistence, permission, policy, or workflow effect. The candidate name should preserve project/user business language unless the criteria records a stronger promotion basis.
+Treat management/operational aggregate evidence as a domain discovery trigger when management verbs such as manage, register, approve, issue, settle, recover, disable, restore, or delete appear with an endpoint/service entry and a persistence, permission, policy, or workflow effect. The candidate name should preserve project/user business language unless user-approved or source-observed evidence supports promotion.
 
 ## Hybrid Domain Naming Policy
 
-Use a hybrid domain naming model for criteria drafts and domain maps:
+Use a hybrid domain naming model for operation inventories, change plans, and domain context atoms:
 
 1. Start with project-native feature/root language observed in source roots, existing docs, API surfaces, package roots, or user vocabulary.
 2. Keep those project-native names visible as the default domain/category candidates unless they are broad or unsupported.
-3. Promote a cross-feature capability/common boundary only when the criteria records explicit promotion evidence.
+3. Promote a cross-feature capability/common boundary only when operation evidence or a user decision records explicit promotion evidence.
 
 Treat project-native feature/root language as the default starting point before inventing a capability alias or common boundary.
 
 Even when a source root is broad and must be split, the codebase's own stable feature/root language is still the default naming input for concrete candidates below it.
 
-The criteria document must distinguish:
+Each operation-local domain candidate must distinguish:
 
 - `project-native name`: the name already used by the project or user
 - `source feature root`: the package/root/surface where the source-observed behavior appears
@@ -83,7 +83,7 @@ The criteria document must distinguish:
 - `promotion reason`: why the alias should replace or sit above project-native feature language
 - `approval state`: `candidate`, `approved`, `rejected`, or `needs_confirmation`
 
-AI-renamed domain labels are not valid default domain names. If the source uses a feature root such as `auth`, `commerce`, `refund`, `resource`, `ticketgroup`, `web`, or `admin`, a criteria draft must not silently rename that root into a new abstract capability label such as `sales-fulfillment` unless one of these bases is recorded:
+AI-renamed domain labels are not valid default domain names. If the source uses a feature root such as `auth`, `commerce`, `refund`, `resource`, `ticketgroup`, `web`, or `admin`, an operation inventory must not silently rename that root into a new abstract capability label such as `sales-fulfillment` unless one of these bases is recorded:
 
 - user approval or user vocabulary for the new capability label
 - existing managed-docs-root terminology that already uses that capability label
@@ -91,7 +91,7 @@ AI-renamed domain labels are not valid default domain names. If the source uses 
 
 Capability or common promotion requires at least one of these evidence types: cross-feature ownership, shared persistence or state, shared policy, or shared recovery question. Without that evidence, keep the project-native feature/root name and put the cross-feature idea in `optional capability alias` or `needs_confirmation`.
 
-Broad source feature roots such as an `admin` root are not automatically approved domains. Treat them as category/root surfaces or split proposals until the criteria records narrower durable boundaries. This preserves the broad-domain FAIL rule while avoiding arbitrary AI renaming.
+Broad source feature roots such as an `admin` root are not automatically valid domains. Treat them as category/root surfaces or split proposals until operation evidence supports narrower durable boundaries. This preserves the broad-domain FAIL rule while avoiding arbitrary AI renaming.
 
 Prefer project/user business language for the promoted aggregate. If the source behavior is about managing, registering, approving, issuing, settling, or recovering a product-visible thing, do not default to technical labels such as `configuration` only because the methods or DTOs sit in a setup/admin area. Keep technical names as source evidence or optional aliases unless the project or user actually uses them as the domain language.
 
@@ -114,9 +114,9 @@ Before creating or moving a domain, the domain context or change plan must state
 - the adjacent-domain boundary
 - why the atom files in the domain tend to change together
 
-Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, criteria-review must fail it unless it is recorded as `rejected` broad grouping or as a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies before writing confirmed docs.
+Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, the development reviewer must FAIL it unless the operation inventory records it as a rejected broad grouping or a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies.
 
-Criteria-review must also fail a criteria draft that rejects a broad source root but does not account for obvious concrete aggregates underneath it. A rejected broad root needs either concrete aggregate candidates, concrete split proposals, or a recorded explanation that no route/controller/service/policy/persistence/workflow evidence supports a durable lower-level boundary.
+The development reviewer must also FAIL a bundle that rejects a broad source root but does not account for obvious concrete aggregates underneath it. The operation inventory needs concrete aggregate candidates, split proposals, or an evidence-backed explanation that no route/controller/service/policy/persistence/workflow surface supports a durable lower-level boundary.
 
 ## Core Business Term Coverage Gate
 
