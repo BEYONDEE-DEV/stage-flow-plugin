@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "simple-workflow" / "SKILL.md"
+ARTIFACT_FORMAT = ROOT / "skills" / "simple-workflow" / "references" / "artifact-format.md"
+HOOKS = ROOT / "skills" / "simple-workflow" / "references" / "hooks.md"
 PLUGIN_JSON = ROOT / ".codex-plugin" / "plugin.json"
 
 
@@ -13,6 +15,8 @@ class SkillContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.text = SKILL.read_text(encoding="utf-8")
+        cls.artifact_text = ARTIFACT_FORMAT.read_text(encoding="utf-8")
+        cls.hooks_text = HOOKS.read_text(encoding="utf-8")
 
     def test_shared_planning_and_review_principles_are_the_common_contract(self) -> None:
         self.assertIn("## Shared Planning And Review Principles", self.text)
@@ -45,7 +49,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("Codex must tell the user before changing it", self.text)
 
     def test_post_implementation_review_does_not_create_extra_user_artifacts(self) -> None:
-        self.assertIn("Do not create new user-facing artifacts for post-implementation review", self.text)
+        self.assertIn("do not create a new artifact", self.text)
         self.assertNotIn("code-review.md", self.text)
         self.assertNotIn("implementation-log.md", self.text)
 
@@ -84,16 +88,17 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("never change the immutable `goal_plan_fingerprint`", self.text)
 
     def test_v2_goal_start_and_recovery_track_both_fingerprints(self) -> None:
-        self.assertIn("`approved_plan_fingerprint: sha256:<hex>`", self.text)
-        self.assertIn("the two fingerprints start equal", self.text)
-        self.assertIn("original objective fingerprint", self.text)
-        self.assertIn("repair all four local fields", self.text)
+        self.assertIn("before `get_goal` or `create_goal`", self.text)
+        self.assertIn("This `approved + pending` state", self.text)
+        self.assertIn("If `create_goal` fails, preserve `approved + pending`", self.text)
+        self.assertIn("record the objective fingerprint as `goal_plan_fingerprint`", self.text)
+        self.assertIn("approval was already recorded and must not be rewritten", self.text)
 
     def test_post_reviews_require_requirement_evidence_and_block_gaps(self) -> None:
         self.assertIn("must list every `REQ-###` with the actual evidence", self.text)
         self.assertIn("response must cover every `REQ-###`", self.text)
         self.assertIn("A critical outcome that cannot be observed is a verification gap", self.text)
-        self.assertIn("do not create a new evidence artifact", self.text)
+        self.assertIn("existing `review.md` Completion Review", self.text)
 
     def test_completion_pre_gate_and_rescope_policy_preserve_goal(self) -> None:
         self.assertIn("validation with `--phase completion`", self.text)
@@ -115,6 +120,24 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("This gate applies to code-changing and read-only work", self.text)
         self.assertIn("actual outputs and commands when work was read-only", self.text)
         self.assertIn("For read-only work, the same completion order applies", self.text)
+
+    def test_allowed_v2_states_and_durable_completion_review_are_explicit(self) -> None:
+        for state in (
+            "plan      | pending  | pending",
+            "review    | approved | pending",
+            "review    | pending  | active",
+            "completed | approved | completed",
+        ):
+            self.assertIn(state, self.artifact_text)
+        self.assertIn("## Completion Review", self.artifact_text)
+        self.assertIn("Requirement | Actual Evidence | Verdict", self.artifact_text)
+        self.assertIn("New completions require this section", self.artifact_text)
+
+    def test_hook_activation_and_stop_boundaries_are_agent_owned(self) -> None:
+        self.assertIn("Hooks do not infer activation from prompt strings", self.text)
+        self.assertIn("search prompt text for `simple workflow`", self.hooks_text)
+        self.assertIn("`Stop` never emits a deny or blocking", self.hooks_text)
+        self.assertIn("without repeatedly running the full validator", self.hooks_text)
 
     def test_plugin_manifest_exposes_simple_workflow_prompt(self) -> None:
         manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))

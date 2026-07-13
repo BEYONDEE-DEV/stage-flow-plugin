@@ -60,10 +60,27 @@ authorized for execution.
 
 `goal_status` is optional for legacy requests. New requests use `pending`, change it to `active`
 only after `create_goal` succeeds, set `completing` immediately before requesting Goal completion,
-and use `completed` only after `update_goal(status="complete")` succeeds. For v2, Goal creation sets
-`goal_plan_fingerprint` and `approved_plan_fingerprint` to the same reviewed value.
+and use `completed` only after `update_goal(status="complete")` succeeds. Before Goal creation,
+explicit approval sets `approved_plan_fingerprint` to the current reviewed plan while Goal remains
+`pending`. Goal creation sets only `goal_plan_fingerprint` and Goal status.
 `goal_plan_fingerprint` remains the immutable fingerprint from the Goal objective;
 `approved_plan_fingerprint` changes only after an explicitly approved material replan.
+
+V2 permits only these `phase | plan_approval_status | goal_status` combinations:
+
+```text
+plan      | pending  | pending
+review    | pending  | pending
+review    | approved | pending
+review    | approved | active
+review    | pending  | active
+review    | approved | completing
+completed | approved | completed
+```
+
+`review | approved | pending` preserves approval when Goal creation fails and is retried.
+`review | pending | active` preserves the original Goal and previous approval fingerprints while a
+material replan waits for approval.
 
 ## plan.md
 
@@ -152,6 +169,32 @@ PASS
 ```
 
 The complete trimmed `## Verdict` body must equal `PASS`; containing the word `PASS` inside a
-different verdict is invalid. `## Blocking Issues` uses blocking-specific no-issue vocabulary,
-while `## Flow Check` uses flow-specific no-issue vocabulary. Do not swap the two fields' status
-values.
+different verdict is invalid. `## Blocking Issues` uses blocking-specific no-issue vocabulary.
+`## Flow Check` and `## Question Depth Check` require non-empty review results and may record a
+non-blocking observation without invalidating the passing verdict.
+
+After both post-execution reviews pass, the main agent appends this internal section to the same
+`review.md`:
+
+```md
+## Completion Review
+### Completion Plan Fingerprint
+Completion Plan Fingerprint: sha256:<hex>
+### Requirements Evidence
+| Requirement | Actual Evidence | Verdict |
+| --- | --- | --- |
+| REQ-001 | 실제 테스트, 출력, 상태 또는 파일 근거 | PASS |
+
+### Observable Outcome Evidence
+
+사용자 또는 시스템이 최종 결과를 관찰한 실제 근거
+
+### Completion Verdict
+
+PASS
+```
+
+Exactly one Completion Review exists and every planned REQ appears exactly once. Evidence must be non-empty and not an obvious placeholder;
+each row and the final verdict use exact uppercase `PASS`. The completion fingerprint must equal the
+current plan and approved fingerprint. New completions require this section. `--phase all` still
+accepts an older completed v2 request without it, but validates it whenever present.

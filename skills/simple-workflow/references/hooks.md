@@ -13,22 +13,22 @@ It keeps the session pointer model:
 .simple/sessions/<session-id>/current.json
 ```
 
-`UserPromptSubmit` emits valid hook wire output with `additionalContext` when the agent needs
-Simple Workflow readiness or continuation context. It never emits `PROCEED_ALLOWED` and does not
-search prompts for approval keywords. The skill-applying agent owns semantic approval judgment.
+The skill-applying agent owns new request activation and semantic approval judgment. Hooks do not
+search prompt text for `simple workflow`, `.simple`, approval keywords, or any other activation
+pattern. Without an active session pointer, `UserPromptSubmit` prepasses.
+
+`UserPromptSubmit` emits valid hook wire output with `additionalContext` only when an active
+`plan` or `review` pointer needs continuation context. It reads pointer, phase, approval, and Goal
+status without repeatedly running the full validator.
 
 It reports when:
 
-- an explicit Simple Workflow prompt has no active request
 - an active `plan` or `review` request receives a follow-up prompt that does not mention Simple Workflow again; this is a non-blocking continuation warning that reminds Codex to keep applying Simple Workflow rules
-- the active request points to a missing or completed request
-- an active plan request is still drafting before `plan.md` exists; this is an expected awaiting-input state, so readiness preserves continuation context and `Stop` allows the user-facing question without running plan validation
-- internal `review.md` is missing for the review or completed phase
-- internal `review.md` has a stale plan fingerprint
 - a v2 plan has `plan_approval_status: pending`; readiness tells the agent that initial or revised execution is on hold until explicit approval
+- a reviewed v2 plan is `approved + pending`; readiness tells the agent it may reconcile the Goal
 
-A completed request does not capture unrelated prompts. Explicit Simple Workflow invocation with a
-completed pointer asks the agent to create or select a new request.
+A completed request never captures a prompt. When the skill trigger applies, the agent creates or
+selects the next request itself.
 
 `PreToolUse` ignores tools other than `create_goal`. It also prepasses unrelated `create_goal`
 calls unless their objective contains an exact `.simple/requests/<request-id>/plan.md` path;
@@ -38,15 +38,15 @@ Goal flows independent. For an in-scope Simple Workflow `create_goal`, it emits
 
 - the selected request metadata is coherent and phase is exactly `review`
 - plugin-bundled `--phase review` validation passes
-- the objective request id and fingerprint exactly match the selected request and current plan
+- for v2, approval is `approved` and `approved_plan_fingerprint` matches the current plan; legacy requests keep the single-fingerprint gate
+- the objective request id and fingerprint exactly match the selected request, review, approval, and current plan
 - `review.md` has the current plan fingerprint and an exact uppercase `PASS` verdict
-- local `goal_status` is not already `active`, `completing`, or `completed`
+- local `goal_status` is exactly `pending`
 
 The pre-tool hook does not prove user approval; the agent has already made that conversational
-decision before attempting the tool call. Once `plan.md` exists, plan validation resumes normally.
-`Stop` emits a blocking wire response only when the current phase's required artifacts or validation
-are invalid, while a plan request that has not written `plan.md` yet remains a non-blocking drafting
-state so Codex can ask for the user input required to write it.
+decision and persisted it before attempting the tool call. `Stop` never emits a deny or blocking
+wire response and never runs the full validator. Invalid lightweight state may produce a diagnostic
+warning on stderr, but Codex can always send the user-facing response.
 
 For material replan after Goal creation, `goal_plan_fingerprint` continues to identify the original
 Goal objective and is never changed. `approved_plan_fingerprint` identifies the latest explicitly
@@ -54,7 +54,9 @@ approved plan. Review validation allows a coherent v2 `pending` state so Codex c
 reapproval, and `Stop` must not deadlock that response. After reapproval, the agent updates the
 approved fingerprint and status, reruns review validation, and resumes the same Goal without another
 `create_goal` call. Before Goal completion, the skill runs plugin-bundled `--phase completion`; this
-is a pre-`update_goal` structural check, not a natural-language approval classifier.
+is an agent-invoked hard gate that validates the durable Completion Review before `update_goal`, not
+a natural-language approval classifier. `--phase all` remains backward compatible with completed v2
+requests that predate Completion Review.
 
 Run manually with the plugin-bundled checker against a target project root:
 

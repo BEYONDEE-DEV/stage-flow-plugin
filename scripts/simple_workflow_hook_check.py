@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any
 
 PHASE_TO_VALIDATION = {"plan": "plan", "review": "review", "completed": "all"}
-EXPLICIT_RE = re.compile(r"simple[- ]workflow|\.simple", re.I)
 SIMPLE_PLAN_PATH_RE = re.compile(
-    r"\.simple[/\\]requests[/\\](?P<request_id>\d{8}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)[/\\]plan\.md"
+    r"(?<![A-Za-z0-9_.-])\.simple[/\\]requests[/\\](?P<request_id>\d{8}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)[/\\]plan\.md"
     r"(?=$|[\s`'\"<>()\[\]{},;:]|\.(?:$|\s))",
     re.I,
 )
@@ -42,12 +41,12 @@ def main(argv=None) -> int:
     wire_output = to_wire_output(event, result)
     if wire_output is not None:
         print(json.dumps(wire_output, ensure_ascii=False, sort_keys=True))
+    elif event == "stop" and result.get("severity") == "warning":
+        print(f"Simple Workflow WARN: {result.get('reason', 'state check failed')}", file=sys.stderr)
     return 0
 
 
 def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    prompt = extract_prompt(payload) if event == "user_prompt_submit" else ""
-    explicit = event == "user_prompt_submit" and bool(EXPLICIT_RE.search(prompt))
     create_goal_tool = event == "pre_tool_use" and is_create_goal_tool(payload)
     goal_objective = extract_goal_objective(payload) if create_goal_tool else ""
     objective_request_id = simple_goal_request_id(goal_objective) if create_goal_tool else ""
@@ -63,8 +62,7 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
             "session_id": session_id,
             "state_dir": f".simple/hook-state/sessions/{session_id}/main",
         },
-        "explicit_simple_workflow_invocation": explicit,
-        "prompt_relevant": explicit,
+        "prompt_relevant": False,
         "continuation_required": False,
         "preflight_required": simple_goal_candidate,
         "request_creation_required": False,
@@ -84,16 +82,7 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
         if create_goal_tool:
             result.update(status="PREPASS", severity="info", reason="create_goal is outside Simple Workflow scope")
             return result
-        if explicit:
-            result.update(
-                status="REQUEST_REQUIRED",
-                severity="warning",
-                reason="explicit Simple Workflow invocation must create a request",
-                request_creation_required=True,
-                validation={"status": "SKIPPED", "reason": "no session current pointer"},
-            )
-        else:
-            result.update(status="PREPASS", severity="info", reason="Simple Workflow is not activated for this session")
+        result.update(status="PREPASS", severity="info", reason="Simple Workflow is not activated for this session")
         return result
 
     current = read_json(current_path)
@@ -123,6 +112,7 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
     goal_status = str(state.get("goal_status") or "pending").strip()
     workflow_version = state.get("workflow_version")
     plan_approval_status = str(state.get("plan_approval_status") or "").strip()
+    approved_plan_fingerprint = str(state.get("approved_plan_fingerprint") or "").strip().lower()
     result.update(
         current_request_id=request_id,
         current_source="session",
@@ -131,6 +121,7 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
         goal_status=goal_status,
         workflow_version=workflow_version,
         plan_approval_status=plan_approval_status,
+        approved_plan_fingerprint=approved_plan_fingerprint,
         validation_phase=PHASE_TO_VALIDATION.get(phase, "all"),
         preflight_required=True,
     )
@@ -140,77 +131,37 @@ def check_hook(event: str, root: Path, payload: dict[str, Any]) -> dict[str, Any
     if event == "pre_tool_use":
         return check_create_goal_gate(root, session_id, request_dir, objective_fingerprint, result)
     if event == "stop":
-        return check_stop(root, session_id, request_dir, result)
-    return check_user_prompt(root, session_id, request_dir, explicit, result)
+        return check_stop(result)
+    return check_user_prompt(result)
 
 
-def check_user_prompt(
-    root: Path,
-    session_id: str,
-    request_dir: Path,
-    explicit: bool,
-    result: dict[str, Any],
-) -> dict[str, Any]:
+def check_user_prompt(result: dict[str, Any]) -> dict[str, Any]:
     phase = str(result["phase"])
     if phase == "completed":
-        if explicit:
-            result.update(
-                status="COMPLETED_CURRENT",
-                severity="warning",
-                reason="session current points at a completed request; create a new request before continuing",
-                request_creation_required=True,
-            )
-        else:
-            result.update(
-                status="PREPASS",
-                severity="info",
-                reason="completed Simple Workflow request does not capture unrelated follow-up prompts",
-                preflight_required=False,
-            )
+        result.update(
+            status="PREPASS",
+            severity="info",
+            reason="completed Simple Workflow request does not capture follow-up prompts",
+            preflight_required=False,
+        )
         return result
 
-    result["artifact_status"] = artifacts(request_dir)
-    if is_plan_drafting(phase, result["artifact_status"]):
-        result["drafting"] = True
-        result["validation"] = {
-            "status": "SKIPPED",
-            "reason": "plan drafting is awaiting input; plan.md is validated after it is written",
-        }
-        warnings: list[str] = []
-        if not explicit:
-            result["prompt_relevant"] = True
-            result["continuation_required"] = True
-            warnings.append(CONTINUATION_WARNING)
-        if warnings:
-            result.update(status="WARN", severity="warning", reason="; ".join(warnings), warnings=warnings)
-        else:
-            result.update(
-                status="DRAFTING",
-                severity="info",
-                reason="Simple Workflow plan drafting is awaiting user input",
-                warnings=[],
-            )
-        return result
-
-    result["validation"] = run_validator(root, session_id, PHASE_TO_VALIDATION[phase])
-    warnings: list[str] = []
-    missing = missing_for_phase(phase, result["artifact_status"])
-    if missing:
-        warnings.append(missing)
-    if result["validation"]["status"] == "FAIL":
-        warnings.append(result["validation"].get("reason", "validation failed"))
+    warnings = [CONTINUATION_WARNING]
+    result["prompt_relevant"] = True
+    result["continuation_required"] = True
     if result.get("workflow_version") == 2 and result.get("plan_approval_status") == "pending":
         warnings.append(
             "Current v2 plan awaits explicit user approval; do not execute the pending plan or revised scope."
         )
-    if not explicit:
-        result["prompt_relevant"] = True
-        result["continuation_required"] = True
-        warnings.append(CONTINUATION_WARNING)
-    if warnings:
-        result.update(status="WARN", severity="warning", reason="; ".join(warnings), warnings=warnings)
-    else:
-        result.update(status="PASS", severity="info", reason="Simple Workflow readiness check passed", warnings=[])
+    if result.get("goal_status") == "pending" and result.get("plan_approval_status") == "approved":
+        warnings.append("The reviewed plan is approved and ready for Goal reconciliation.")
+    result.update(
+        status="WARN",
+        severity="warning",
+        reason="; ".join(warnings),
+        warnings=warnings,
+        validation={"status": "SKIPPED", "reason": "UserPromptSubmit uses lightweight state checks"},
+    )
     return result
 
 
@@ -223,9 +174,15 @@ def check_create_goal_gate(
 ) -> dict[str, Any]:
     if result["phase"] != "review":
         return block(result, "create_goal is allowed only while the Simple Workflow request is in review phase")
-    if result["goal_status"] in {"active", "completing", "completed"}:
+    if result["goal_status"] != "pending":
         return block(result, "create_goal has already started or completed for this Simple Workflow request")
-    if objective_fingerprint != plan_fp(request_dir / "plan.md"):
+    current_fingerprint = plan_fp(request_dir / "plan.md")
+    if result.get("workflow_version") == 2:
+        if result.get("plan_approval_status") != "approved":
+            return block(result, "create_goal requires recorded user approval for the current plan")
+        if result.get("approved_plan_fingerprint") != f"sha256:{current_fingerprint}":
+            return block(result, "create_goal requires approved_plan_fingerprint to match the current plan")
+    if objective_fingerprint != current_fingerprint:
         return block(result, "Simple Workflow create_goal objective must name the current plan fingerprint")
 
     result["artifact_status"] = artifacts(request_dir)
@@ -244,46 +201,32 @@ def check_create_goal_gate(
     return result
 
 
-def check_stop(root: Path, session_id: str, request_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
-    phase = str(result["phase"])
-    result["artifact_status"] = artifacts(request_dir)
-    if is_plan_drafting(phase, result["artifact_status"]):
-        result.update(
-            status="PASS",
-            severity="info",
-            reason="Simple Workflow plan drafting may pause for user input before plan.md exists",
-            drafting=True,
-            validation={
-                "status": "SKIPPED",
-                "reason": "plan.md is validated after it is written",
-            },
-            warnings=[],
-        )
-        return result
-
-    result["validation"] = run_validator(root, session_id, PHASE_TO_VALIDATION[phase])
+def check_stop(result: dict[str, Any]) -> dict[str, Any]:
     warnings: list[str] = []
-    missing = missing_for_phase(phase, result["artifact_status"])
-    if missing:
-        warnings.append(missing)
-    if result["validation"]["status"] == "FAIL":
-        warnings.append(result["validation"].get("reason", "validation failed"))
+    if result.get("workflow_version") == 2 and result.get("plan_approval_status") == "pending":
+        warnings.append("Simple Workflow execution is waiting for user approval.")
     if warnings:
         result.update(
-            status="BLOCKED",
+            status="WARN",
             severity="warning",
             reason="; ".join(warnings),
             warnings=warnings,
-            decision="block",
+            validation={"status": "SKIPPED", "reason": "Stop uses lightweight state checks"},
         )
     else:
-        result.update(status="PASS", severity="info", reason="Simple Workflow stop check passed", warnings=[])
+        result.update(
+            status="PASS",
+            severity="info",
+            reason="Simple Workflow stop check passed",
+            warnings=[],
+            validation={"status": "SKIPPED", "reason": "Stop uses lightweight state checks"},
+        )
     return result
 
 
 def invalid_current(event: str, result: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:
     result.update(status="INVALID_CURRENT", severity="warning", reason=reason, **extra)
-    if event in {"pre_tool_use", "stop"}:
+    if event == "pre_tool_use":
         result["decision"] = "block"
     return result
 
@@ -313,27 +256,11 @@ def to_wire_output(event: str, result: dict[str, Any]) -> dict[str, Any] | None:
                 "permissionDecisionReason": str(result.get("reason") or "Simple Workflow create_goal gate denied this call"),
             }
         }
-    if event == "stop" and result.get("decision") == "block":
-        return {"decision": "block", "reason": str(result.get("reason") or "Simple Workflow validation failed")}
     return None
 
 
 def artifacts(directory: Path) -> dict[str, bool]:
     return {name: (directory / name).is_file() for name in ("plan.md", "review.md")}
-
-
-def is_plan_drafting(phase: str, status: dict[str, bool]) -> bool:
-    return phase == "plan" and not status.get("plan.md", False)
-
-
-def missing_for_phase(phase: str, status: dict[str, bool]) -> str:
-    required = {
-        "plan": ("plan.md",),
-        "review": ("plan.md", "review.md"),
-        "completed": ("plan.md", "review.md"),
-    }.get(phase, ())
-    missing = [name for name in required if not status.get(name)]
-    return "missing required artifact(s): " + ", ".join(missing) if missing else ""
 
 
 def review_ready(directory: Path) -> dict[str, str]:
@@ -414,13 +341,6 @@ def read_json(path: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
-
-
-def extract_prompt(payload: dict[str, Any]) -> str:
-    for key in ("prompt", "message", "user_prompt", "input"):
-        if isinstance(payload.get(key), str):
-            return payload[key]
-    return ""
 
 
 def extract_tool_name(payload: dict[str, Any]) -> str:

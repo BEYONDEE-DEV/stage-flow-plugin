@@ -24,86 +24,32 @@ BLOCKING_OK = {
     "없음",
     "차단 없음",
 }
-FLOW_OK = {
+REVIEW_FIXED_STATUSES = {
     "none",
+    "no blocking issues",
     "no flow issues",
-    "0",
-    "zero",
-    "없음",
-    "흐름 문제 없음",
-    "계획된 변경으로 인한 흐름 문제 없음",
-    "변경 흐름 문제 없음",
-    "관련 흐름 문제 없음",
-    "사용자에게 알려야 할 관련 흐름 문제 없음",
-    "미보고 흐름 문제 없음",
-}
-QUESTION_DEPTH_OK = {
-    "none",
     "no unresolved higher-level questions",
-    "question depth checks passed",
-    "no question depth issues",
+    "차단 없음",
+    "흐름 문제 없음",
     "상위 질문 없음",
-    "질문 깊이 문제 없음",
 }
 HANGUL_RE = re.compile(r"[가-힣]")
 REQUEST_ID_RE = re.compile(r"^\d{8}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*$")
-PLAN_PLACEHOLDER_RE = re.compile(
-    r"(?:(?<![A-Za-z0-9_])(?:TODO|TBD|N/?A)(?![A-Za-z0-9_])|미정|나중에|추후)",
+OBVIOUS_PLACEHOLDER_RE = re.compile(
+    r"(?:TODO|TBD|N/?A|PLACEHOLDER|미정|나중에|추후|작성\s*필요|증거\s*필요)",
     re.IGNORECASE,
 )
 FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 INLINE_CODE_RE = re.compile(r"`([^`]*)`")
-PLACEHOLDER_CODE_RE = re.compile(
-    r"(?:(?<![A-Za-z0-9_])(?:TODO|TBD|N/?A|PLACEHOLDER)(?![A-Za-z0-9_])|미정|나중에|추후)",
-    re.IGNORECASE,
-)
-PLACEHOLDER_TARGET_LABEL_RE = re.compile(
-    r"^\s*(?:marker|token|literal|identifier|placeholder|마커|표식|토큰|리터럴|식별자|문자열)"
-    r"(?=$|\s|[가-힣])",
-    re.IGNORECASE,
-)
-PLACEHOLDER_WORD_RE = re.compile(
-    r"(?<![A-Za-z0-9_])placeholder(?![A-Za-z0-9_])",
-    re.IGNORECASE,
-)
-PLACEHOLDER_PLAIN_TARGET_RE = re.compile(
-    r"(?<![A-Za-z0-9_])placeholder(?![A-Za-z0-9_])"
-    r"(?:(?:와|및)\s*)?(?:\s*(?:변형|표식|마커|토큰|리터럴|식별자|문자열|계획|값|상태))?\s*(?:을|를)",
-    re.IGNORECASE,
-)
-PLACEHOLDER_DESCRIBED_TARGET_RE = re.compile(
-    r"(?<![A-Za-z0-9_])placeholder(?![A-Za-z0-9_])"
-    r"\s+(?:변형|표식|마커|토큰|리터럴|식별자|문자열|계획|값|상태)",
-    re.IGNORECASE,
-)
-PLACEHOLDER_DEFERRAL_USAGE_RE = re.compile(
-    r"(?<![A-Za-z0-9_])placeholder(?![A-Za-z0-9_])"
-    r"(?:\s+(?:변형|표식|마커|토큰|리터럴|식별자|문자열|계획|값|상태))?"
-    r"\s*(?:로|으로|에|을|를)?\s*"
-    r"(?:둔다|두고|처리한다|처리하고|작성한다|작성하고|고정한다|고정하고|설정한다|설정하고|"
-    r"유지한다|유지하고|남긴다|남기고|넣는다|넣고|삽입한다|삽입하고)",
-    re.IGNORECASE,
-)
-PLACEHOLDER_TARGET_ACTION_RE = re.compile(
-    r"(?:제거|교체|차단|검증|탐지|거부|치환|삭제)(?:한다|하고|하며|하도록|해|하여|할\b)"
-)
-PLACEHOLDER_REGRESSION_FIX_RE = re.compile(r"(?:테스트.{0,40}고정|고정.{0,40}테스트)")
-OUTCOME_TARGET_RE = re.compile(r"(?:사용자|요청|상태|동작|응답|출력|파일|흐름|요구사항|Goal|plan)", re.IGNORECASE)
-OUTCOME_METHOD_RE = re.compile(r"(?:명령|테스트|validator|출력|응답|파일|경로|사용자\s*흐름|상태\s*필드|diff|증거)", re.IGNORECASE)
-OUTCOME_PROOF_RE = re.compile(r"(?:확인|관찰|통과|일치|반환|표시|검증|증명|대조|가능)")
-GENERIC_OUTCOME_RE = re.compile(r"^\s*(?:[-*]\s*)?(?:잘|정상적으로)?\s*(?:완료|동작|처리)(?:한다|된다)?[.!]?\s*$")
-EVIDENCE_SOURCE_RE = re.compile(
-    r"(?:테스트|validator|명령|출력|응답|상태|파일|경로|diff|사용자\s*흐름|검사)",
-    re.IGNORECASE,
-)
-EVIDENCE_TARGET_RE = re.compile(
-    r"(?:REQ-\d{3}|동작|결과|상태|흐름|요구|규칙|경계|순서|fingerprint|plan|Goal|승인|섹션|열|셀|버전|호환|복구|경고|범위|출력|증거|소스|cache|캐시|설치|plugin|플러그인)",
-    re.IGNORECASE,
-)
-EVIDENCE_PROOF_RE = re.compile(
-    r"(?:통과|일치|반환|표시|확인|비교|검증|관찰|차단|거부|성공|실패|보존)",
-    re.IGNORECASE,
-)
+ALLOWED_V2_STATES = {
+    ("plan", "pending", "pending"),
+    ("review", "pending", "pending"),
+    ("review", "approved", "pending"),
+    ("review", "approved", "active"),
+    ("review", "pending", "active"),
+    ("review", "approved", "completing"),
+    ("completed", "approved", "completed"),
+}
 
 VALIDATOR_TEMPLATES = {
     "index": '''{
@@ -304,6 +250,7 @@ def validate(ctx: Ctx, phase: str, errors: list[str]) -> None:
         validate_review(ctx, errors)
     if phase in {"completion", "all"}:
         validate_completion(ctx, phase, errors)
+        validate_completion_review(ctx, required=phase == "completion", errors=errors)
 
 
 def validate_meta(ctx: Ctx, errors: list[str]) -> None:
@@ -341,21 +288,26 @@ def validate_plan(ctx: Ctx, errors: list[str]) -> None:
     )
     if is_v2(ctx.state):
         outcome = section(text, "## Outcome And Completion Criteria")
-        if not meaningful_outcome(outcome):
-            errors.append("`plan.md` Outcome And Completion Criteria must define a concrete observable outcome")
+        if is_blank_or_placeholder(outcome):
+            errors.append("`plan.md` Outcome And Completion Criteria must not be empty or an obvious placeholder")
     coverage = section(text, "## Requirements Coverage")
     if is_v2(ctx.state):
         header = coverage_header(coverage)
         if [norm(cell) for cell in header] != ["requirement", "plan", "completion evidence"]:
             errors.append("`plan.md` v2 Requirements Coverage header must be exactly `Requirement | Plan | Completion Evidence`")
     for rid in ids:
-        row = coverage_row(coverage, rid)
-        if not row:
+        rows = coverage_rows(coverage, rid)
+        if not rows:
             errors.append(f"`plan.md` Requirements Coverage must include a table row for `{rid}`")
-        elif not meaningful_plan_cell(row):
-            errors.append(f"`plan.md` Requirements Coverage must include a concrete plan for `{rid}`")
-        elif is_v2(ctx.state) and not meaningful_evidence_cell(row):
-            errors.append(f"`plan.md` Requirements Coverage must include concrete completion evidence for `{rid}`")
+            continue
+        if len(rows) != 1:
+            errors.append(f"`plan.md` Requirements Coverage must include exactly one table row for `{rid}`")
+            continue
+        row = rows[0]
+        if len(row) < 2 or is_blank_or_placeholder(row[1]):
+            errors.append(f"`plan.md` Requirements Coverage plan cell for `{rid}` must not be empty or an obvious placeholder")
+        if is_v2(ctx.state) and (len(row) < 3 or is_blank_or_placeholder(row[2])):
+            errors.append(f"`plan.md` Requirements Coverage evidence cell for `{rid}` must not be empty or an obvious placeholder")
 
 
 def validate_review(ctx: Ctx, errors: list[str]) -> None:
@@ -372,10 +324,10 @@ def validate_review(ctx: Ctx, errors: list[str]) -> None:
         errors.append("`review.md` verdict must be `PASS` before goal execution")
     if norm(section(text, "## Blocking Issues")) not in BLOCKING_OK:
         errors.append("`review.md` Blocking Issues must say `No blocking issues` or `None`")
-    if norm(section(text, "## Flow Check")) not in FLOW_OK:
-        errors.append("`review.md` Flow Check must say there are no unreported relevant flow issues")
-    if norm(section(text, "## Question Depth Check")) not in QUESTION_DEPTH_OK:
-        errors.append("`review.md` Question Depth Check must say `No unresolved higher-level questions` or `None`")
+    if is_blank_or_placeholder(section(text, "## Flow Check")):
+        errors.append("`review.md` Flow Check must include a non-empty review result")
+    if is_blank_or_placeholder(section(text, "## Question Depth Check")):
+        errors.append("`review.md` Question Depth Check must include a non-empty review result")
     validate_review_language(text, errors)
 
 
@@ -393,6 +345,69 @@ def validate_completion(ctx: Ctx, phase: str, errors: list[str]) -> None:
         errors.append("completion requires `approved_plan_fingerprint: sha256:<hex>`")
     elif approved.removeprefix("sha256:") != plan_fp(ctx.request_dir):
         errors.append("completion requires approved_plan_fingerprint to match the current `plan.md`")
+
+
+def validate_completion_review(ctx: Ctx, required: bool, errors: list[str]) -> None:
+    text = read_md(ctx.request_dir / "review.md", "`review.md`", errors)
+    if not text:
+        return
+    completion_count = sum(line.strip() == "## Completion Review" for line in text.splitlines())
+    if completion_count == 0:
+        if required:
+            errors.append("`review.md` must include `## Completion Review` before Goal completion")
+        return
+    if completion_count != 1:
+        errors.append("`review.md` must include exactly one `## Completion Review` section")
+
+    need_heads(
+        text,
+        "review.md",
+        [
+            "## Completion Review",
+            "### Completion Plan Fingerprint",
+            "### Requirements Evidence",
+            "### Observable Outcome Evidence",
+            "### Completion Verdict",
+        ],
+        errors,
+    )
+    completion_fp = match_fp(
+        r"Completion Plan Fingerprint:\s*sha256:([0-9a-fA-F]{64})",
+        section(text, "### Completion Plan Fingerprint"),
+    )
+    current_fp = plan_fp(ctx.request_dir)
+    if not completion_fp:
+        errors.append("`review.md` Completion Review must include `Completion Plan Fingerprint: sha256:<hex>`")
+    elif completion_fp != current_fp:
+        errors.append("`review.md` Completion Plan Fingerprint is stale")
+
+    evidence = section(text, "### Requirements Evidence")
+    header = table_header(evidence)
+    if [norm(cell) for cell in header] != ["requirement", "actual evidence", "verdict"]:
+        errors.append("`review.md` Requirements Evidence header must be exactly `Requirement | Actual Evidence | Verdict`")
+    planned_ids = req_ids(section(read_file(ctx.request_dir / "plan.md"), "## Requirements Coverage"))
+    evidence_rows = table_rows(evidence)
+    evidence_ids = [row[0] for row in evidence_rows if row and re.fullmatch(r"REQ-\d{3}", row[0])]
+    for rid in planned_ids:
+        rows = [row for row in evidence_rows if row and row[0] == rid]
+        if len(rows) != 1:
+            errors.append(f"`review.md` Requirements Evidence must include exactly one row for `{rid}`")
+            continue
+        row = rows[0]
+        if len(row) < 2 or is_blank_or_placeholder(row[1]):
+            errors.append(f"`review.md` Actual Evidence for `{rid}` must not be empty or an obvious placeholder")
+        if len(row) < 3 or row[2].strip() != "PASS":
+            errors.append(f"`review.md` Requirements Evidence verdict for `{rid}` must be exactly `PASS`")
+    for rid in sorted(set(evidence_ids) - set(planned_ids)):
+        errors.append(f"`review.md` Requirements Evidence contains unknown requirement `{rid}`")
+
+    outcome = section(text, "### Observable Outcome Evidence")
+    if is_blank_or_placeholder(outcome):
+        errors.append("`review.md` Observable Outcome Evidence must not be empty or an obvious placeholder")
+    elif not HANGUL_RE.search(outcome):
+        errors.append("`review.md` Observable Outcome Evidence must include Korean body text")
+    if not exact_pass(section(text, "### Completion Verdict")):
+        errors.append("`review.md` Completion Verdict must be exactly `PASS`")
 
 
 def read_json(path: Path, label: str, errors: list[str]) -> dict[str, Any]:
@@ -439,13 +454,9 @@ def require_korean_sections(text: str, artifact: str, heads: list[str], errors: 
 
 
 def validate_review_language(text: str, errors: list[str]) -> None:
-    for heading, allowed in (
-        ("## Blocking Issues", BLOCKING_OK),
-        ("## Flow Check", FLOW_OK),
-        ("## Question Depth Check", QUESTION_DEPTH_OK),
-    ):
+    for heading in ("## Blocking Issues", "## Flow Check", "## Question Depth Check"):
         body = section(text, heading)
-        if body and norm(body) not in allowed and not HANGUL_RE.search(body):
+        if body and norm(body) not in REVIEW_FIXED_STATUSES and not HANGUL_RE.search(body):
             errors.append(f"`review.md` section `{heading}` must use Korean body text or an allowed fixed status")
     notes = section(text, "## Notes")
     if notes and not HANGUL_RE.search(notes):
@@ -456,18 +467,23 @@ def req_ids(text: str) -> list[str]:
     return sorted(set(re.findall(r"\bREQ-\d{3}\b", text)))
 
 
-def coverage_row(coverage: str, rid: str) -> list[str]:
+def coverage_rows(coverage: str, rid: str) -> list[list[str]]:
+    rows: list[list[str]] = []
     for line in coverage.splitlines():
         if rid not in line or "|" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if cells and cells[0] == rid:
-            return cells
-    return []
+            rows.append(cells)
+    return rows
 
 
 def coverage_header(coverage: str) -> list[str]:
-    for line in coverage.splitlines():
+    return table_header(coverage)
+
+
+def table_header(value: str) -> list[str]:
+    for line in value.splitlines():
         if "|" not in line:
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -476,72 +492,25 @@ def coverage_header(coverage: str) -> list[str]:
     return []
 
 
-def meaningful_outcome(value: str) -> bool:
-    prose = INLINE_CODE_RE.sub("", value).strip()
-    if len(prose) < 40 or not HANGUL_RE.search(prose) or GENERIC_OUTCOME_RE.fullmatch(prose):
-        return False
-    if (
-        PLAN_PLACEHOLDER_RE.search(prose)
-        or PLACEHOLDER_DEFERRAL_USAGE_RE.search(prose)
-        or has_inline_placeholder(value)
-    ):
-        return False
-    return bool(
-        OUTCOME_TARGET_RE.search(prose)
-        and OUTCOME_METHOD_RE.search(prose)
-        and OUTCOME_PROOF_RE.search(prose)
-    )
+def table_rows(value: str) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for line in value.splitlines():
+        if "|" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if not cells or norm(cells[0]) == "requirement" or all(re.fullmatch(r":?-+:?", cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return rows
 
 
-def meaningful_evidence_cell(row: list[str]) -> bool:
-    if len(row) < 3:
-        return False
-    evidence = row[2].strip()
-    prose = INLINE_CODE_RE.sub("", evidence).strip()
-    if len(prose) < 20 or evidence == "-":
-        return False
-    if (
-        PLAN_PLACEHOLDER_RE.search(prose)
-        or PLACEHOLDER_DEFERRAL_USAGE_RE.search(prose)
-        or has_inline_placeholder(evidence)
-    ):
-        return False
-    return bool(
-        EVIDENCE_SOURCE_RE.search(prose)
-        and EVIDENCE_TARGET_RE.search(prose)
-        and EVIDENCE_PROOF_RE.search(prose)
-    )
-
-
-def has_inline_placeholder(value: str) -> bool:
-    return any(PLACEHOLDER_CODE_RE.search(match.group(1).strip()) for match in INLINE_CODE_RE.finditer(value))
-
-
-def meaningful_plan_cell(row: list[str]) -> bool:
-    if len(row) < 2:
-        return False
-    plan = row[1].strip()
-    inline_placeholders = [
-        match
-        for match in INLINE_CODE_RE.finditer(plan)
-        if PLACEHOLDER_CODE_RE.search(match.group(1).strip())
-    ]
-    prose = INLINE_CODE_RE.sub("", plan)
-    if PLACEHOLDER_DEFERRAL_USAGE_RE.search(prose):
-        return False
-    regression_fix = bool(PLACEHOLDER_REGRESSION_FIX_RE.search(prose))
-    target_action = bool(PLACEHOLDER_TARGET_ACTION_RE.search(prose) or regression_fix)
-    plain_target = bool(
-        PLACEHOLDER_PLAIN_TARGET_RE.search(prose)
-        or (regression_fix and PLACEHOLDER_DESCRIBED_TARGET_RE.search(prose))
-    )
-    if inline_placeholders:
-        shared_literal_target = bool(PLACEHOLDER_TARGET_LABEL_RE.search(plan[inline_placeholders[-1].end() :]))
-        if not target_action or not (shared_literal_target or plain_target):
-            return False
-    if PLACEHOLDER_WORD_RE.search(prose) and not (plain_target and target_action):
-        return False
-    return bool(plan) and plan != "-" and not PLAN_PLACEHOLDER_RE.search(prose)
+def is_blank_or_placeholder(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped or stripped == "-":
+        return True
+    plain = INLINE_CODE_RE.sub(lambda match: match.group(1), stripped).strip()
+    plain = re.sub(r"^[-*]\s*", "", plain).strip().strip(".:。")
+    return bool(OBVIOUS_PLACEHOLDER_RE.fullmatch(plain))
 
 
 def exact_pass(value: str) -> bool:
@@ -602,6 +571,9 @@ def validate_goal_metadata(state: dict[str, Any], request_dir: Path, errors: lis
     if goal_status not in GOAL_STATUSES:
         errors.append(f"`state.json` goal_status `{goal_status}` is not allowed")
         return
+    if v2:
+        validate_v2_approval_metadata(state, goal_status, request_dir, errors)
+        return
     phase = metadata_phase(state)
     incompatible = (
         (phase == "plan" and goal_status != "pending")
@@ -619,9 +591,6 @@ def validate_goal_metadata(state: dict[str, Any], request_dir: Path, errors: lis
         )
     elif not v2 and goal_status in {"active", "completing", "completed"} and fingerprint.removeprefix("sha256:") != plan_fp(request_dir):
         errors.append("`state.json` goal_plan_fingerprint must match the current `plan.md`")
-    if not v2:
-        return
-    validate_v2_approval_metadata(state, goal_status, request_dir, errors)
 
 
 def validate_v2_approval_metadata(
@@ -630,19 +599,34 @@ def validate_v2_approval_metadata(
     request_dir: Path,
     errors: list[str],
 ) -> None:
+    phase = metadata_phase(state)
     approval_status = str(state.get("plan_approval_status") or "").strip()
     if approval_status not in PLAN_APPROVAL_STATUSES:
         errors.append("`state.json` v2 requests require plan_approval_status `pending` or `approved`")
-    if goal_status == "pending" and approval_status and approval_status != "pending":
-        errors.append("`state.json` v2 pending goal_status requires plan_approval_status `pending`")
+    elif (phase, approval_status, goal_status) not in ALLOWED_V2_STATES:
+        errors.append(
+            "`state.json` v2 phase, plan_approval_status, and goal_status combination is not allowed"
+        )
+
+    goal_fingerprint = str(state.get("goal_plan_fingerprint") or "").strip().lower()
     approved = str(state.get("approved_plan_fingerprint") or "").strip().lower()
+    if goal_status == "pending" and goal_fingerprint:
+        errors.append("`state.json` pending goal_status must not set `goal_plan_fingerprint`")
+    elif goal_status in {"active", "completing", "completed"} and not FINGERPRINT_RE.fullmatch(goal_fingerprint):
+        errors.append(
+            "`state.json` active/completing/completed goal_status requires `goal_plan_fingerprint: sha256:<hex>`"
+        )
     if approved and not FINGERPRINT_RE.fullmatch(approved):
         errors.append("`state.json` approved_plan_fingerprint must use `sha256:<hex>`")
-    if goal_status in {"active", "completing", "completed"} and not FINGERPRINT_RE.fullmatch(approved):
+    if approval_status == "pending" and goal_status == "pending" and approved:
+        errors.append("`state.json` initial pending approval must not set `approved_plan_fingerprint`")
+    if approval_status == "pending" and goal_status == "active" and not FINGERPRINT_RE.fullmatch(approved):
+        errors.append("`state.json` material replan must preserve `approved_plan_fingerprint: sha256:<hex>`")
+    if approval_status == "approved" and not FINGERPRINT_RE.fullmatch(approved):
         errors.append(
-            "`state.json` v2 active/completing/completed goal_status requires `approved_plan_fingerprint: sha256:<hex>`"
+            "`state.json` approved plan requires `approved_plan_fingerprint: sha256:<hex>`"
         )
-    elif approval_status == "approved" and goal_status in {"active", "completing", "completed"} and approved.removeprefix("sha256:") != plan_fp(request_dir):
+    elif approval_status == "approved" and approved.removeprefix("sha256:") != plan_fp(request_dir):
         errors.append("`state.json` approved_plan_fingerprint must match the current `plan.md` when approved")
 
 
