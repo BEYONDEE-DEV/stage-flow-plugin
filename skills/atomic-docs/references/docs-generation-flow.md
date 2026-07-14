@@ -13,19 +13,19 @@
 
 ## Responsibility
 
-This reference owns post-approval execution orchestration: Goal handoff, operation state, persistent agents, sequential bundles, preflight order, and progress handling. Operation-profile definitions belong to `refresh-flow.md`, semantic reviewer selection and rerun verdicts to `reviewer-perspectives.md`, and baseline eligibility to `source-baseline-and-change-plan.md`.
+This reference owns Atomic Docs operation state from bootstrap through post-approval execution, including Goal handoff, persistent agents, sequential bundles, preflight order, and progress handling. Bootstrap discovery and approval sequencing belong to `criteria-flow.md`, operation-profile definitions to `refresh-flow.md`, semantic reviewer selection to `reviewer-perspectives.md`, and baseline eligibility to `source-baseline-and-change-plan.md`.
 
 ## Atomic Docs Goal Gate
 
-Bootstrap criteria drafting and criteria-review/revision do not require a Codex Goal. That limited scope may create or update only `.stageflow/atomic-docs.json` and `<doc-root>/project/atomization-criteria.md`.
+Bootstrap criteria drafting, domain-proposal discovery, and bootstrap review/revision do not require a Codex Goal. Accepted bootstrap scope may create or update `.stageflow/atomic-docs.json`, `<doc-root>/project/atomization-criteria.md`, Atomic Docs request state, `work-state.json`, and a domain-only `inventory.md`.
 
-After criteria approval and accepted docs write scope, call `create_goal` before creating project docs, inventory, atom files, graph edges, domain subagents, review output, or baseline metadata. The Goal objective must name the criteria path, docs root, accepted write scope, implementation-context selection requirement, applicable domain/risk/project review gates, and completion condition.
+After the combined approval of criteria, source-supported domain boundaries, and selected domain write scope, call `create_goal` before creating detailed `evidence.md`, Atom/context candidates, project docs, atom files, graph edges, domain writer/reviewer bundles, post-write review output, or baseline metadata. The Goal objective must name the criteria path, docs root, approved tentative domain paths, implementation-context selection requirement, applicable domain/risk/project review gates, and completion condition.
 
-If Goal creation is unavailable or fails, stop before docs generation. Complete the Goal only after the accepted operation satisfies every applicable review and validation gate. A reviewer that has not run, or an in-scope review FAIL that still needs correction, is not a Goal-blocked state.
+If Goal creation is unavailable or fails, preserve the approved criteria, domain paths, accepted scope, review PASS, and empty Goal link; stop before docs generation and retry the same Goal objective without asking for approval again. Complete the Goal only after the accepted operation satisfies every applicable review and validation gate. A reviewer that has not run, or an in-scope review FAIL that still needs correction, is not a Goal-blocked state.
 
 ## Atomic Docs Operation State
 
-After criteria approval and scope acceptance, create or resume atomic-docs-owned operation state:
+After the user accepts project-wide or targeted bootstrap discovery, create or resume atomic-docs-owned operation state:
 
 ```text
 .stageflow/atomic-docs/index.json
@@ -38,12 +38,16 @@ Keep each state file's ownership narrow:
 
 - `index.json`: request lookup only
 - `sessions/<session-id>/current.json`: the active request pointer only
-- `requests/<request-id>/state.json`: request lifecycle and session/Goal links only
-- `requests/<request-id>/work-state.json`: the only owner of operation profile, accepted scope, `source_commit_observed`, context selection and ownership prepass, bundle queue, active attempt, persistent agent IDs, risk triggers, changed artifacts, reviewer verdicts, finding fingerprints, temporary evidence paths, integration/baseline state, and carry-forward basis
+- `requests/<request-id>/state.json`: request lifecycle and session/Goal links only; the Goal link stays empty before combined approval and Goal success
+- `requests/<request-id>/work-state.json`: the only owner of operation profile, bootstrap discovery scope, domain candidate status, accepted scope, `source_commit_observed`, context selection and ownership prepass, bundle queue, active attempt, persistent agent IDs, risk triggers, changed artifacts, reviewer verdicts, finding fingerprints, temporary evidence paths, integration/baseline state, and carry-forward basis
 
 Do not duplicate queue position, source basis, agent identity, or reviewer state across these files. This state is not a Stageflow request, managed docs output, or direct implementation evidence.
 
-Temporary `inventory.md`, `evidence.md`, compact domain review files, and `post-write-review.md` may live beside request state. Create `inventory.md` and `evidence.md` only after criteria approval and scope acceptance. Pin evidence to `source_commit_observed` and reuse it as a source-navigation index. Delete or ignore temporary inventory/evidence after completion unless the accepted scope explicitly retains a synced project coverage index.
+Before combined approval, keep accepted scope and execution profile empty and use `inventory.md` only for the domain proposal contract in `project-documents-and-inventory.md`; do not create queues, detailed evidence, or Atom candidates. `work-state.json` is the authoritative owner of domain candidate status; the inventory status column only mirrors it for user review. On approval, set only user-selected valid tentative domain paths to `approved` and accepted scope. Keep unselected and `needs_confirmation` domains outside that scope. Select `initial-baseline` only when baseline creation was included in the approved action and every required project domain is approved; partial approval selects `targeted` and cannot advance the global baseline.
+
+After Goal success, expand the same `inventory.md` for approved-domain context candidates and create `evidence.md` pinned to `source_commit_observed`. Temporary evidence, compact domain review files, and `post-write-review.md` may then live beside request state. Delete or ignore temporary inventory/evidence after completion unless the accepted scope explicitly retains a synced project context index.
+
+Atomic Docs request state remains owned by Atomic Docs even when a caller uses Stageflow, Simple Workflow, or another workflow. A caller session may link to the request but must not duplicate or replace its discovery scope, domain status, accepted scope, queue, or Goal link.
 
 Only Atomic Impl or an explicit docs/code compliance operation adds `## 구현 검증` to the linked request's `post-write-review.md`. Record docs and implementation basis once, followed by one row per changed in-scope required AID with `관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap`.
 
@@ -53,7 +57,7 @@ For partial or targeted docs work, record the inspected source commit as `source
 
 ## Required Subagent Authorization
 
-Accepted bootstrap scope authorizes criteria-review and revision cycles. After criteria approval, accepted docs scope, and Goal handoff, the writer, required development-quality reviewer, applicable risk/contract reviewer, applicable integration/baseline reviewer, and their reruns are authorized operation steps and do not require separate approval merely to run.
+Accepted bootstrap scope authorizes domain-proposal discovery plus criteria and boundary review/revision cycles. After combined approval and Goal handoff, the writer, required development-quality reviewer, applicable risk/contract reviewer, applicable integration/baseline reviewer, and their reruns are authorized operation steps and do not require separate approval merely to run.
 
 Ask again only when a required step needs deletion, migration, push, an external service call, or a blocker cannot PASS without user judgment. Do not stop because a required subagent was not named again.
 
@@ -65,7 +69,11 @@ For multi-domain or `initial-baseline` work, run the lightweight ownership/evide
 
 Before writing each selected bundle, classify and record the applicable risk triggers from `service-logic-coverage.md`. Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself when no selected context or approved change relies on it. Do not invent a risk trigger merely to add review, and do not omit one from selected high-impact context to save time.
 
-Record a compact domain-grouped write plan before the first writer. Report domain count, bundle count, risk-bundle count, shared-owner count, and expected final-review type in a short non-blocking user update. Do not invent an ETA. When every path and action stays inside accepted docs scope and boundaries, prior scope approval authorizes the plan. Ask again only for expanded source/docs scope, an ambiguous or moved boundary requiring user judgment, deletion, migration, or another protected action.
+Record a compact domain-grouped write plan before the first writer. Report domain count, bundle count, risk-bundle count, shared-owner count, and expected final-review type in a short non-blocking user update. Do not invent an ETA. When every path and action stays inside accepted docs scope and approved boundaries, prior scope approval authorizes the plan.
+
+Before Goal creation, an affected boundary review and user approval may replace accepted domain paths. After the Goal becomes active, its approved domain paths and accepted scope are immutable: do not add a newly discovered domain, moved/merged path, or scope-expanding boundary to its queue. A same-path boundary clarification may continue after affected review and user approval only when it preserves the Goal outcome and scope. Put independent new scope in a follow-up Atomic Docs request/Goal after the active Goal finishes. If a changed boundary invalidates an active in-scope path, stop that bundle and ask whether to complete unaffected scope or end the current operation before opening the replacement request. Never create a second Goal while the first is active.
+
+Ask again for expanded source/docs scope, an ambiguous or moved boundary requiring user judgment, deletion, migration, or another protected action.
 
 Create one writer and one independent development-quality reviewer for the operation and record their agent IDs in `work-state.json`. Reuse them for every sequential selected bundle. The writer uses the shared evidence index, reopens source when needed, and produces or revises selected inventory rows, atom files, selective AIDs, meaningful graph candidates, and project-document impacts. The reviewer receives managed docs, source/evidence, criteria, and operation state, but not the writer's private reasoning conversation.
 

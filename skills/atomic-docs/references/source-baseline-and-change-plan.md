@@ -35,7 +35,7 @@ Advance an existing trusted baseline through `baseline-diff-refresh` without rer
 
 Partial or targeted operations must not create, replace, or advance baseline metadata. Record their inspected commit as `source_commit_observed` in `.stageflow/atomic-docs/requests/<request-id>/work-state.json` and report the result as partial scope. That operation-local value is audit/resume state, not a global freshness claim.
 
-Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide context exploration, selected-claim source fidelity, applicable risk review, and integration consistency. Never describe baseline readiness as complete product-behavior documentation.
+Do not create new provisional atoms for `candidate`, unselected, or `needs_confirmation` domains. Existing legacy provisional atoms may be inspected only under an accepted inspection or migration scope and cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide context exploration, selected-claim source fidelity, applicable risk review, and integration consistency. Never describe baseline readiness as complete product-behavior documentation.
 
 ## Change Scope Inputs
 
@@ -59,6 +59,6 @@ A compact change plan groups by domain and lists only applicable items from the 
 - global baseline or operation-local `source_commit_observed` actions under the Source Baseline contract above
 - unresolved ownership, boundary, protected-action, or user decisions that prevent the planned write
 
-The compact change plan defines the paths and write actions for the current docs operation. If every item is inside the user-accepted docs scope and follows approved criteria, that scope acceptance authorizes source-supported new domains and no second approval is required. Stop when the plan expands source/docs scope, moves/deletes/merges an existing boundary, leaves an ambiguous boundary requiring user judgment, performs migration, changes config/baseline outside the accepted action, or otherwise exceeds prior authorization.
+The compact change plan defines the paths and write actions for the current docs operation. If every item stays inside the user-approved domain boundaries and docs scope and follows approved criteria, prior scope approval authorizes the plan without a second approval. A newly found domain or materially changed responsibility, exclusion, or adjacent boundary requires affected boundary review and user approval before it enters scope. Stop when the plan expands source/docs scope, moves/deletes/merges an existing boundary, leaves an ambiguous boundary requiring user judgment, performs migration, changes config/baseline outside the accepted action, or otherwise exceeds prior authorization.
 
 Inference, confirmation, conflict, planned-change, and gap classification follow `change-judgment-policy.md`. The change plan names the affected decision and required action but does not redefine controlled labels or their precedence.

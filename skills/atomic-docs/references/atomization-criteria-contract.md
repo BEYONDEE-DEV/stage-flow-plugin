@@ -25,7 +25,7 @@ For new or explicitly revised Korean criteria, use exactly these visible section
 - `작성과 검토 기준`
 - `프로젝트 예외와 미해결 결정`
 
-Explain internal identifiers in plain language before names such as `atom_key`, AID, `target_key`, or judgment labels. While draft, record `승인 상태: 초안, 사용자 승인 대기`. After approval, record `승인 상태: 사용자 승인 완료` and remove obsolete approval-waiting notes.
+Explain internal identifiers in plain language before names such as `atom_key`, AID, `target_key`, or judgment labels. While draft, record `승인 상태: 초안, 사용자 승인 대기`. After the combined criteria/domain/scope approval, record `승인 상태: 사용자 승인 완료` and remove obsolete approval-waiting notes.
 
 ## Durable Content
 
@@ -54,7 +54,7 @@ Do not put any of the following in durable criteria:
 - bundle queues, agent identities, reviewer results, Goal status, baseline readiness, cache paths, or current-run progress
 - subagent instruction sheets or repeated judgment-label catalogs
 
-After criteria approval and docs-scope acceptance, put selected domain/context candidates, source evidence, owners, risk triggers, and queue state in `.stageflow/atomic-docs/requests/<request-id>/inventory.md`, `evidence.md`, or `work-state.json`. Preserve a reviewed durable domain boundary in its domain context atom. Keep a retained project context index only when the user explicitly requests it.
+Before combined approval, put only the domain proposal, its minimal representative source locators, and candidate status in `.stageflow/atomic-docs/requests/<request-id>/inventory.md` and `work-state.json`. After approval and Goal handoff, expand only approved domains into Atom/context candidates, detailed `evidence.md`, owners, risk triggers, and queue state. Preserve a reviewed durable domain boundary in its domain context atom. Never copy the operation candidate map into criteria, and keep a retained project context index only when the user explicitly requests it.
 
 An existing approved criteria file that contains the older maps or perspective table remains a valid superset. Do not migrate or delete that content automatically. New criteria and user-approved criteria revisions use the compact contract; unrelated docs work may read the durable rules and ignore legacy discovery/progress sections.
 
@@ -69,6 +69,6 @@ The independent criteria reviewer checks only:
 - operation-local discovery, candidates, evidence, and progress have not leaked into the durable file
 - no unsupported inference, example leakage, migration, deletion, or external action is claimed
 
-Do not inspect the whole project or require domain candidates, atom candidates, perspective rows, source coverage, aggregate dispositions, or graph completeness for criteria PASS. Inspect source only when a user-stated criterion names a specific code boundary and that narrow check is needed to understand the rule.
+Do not inspect the whole project or require domain candidates, atom candidates, perspective rows, source coverage, aggregate dispositions, or graph completeness for criteria-structure PASS. That structural verdict is separate from the source-supported domain-proposal review required by `criteria-flow.md` and `source-convention-and-domain-policy.md`.
 
 Any violation of these checks is criteria-review FAIL. PASS means the criteria are structurally ready for user review, not user approval. Revision cycles and approval handoff follow `criteria-flow.md`.

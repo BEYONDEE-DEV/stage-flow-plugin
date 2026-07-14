@@ -92,6 +92,6 @@ Apply finding fields, label precedence, and AID-or-owning-section evidence from 
 
 ## Atomic Docs Goal Boundary
 
-The Codex Goal after criteria approval is an execution scope for the accepted docs operation. It does not replace criteria approval, docs write scope, atom content, judgment labels, source evidence, user review, or baseline metadata.
+The Codex Goal after combined criteria/domain/scope approval is an execution scope for the accepted docs operation. It does not replace the approved criteria, domain boundaries, selected write scope, atom content, judgment labels, source evidence, user review, or baseline metadata.
 
 Do not write Goal status into atom meaning. If execution is waiting or blocked, preserve that state in operation state or the change plan. A correctable review FAIL is not Goal-blocked; revise and rerun the applicable reviewer first.

@@ -44,7 +44,7 @@ Keep source convention and service logic judgment separate:
 
 ## Domain Discovery Policy
 
-Choose domain paths from project evidence, not from a fixed project-specific list. For targeted work, inspect the requested behavior and adjacent ownership or shared-contract surfaces. Do not require project-wide domain discovery unless the accepted operation is full-project or seeks a global baseline.
+Choose domain paths from project evidence, not from a fixed project-specific list. Before first approval, project-wide bootstrap discovery considers every project-native feature area only to domain-boundary depth; targeted bootstrap discovery inspects the requested behavior and adjacent ownership or shared-contract surfaces. After approval, detailed discovery stays inside approved domains unless a newly found boundary is separately reviewed and approved.
 
 Use this priority order:
 
@@ -81,6 +81,8 @@ Each operation-local domain candidate must distinguish:
 - `source feature root`: the package/root/surface where the source-observed behavior appears
 - `optional capability alias`: a proposed business capability label, if any
 - `promotion reason`: why the alias should replace or sit above project-native feature language
+- `durable responsibility`, important exclusion, and adjacent-domain boundary
+- the smallest representative source locator plus one concise observed-boundary summary
 - `approval state`: `candidate`, `approved`, `rejected`, or `needs_confirmation`
 
 AI-renamed domain labels are not valid default domain names. If the source uses a feature root such as `auth`, `commerce`, `refund`, `resource`, `ticketgroup`, `web`, or `admin`, an operation inventory must not silently rename that root into a new abstract capability label such as `sales-fulfillment` unless one of these bases is recorded:
@@ -95,7 +97,7 @@ Broad source feature roots such as an `admin` root are not automatically valid d
 
 Prefer project/user business language for the promoted aggregate. If the source behavior is about managing, registering, approving, issuing, settling, or recovering a product-visible thing, do not default to technical labels such as `configuration` only because the methods or DTOs sit in a setup/admin area. Keep technical names as source evidence or optional aliases unless the project or user actually uses them as the domain language.
 
-Atom candidates must point their owning domain/category path at an approved or candidate hybrid boundary. Do not point atom candidates at an AI-renamed label that lacks user/source trace or promotion evidence.
+After combined approval and Goal handoff, Atom candidates must point their owning domain/category path at an approved hybrid boundary. Do not create Atom candidates for `candidate`, unselected, `rejected`, or `needs_confirmation` domains, and do not point them at an AI-renamed label that lacks user/source trace or promotion evidence.
 
 ## Domain Boundary Quality Gate
 
@@ -107,16 +109,19 @@ A first-level domain is valid only when it describes a durable ownership boundar
 - an integration contract
 - a shared policy or platform concern
 
-Before creating or moving a domain, the domain context or change plan must state the applicable navigation context:
+Before first approval, the operation-local domain proposal must state the applicable navigation context:
 
 - the durable responsibility the domain owns
 - an important excluded capability when needed to prevent confusion
 - the adjacent-domain boundary
 - why the atom files in the domain tend to change together
+- representative source locators and an observed-boundary summary, not identifiers alone
 
-Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, the development reviewer must FAIL it unless the operation inventory records it as a rejected broad grouping or a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies.
+The bootstrap domain-boundary reviewer must FAIL a proposal that relies only on identifiers, uses a broad or generic grouping as an approvable domain, hides an obvious durable lower-level owner, or contradicts its stated responsibility, exclusion, or adjacent boundary. Mark a boundary that needs user ownership judgment as `needs_confirmation`; it blocks only that domain while independently valid domains remain eligible for approval.
 
-The development reviewer must also FAIL a bundle that rejects a broad source root while hiding an obvious high-value lower-level owner or shared contract needed to understand the proposed docs. It must not require a candidate, split, or disposition for every route/controller/service/policy/persistence/workflow surface underneath that root.
+Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. Record a broad candidate as `rejected` and propose concrete durable boundaries when source supports them. Do not require every route, service, policy, or persistence surface to become a proposal.
+
+After writing begins, the development reviewer rechecks a boundary when its meaning changes and must FAIL a bundle that hides an important owner or shared contract needed to understand its stated scope. It does not repeat unchanged bootstrap review or require a candidate, split, or disposition for every source surface.
 
 ## Core Business Term Coverage Gate
 

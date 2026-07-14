@@ -18,16 +18,16 @@ A full refresh is a first-class operation when the user explicitly asks for it. 
 For refresh or targeted docs work:
 
 1. Confirm the configured docs root and source root.
-2. Inspect changed or targeted source areas far enough to identify useful implementation context and verify claims selected for documentation. Include DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they clarify an important rule, contract, owner, constraint, or approved requirement. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files when they do not affect selected context.
+2. If first setup lacks combined approval, route to `criteria-flow.md` and stop after its domain-only proposal. Otherwise, after accepted scope and Goal handoff, inspect changed or targeted source areas far enough to identify useful implementation context and verify claims selected for documentation. Include DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they clarify an important rule, contract, owner, constraint, or approved requirement. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files when they do not affect selected context.
 3. Inspect existing project, common, and domain context before assigning source behavior to a domain.
-4. Use source-to-atom seed discovery to find likely domain and atom candidates.
+4. Use source-to-atom seed discovery only inside the approved domain paths and after Goal handoff to find context and Atom candidates.
 5. Follow criteria, Goal, inventory, writer/reviewer, graph, source-baseline, and change-plan rules from the sibling references below.
 
 ## Operation Profiles
 
-Select one profile before source discovery and record it in operation state:
+For an existing approved docs set, select one profile before detailed source discovery and record it in operation state. For first setup, record only project-wide or targeted bootstrap discovery scope before approval, then select the execution profile from the approved domain paths. Project-wide bootstrap discovery does not imply `initial-baseline`: partial domain approval selects `targeted` and cannot create or advance a global baseline.
 
-- `initial-baseline`: no trusted global baseline exists and the accepted scope is the whole project. Consider every project-native feature area, select durable high-value context bundles, run the ownership/evidence prepass and project-wide reviewer, and create baseline metadata only after every selected bundle PASSes. Do not turn source exploration into a behavior-disposition inventory.
+- `initial-baseline`: no trusted global baseline exists, baseline creation was explicitly included in the combined approval, and the accepted scope contains every required project domain. Consider every project-native feature area, select durable high-value context bundles, run the ownership/evidence prepass and project-wide reviewer, and create baseline metadata only after every selected bundle PASSes. Do not turn source exploration into a behavior-disposition inventory.
 - `baseline-diff-refresh`: a trusted global baseline exists and the user wants it advanced. Start from `git diff <source_commit>..HEAD`, seed impacted atoms, expand through shared ownership/graph, process affected bundles only, then run the project-wide reviewer before updating the baseline. Record the prior/new commits, changed source surfaces, affected bundles, and rationale for carrying forward each unaffected bundle class.
 - `change-impact-refresh`: inspect a source or requirement change and update affected bundles without claiming a new global baseline. Use diff/seed/graph impact and leave global baseline metadata unchanged.
 - `targeted`: process only the user-accepted domain/feature plus adjacent contracts required for ownership and conflict judgment. Do not widen to project-wide work automatically.
@@ -54,7 +54,7 @@ If a new domain, common atom, category/subdomain path, or domain move is plausib
 
 Read these sibling references directly from `SKILL.md` as needed:
 
-- `criteria-flow.md` for the first setup step, `project/atomization-criteria.md`, Criteria Structure Review Gate, criteria approval summary, and criteria approval handoff.
+- `criteria-flow.md` for first setup, domain-boundary-depth discovery, bootstrap review, and the combined criteria/domain/scope approval handoff.
 - `docs-generation-flow.md` for Atomic Docs Goal Gate, sequential domain bundles, conditional risk review, and conditional project-wide review.
 - `reviewer-perspectives.md` for the required development-quality reviewer, conditional risk/contract reviewer, and project-wide integration/baseline reviewer.
 - `project-documents-and-inventory.md` for `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, `project/source-convention.md`, and service logic inventory rules.

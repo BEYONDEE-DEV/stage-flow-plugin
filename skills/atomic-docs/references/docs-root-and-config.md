@@ -24,13 +24,13 @@ When explaining docs-root setup to a user, describe what will happen before nami
 - `docs_root` and managed docs root mean `문서 저장 위치`.
 - `.stageflow/atomic-docs.json` is the `atomic docs 설정 파일`.
 
-For a first setup where the user chose repository storage and `docs`, explain the scope as: atomic docs를 처음 설정하는 단계이며, 실제 atom 문서를 쓰기 전에 문서 저장 위치와 문서 작성 기준 초안만 준비한다. Then identify the concrete paths: the config file is `.stageflow/atomic-docs.json`, and the draft criteria file is `<doc-root>/project/atomization-criteria.md`.
+For a first setup where the user chose repository storage and `docs`, explain the scope as: atomic docs를 처음 설정하는 단계이며, 실제 atom 문서를 쓰기 전에 문서 저장 위치와 문서 작성 기준 초안을 준비하고 소스를 도메인 경계 수준으로 살펴 도메인 구성을 제안한다. Then identify the concrete config and criteria paths; explain the operation-local domain proposal in user language before any internal state path.
 
 ## Configuration File
 
 Persist the confirmed root and storage mode in target-project config at `.stageflow/atomic-docs.json` only after the user has accepted the docs-root setup scope and config write. This file is project/plugin configuration, not a Stageflow request artifact and not docs refresh evidence.
 
-If the current user request explicitly selects a storage mode, selects a managed docs root, and asks to start, redo, regenerate, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/atomic-docs.json`. That bootstrap acceptance does not authorize any other docs writes except the paired draft criteria document allowed by `criteria-flow.md`.
+If the current user request explicitly selects a storage mode, selects a managed docs root, and asks to start, redo, regenerate, or recreate atomic docs, treat that request as accepting the docs-root setup scope and config write for `.stageflow/atomic-docs.json`. That bootstrap acceptance authorizes the paired criteria draft and operation-local domain proposal allowed by `criteria-flow.md`, but no other managed docs.
 
 Required fields:
 

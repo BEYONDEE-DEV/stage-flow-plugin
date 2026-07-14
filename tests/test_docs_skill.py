@@ -90,7 +90,7 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-        self.assertIn("owns criteria bootstrap sequencing", criteria_flow)
+        self.assertIn("owns bootstrap sequencing", criteria_flow)
         self.assertIn("normative owner of the small durable criteria", criteria_contract)
         self.assertNotIn("FAIL only for missing or contradictory durable rules", criteria_flow)
         self.assertIn("The independent criteria reviewer checks only", criteria_contract)
@@ -105,7 +105,10 @@ class DocsSkillTests(unittest.TestCase):
         self.assertIn("Do not create or advance baseline metadata", project_flow)
         self.assertIn("normative owner of source-convention content", source_policy)
 
-        self.assertIn("owns post-approval execution orchestration", generation_flow)
+        self.assertIn(
+            "owns Atomic Docs operation state from bootstrap through post-approval execution",
+            generation_flow,
+        )
         self.assertNotIn("new atom, `atom_key`, `Intent`", generation_flow)
         self.assertIn("normative owner of semantic reviewer selection", reviewer_policy)
         self.assertIn("normative owner of global source-baseline schema", baseline_policy)
@@ -161,7 +164,7 @@ class DocsSkillTests(unittest.TestCase):
             "The independent criteria reviewer checks only:": "atomization-criteria-contract.md",
             "project/atomization-criteria-atom.md` is a legacy path": "atomic-document-contract.md",
             "project-goal.md` treats docs config, baseline/cache paths": "project-documents-and-inventory.md",
-            "Select one profile before source discovery": "refresh-flow.md",
+            "For an existing approved docs set, select one profile before detailed source discovery": "refresh-flow.md",
             "| Change after review | Required rerun |": "reviewer-perspectives.md",
             "Create the first baseline only when": "source-baseline-and-change-plan.md",
             "Document until the applicable questions can be answered": "service-logic-coverage.md",
@@ -254,6 +257,7 @@ class DocsSkillTests(unittest.TestCase):
                 "문서 저장 위치",
                 "atomic docs 설정 파일",
                 "문서 작성 기준 초안",
+                "소스를 도메인 경계 수준으로 살펴 도메인 구성을 제안",
                 "Do not reduce this message to raw",
             ),
         )
@@ -455,6 +459,7 @@ class DocsSkillTests(unittest.TestCase):
 
     def test_compact_criteria_contains_only_durable_rules(self) -> None:
         text = refs("atomization-criteria-contract.md", "criteria-flow.md")
+        skill = read(SKILL)
         for heading in (
             "목적과 승인 상태",
             "문서 저장 위치와 적용 범위",
@@ -478,8 +483,12 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
         self.assertNotIn("관점 | 적용 상태 | 프로젝트 근거/후보", text)
+        self.assertIn(
+            "the criteria file owns only its own draft/approved marker",
+            skill,
+        )
 
-    def test_domain_and_atom_discovery_start_after_criteria_approval(self) -> None:
+    def test_domain_proposal_precedes_approval_and_atom_discovery_follows(self) -> None:
         text = refs(
             "atomization-criteria-contract.md",
             "criteria-flow.md",
@@ -490,31 +499,53 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Do not inspect the whole project",
-                "After criteria approval and docs-scope acceptance",
-                "first place where source-derived domain and atom candidates are recorded",
-                "do not copy this candidate map into criteria",
+                "project-wide bootstrap discovery considers every project-native feature area only to domain-boundary depth",
+                "first place where source-derived domain candidates are recorded; Atom candidates still do not exist",
+                "Do not create `evidence.md`, candidate `atom_key` values",
+                "After combined approval and Goal handoff, expand only approved domains",
+                "Never copy the candidate map into criteria",
                 "project-native name",
                 "concrete durable responsibilities",
             ),
         )
 
-    def test_criteria_review_and_user_handoff_are_gated(self) -> None:
+    def test_bootstrap_review_and_combined_user_handoff_are_gated(self) -> None:
         text = read(REFS / "criteria-flow.md")
         assert_all(
             self,
             text,
             (
-                "one independent criteria reviewer",
-                "Reuse that reviewer for revision cycles",
-                "Continue until PASS",
-                "PASS means ready for user review; it does not approve the criteria",
+                "one independent bootstrap reviewer",
+                "reuse it for revision cycles",
+                "until both PASS",
+                "do not approve either one",
                 "문서 작성 기준의 핵심 원칙",
-                "이 프로젝트에만 적용할 예외",
-                "아직 결정하지 못해 승인을 막는 내용",
-                "지금 승인하면 허용되는 작업과 아직 시작되지 않은 작업",
-                "actual domain candidates, atom candidates, and source evidence will be prepared after",
-                "문서 작성 기준 승인은 완료됐고, 아직 실제 서비스 로직 문서는 작성하지 않았다",
+                "도메인 후보별 책임, 제외 범위, 인접 경계와 대표 소스 근거",
+                "승인 가능한 도메인과 소유권 결정이 필요한 도메인",
+                "실제로 작성할 도메인 선택",
+                "criteria, source-supported domain boundaries, and selected domain write scope",
+                "Partial approval is valid",
+                "문서 작성 기준과 선택한 도메인 경계는 승인됐고, 아직 실제 Atom 문서는 작성하지 않았다",
+                "Do not ask for the same write scope again",
+            ),
+        )
+
+    def test_unresolved_domain_isolated_from_approved_domain_scope(self) -> None:
+        text = refs(
+            "criteria-flow.md",
+            "source-convention-and-domain-policy.md",
+            "docs-generation-flow.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "update that domain to `needs_confirmation` in `work-state.json`",
+                "blocks only that domain",
+                "independently valid domains remain eligible for approval",
+                "put only their approved tentative domain paths in accepted scope",
+                "Keep unselected and `needs_confirmation` domains outside that scope",
+                "Do not create Atom candidates for `candidate`, unselected, `rejected`, or `needs_confirmation` domains",
             ),
         )
 
@@ -758,9 +789,13 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "operation-local by default",
-                "lightweight operation inventory",
+                "Pre-Approval Domain Proposal",
+                "first place where source-derived domain candidates are recorded",
+                "도메인 후보 | 책임 | 제외 범위 | 인접 경계 | 대표 소스 근거 | 상태/미해결 질문",
+                "Do not add `atom_key`, AID, split proposals",
+                "Post-Approval Context Inventory",
+                "After combined approval and Goal handoff",
                 "grouped by durable domain and selected implementation-context candidate",
-                "first place where source-derived domain and atom candidates are recorded",
                 "Do not require every inventory row",
                 "Do not create one inventory row per route",
                 "candidate or final owning `atom_key`",
@@ -1094,7 +1129,7 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Accepted bootstrap scope authorizes criteria-review and revision cycles",
+                "Accepted bootstrap scope authorizes domain-proposal discovery plus criteria and boundary review/revision cycles",
                 "do not require separate approval merely to run",
                 "deletion, migration, push, an external service call",
                 "Do not stop because a required subagent was not named again",
@@ -1112,7 +1147,9 @@ class DocsSkillTests(unittest.TestCase):
                 "lists only applicable items",
                 "Do not add placeholder rows",
                 "prior scope approval authorizes the plan",
-                "scope acceptance authorizes source-supported new domains",
+                "user-approved domain boundaries",
+                "newly found domain",
+                "requires affected boundary review and user approval",
                 "expands source/docs scope",
                 "moves/deletes/merges an existing boundary",
                 "ambiguous boundary requiring user judgment",
@@ -1125,12 +1162,83 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Bootstrap criteria drafting and criteria-review/revision do not require a Codex Goal",
-                "call `create_goal` before creating project docs, inventory, atom files, graph edges",
+                "Bootstrap criteria drafting, domain-proposal discovery, and bootstrap review/revision do not require a Codex Goal",
+                "call `create_goal` before creating detailed `evidence.md`, Atom/context candidates",
+                "approved tentative domain paths",
                 "implementation-context selection requirement",
                 "applicable domain/risk/project review gates",
-                "If Goal creation is unavailable or fails, stop before docs generation",
+                "If Goal creation is unavailable or fails, preserve the approved criteria",
+                "retry the same Goal objective without asking for approval again",
                 "Complete the Goal only after",
+            ),
+        )
+
+    def test_bootstrap_state_transitions_into_approved_goal_scope(self) -> None:
+        text = read(REFS / "docs-generation-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "the Goal link stays empty before combined approval and Goal success",
+                "the only owner of operation profile, bootstrap discovery scope, domain candidate status, accepted scope",
+                "`work-state.json` is the authoritative owner of domain candidate status",
+                "the inventory status column only mirrors it for user review",
+                "Before combined approval, keep accepted scope and execution profile empty",
+                "set only user-selected valid tentative domain paths to `approved` and accepted scope",
+                "After Goal success, expand the same `inventory.md`",
+                "A caller session may link to the request but must not duplicate or replace",
+            ),
+        )
+
+    def test_first_setup_stops_before_atom_seed_discovery(self) -> None:
+        text = read(REFS / "refresh-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "If first setup lacks combined approval, route to `criteria-flow.md` and stop after its domain-only proposal",
+                "after accepted scope and Goal handoff",
+                "Use source-to-atom seed discovery only inside the approved domain paths and after Goal handoff",
+            ),
+        )
+
+    def test_domain_candidate_status_has_one_authoritative_owner(self) -> None:
+        text = refs("criteria-flow.md", "project-documents-and-inventory.md")
+        assert_all(
+            self,
+            text,
+            (
+                "update that domain to `needs_confirmation` in `work-state.json`, then synchronize the inventory projection",
+                "Any status mismatch is a bootstrap review FAIL",
+                "`work-state.json` is authoritative for `candidate|approved|rejected|needs_confirmation`",
+                "inventory status column is a user-review projection",
+            ),
+        )
+
+    def test_active_goal_scope_cannot_expand_in_place(self) -> None:
+        text = read(REFS / "docs-generation-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "its approved domain paths and accepted scope are immutable",
+                "A same-path boundary clarification may continue",
+                "Put independent new scope in a follow-up Atomic Docs request/Goal",
+                "Never create a second Goal while the first is active",
+            ),
+        )
+
+    def test_partial_project_wide_approval_becomes_targeted_execution(self) -> None:
+        text = refs("criteria-flow.md", "docs-generation-flow.md", "refresh-flow.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Project-wide bootstrap discovery does not imply `initial-baseline`",
+                "partial domain approval selects `targeted`",
+                "cannot create or advance a global baseline",
+                "every required project domain is approved",
+                "baseline creation was explicitly included in the combined approval",
             ),
         )
 
@@ -1154,6 +1262,7 @@ class DocsSkillTests(unittest.TestCase):
                 "retained managed-doc claims were reviewed at that revision",
                 "does not mean every product behavior, field, branch, state, or failure is documented",
                 "Baseline PASS does not mean product policy approval",
+                "Do not create new provisional atoms for `candidate`, unselected, or `needs_confirmation` domains",
             ),
         )
         self.assertIn("or partial scope are invalid", validation)

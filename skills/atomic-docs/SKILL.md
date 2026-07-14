@@ -14,11 +14,12 @@ Create and maintain source-based project documentation that gives developers use
 - Persist the accepted storage mode and managed docs root in `.stageflow/atomic-docs.json`. Explain storage and write scope in plain user language before showing config keys or paths.
 - Keep managed docs inside the configured docs root. Keep resumable operation state under `.stageflow/atomic-docs/`; it is not managed docs output or direct implementation evidence.
 - Do not create a submodule, remote, docs directory, migration, generated docs set, or baseline outside an accepted write action.
-- Make `<doc-root>/project/atomization-criteria.md` the first managed-docs write when criteria are needed. Bootstrap acceptance may authorize only config and the criteria draft.
-- Run one lightweight criteria reviewer and reuse it for revision cycles until structural PASS, then give the user a decision-ready summary and require criteria approval before docs generation.
-- Keep criteria durable and compact. Store only split/merge, context-depth, evidence, selective identity, review, project-exception, and unresolved-decision rules. Do not perform domain/atom discovery or store candidates, source inventories, dispositions, or execution state in criteria.
-- After criteria approval, say that the writing criteria are approved but actual service-logic docs are not written, then ask for a user-enterable scope such as `전체 문서 작성 시작`, `특정 도메인만 작성`, `특정 기능/흐름만 작성`, or `기준을 더 수정`.
-- Require a Codex Goal after criteria approval and accepted docs write scope, before inventory, writer/reviewer, graph, project-document, atom, or baseline work. A Goal does not replace user approval, evidence, or review.
+- Make `<doc-root>/project/atomization-criteria.md` the first managed-docs write when criteria are needed. Bootstrap may also create Atomic Docs request state and a domain-only inventory, but no other managed docs or detailed evidence.
+- Keep only durable split/merge, depth, evidence, identity, review, project-exception, and unresolved-decision rules in criteria. Keep domain proposals, source locators, candidate status, and execution state operation-local; the criteria file owns only its own draft/approved marker.
+- Before first approval, confirm the discovery scope, pin `source_commit_observed`, inspect source to domain-boundary depth, and write a domain proposal. Do not create Atom candidates, detailed `evidence.md`, behavior inventory, project docs, graph, or baseline.
+- Reuse one independent bootstrap reviewer for both criteria structure and source-supported domain-boundary review. Revise and rerun the affected review until both PASS or a domain needs a user ownership decision.
+- Make the first user approval jointly approve the criteria, the source-supported domain boundaries, and the selected domain write scope. A `needs_confirmation` domain stays outside approval and later writing without blocking independently approved domains.
+- Require a Codex Goal after that combined approval, naming the approved domain paths, before detailed evidence, Atom-candidate discovery, writer/reviewer bundles, graph, project-document, atom, or baseline work. A Goal does not replace user approval, evidence, or review.
 - Treat required criteria, writer, reviewer, rerun, and post-write subagents as authorized parts of the accepted operation. Ask again only for deletion, migration, push, an external service call, or a blocker that cannot PASS without a user decision.
 - Before a multi-domain queue starts, run one lightweight ownership/evidence prepass. Confirm shared or high-fan-out owners that would reopen dependent bundles, keep ordinary local owners provisional, and order shared-owner bundles before their dependents. Do not freeze every aggregate owner before writing.
 - Process multi-domain bundles sequentially. A bundle is one durable domain or cohesive accepted shard and may contain several atoms; it is not one bundle per atom. Reuse one writer and one independent development-quality reviewer for the whole operation. Reuse one conditional risk/contract reviewer across triggered bundles. Replace an unavailable agent only through a compact role-preserving handoff.
@@ -60,8 +61,8 @@ Read only the direct references needed for the current operation:
 - `references/atom-format-and-judgment.md` for the normative AID, required-section, section-ownership, and atomicity contract.
 - `references/language-policy.md` for docs language, Korean-first prose, and no-example-leakage rules.
 - `references/refresh-flow.md` for operation-profile selection and full or targeted refresh routing.
-- `references/criteria-flow.md` for bootstrap sequencing, criteria-review invocation, approval summary, and post-approval handoff.
-- `references/docs-generation-flow.md` for Goal handoff, operation state, domain queue, and review orchestration.
+- `references/criteria-flow.md` for bootstrap sequencing, domain-proposal discovery/review, combined approval summary, and post-approval handoff.
+- `references/docs-generation-flow.md` for bootstrap-to-execution operation state, Goal handoff, domain queue, and review orchestration.
 - `references/reviewer-perspectives.md` for the normative reviewer selection, verdict, report, and rerun contract.
 - `references/project-documents-and-inventory.md` for non-atom project-document lifecycle and operation inventory/evidence flow.
 - `references/source-baseline-and-change-plan.md` for the normative baseline eligibility, source commit contract, and accepted change-plan shape.
@@ -74,12 +75,12 @@ Read only the direct references needed for the current operation:
 
 1. Classify the request as setup, full refresh, targeted work, inspection, graph maintenance, or Stageflow-adjacent docs work.
 2. Read config and confirm storage mode, managed docs root, source root, language, and accepted write action.
-3. When criteria are missing or changing, write only config and the compact criteria draft. Inspect source only for a user-named code boundary, then run the lightweight criteria-review/revision cycle to PASS.
-4. Summarize criteria in user language and stop for user approval. After approval, ask for the docs write scope.
-5. Create or reuse a matching Codex Goal, select the operation profile, then create or resume operation state pinned to `source_commit_observed`.
-6. Discover domain and high-value context candidates only now, then build a lightweight selection inventory and reusable source evidence index for the accepted scope.
+3. When criteria are missing or changing, confirm the requested discovery scope, write config and the compact criteria draft, and create or resume Atomic Docs operation state with no accepted write scope yet.
+4. Inspect source to domain-boundary depth and write only the operation-local domain proposal. Reuse one bootstrap reviewer for criteria structure and domain-boundary review until both PASS or a user decision is required.
+5. Present the criteria, source-supported domain boundaries, unresolved domains, and selectable write scope together. Stop for one combined approval; exclude unresolved or unselected domains from accepted scope.
+6. Select the execution profile from the approved scope, create or reuse a matching Codex Goal for the approved domain paths, then expand only those domains into Atom candidates, the detailed source evidence index, and context-selection inventory. Project-wide discovery with partial domain approval becomes `targeted`, not `initial-baseline`.
 7. For initial-baseline or multi-domain work, run the ownership prepass, confirm only shared/high-fan-out owners, and order shared-owner bundles before dependents. For targeted work, inspect only the target's local owner and adjacent contracts.
-8. Record a compact domain-grouped write plan and give a non-blocking scale summary with domain, bundle, risk-bundle, shared-owner, and final-review counts. Continue without a second approval when it stays inside accepted paths/actions and boundaries.
+8. Record a compact domain-grouped write plan and give a non-blocking scale summary with domain, bundle, risk-bundle, shared-owner, and final-review counts. Continue without a second approval while it stays inside the approved domain boundaries, paths, and actions.
 9. Reuse one writer and one independent context-quality reviewer across the sequential selected domain bundles. Process each bundle through the writer, structural preflight, and applicable semantic reviewers; run development/risk reviewers in parallel when both apply to the same bundle attempt.
 10. Route reruns from the changed artifact/evidence type and reopen only bundles whose PASS basis changed.
 11. Run lightweight integration lint after shared-owner or cross-domain relationship changes. Run one affected-closure integration reviewer only when those relationships changed, and expand it to a project-wide baseline review only for a baseline profile.
