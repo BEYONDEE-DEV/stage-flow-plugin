@@ -65,6 +65,114 @@ class DocsSkillTests(unittest.TestCase):
                 f"{path.name} exceeds the direct-reference line budget",
             )
 
+    def test_direct_references_separate_normative_owners_from_flow_consumers(self) -> None:
+        skill = read(SKILL)
+        criteria_flow = read(REFS / "criteria-flow.md")
+        criteria_contract = read(REFS / "atomization-criteria-contract.md")
+        document_contract = read(REFS / "atomic-document-contract.md")
+        project_flow = read(REFS / "project-documents-and-inventory.md")
+        source_policy = read(REFS / "source-convention-and-domain-policy.md")
+        generation_flow = read(REFS / "docs-generation-flow.md")
+        reviewer_policy = read(REFS / "reviewer-perspectives.md")
+        baseline_policy = read(REFS / "source-baseline-and-change-plan.md")
+        atom_format = read(REFS / "atom-format-and-judgment.md")
+        judgment_policy = read(REFS / "change-judgment-policy.md")
+
+        assert_all(
+            self,
+            skill,
+            (
+                "Treat each direct reference as the detailed owner",
+                "must point to the detailed owner instead of independently redefining",
+                "normative criteria structure",
+                "normative reviewer selection",
+                "normative judgment labels",
+            ),
+        )
+
+        self.assertIn("owns criteria bootstrap sequencing", criteria_flow)
+        self.assertIn("normative owner of the small durable criteria", criteria_contract)
+        self.assertNotIn("FAIL only for missing or contradictory durable rules", criteria_flow)
+        self.assertIn("The independent criteria reviewer checks only", criteria_contract)
+
+        self.assertIn("structural owner of paths", document_contract)
+        self.assertNotIn("Project document review rules:", document_contract)
+        self.assertIn("project/atomization-criteria-atom.md", document_contract)
+        self.assertIn("do not use it as the default path for new criteria work", document_contract)
+        self.assertIn("owns when non-atom project documents are created", project_flow)
+        self.assertIn("treats docs config, baseline/cache paths", project_flow)
+        self.assertIn("not synchronized to real `atom_key` and existing AID references", project_flow)
+        self.assertIn("Do not create or advance baseline metadata", project_flow)
+        self.assertIn("normative owner of source-convention content", source_policy)
+
+        self.assertIn("owns post-approval execution orchestration", generation_flow)
+        self.assertNotIn("new atom, `atom_key`, `Intent`", generation_flow)
+        self.assertIn("normative owner of semantic reviewer selection", reviewer_policy)
+        self.assertIn("normative owner of global source-baseline schema", baseline_policy)
+
+        self.assertIn("owns where a judgment may appear inside an atom", atom_format)
+        self.assertNotIn("Each judgment-bearing item must include:", atom_format)
+        self.assertIn("normative owner of controlled judgment", judgment_policy)
+
+        for path in sorted(REFS.glob("*.md")):
+            self.assertIn("## Responsibility", read(path), f"{path.name} has no owner boundary")
+
+        owner_links = {
+            "criteria-flow.md": ("atomization-criteria-contract.md",),
+            "atomic-document-contract.md": (
+                "project-documents-and-inventory.md",
+                "atomization-criteria-contract.md",
+                "source-convention-and-domain-policy.md",
+                "atom-format-and-judgment.md",
+                "change-judgment-policy.md",
+            ),
+            "project-documents-and-inventory.md": (
+                "atomic-document-contract.md",
+                "source-convention-and-domain-policy.md",
+            ),
+            "refresh-flow.md": (
+                "source-convention-and-domain-policy.md",
+                "source-baseline-and-change-plan.md",
+                "change-judgment-policy.md",
+            ),
+            "docs-generation-flow.md": (
+                "refresh-flow.md",
+                "reviewer-perspectives.md",
+                "source-baseline-and-change-plan.md",
+            ),
+            "source-baseline-and-change-plan.md": (
+                "refresh-flow.md",
+                "reviewer-perspectives.md",
+                "change-judgment-policy.md",
+            ),
+            "service-logic-coverage.md": (
+                "atom-format-and-judgment.md",
+                "change-judgment-policy.md",
+                "docs-generation-flow.md",
+            ),
+            "atom-format-and-judgment.md": ("change-judgment-policy.md",),
+        }
+        for consumer, owners in owner_links.items():
+            consumer_text = read(REFS / consumer)
+            for owner in owners:
+                self.assertIn(owner, consumer_text, f"{consumer} does not route to {owner}")
+
+        unique_rules = {
+            "The independent criteria reviewer checks only:": "atomization-criteria-contract.md",
+            "project/atomization-criteria-atom.md` is a legacy path": "atomic-document-contract.md",
+            "project-goal.md` treats docs config, baseline/cache paths": "project-documents-and-inventory.md",
+            "Select one profile before source discovery": "refresh-flow.md",
+            "| Change after review | Required rerun |": "reviewer-perspectives.md",
+            "Create the first baseline only when": "source-baseline-and-change-plan.md",
+            "Document until all of these questions can be answered": "service-logic-coverage.md",
+            "Each atom file must preserve these sections": "atom-format-and-judgment.md",
+            "Apply the first matching judgment that is supported by evidence": "change-judgment-policy.md",
+        }
+        reference_text = {path.name: read(path) for path in REFS.glob("*.md")}
+        for marker, owner in unique_rules.items():
+            locations = [name for name, text in reference_text.items() if marker in text]
+            self.assertEqual([owner], locations, f"{marker!r} has ambiguous owners: {locations}")
+
     def test_ui_metadata_matches_development_decision_goal(self) -> None:
         text = read(OPENAI_YAML)
         assert_all(
@@ -190,7 +298,12 @@ class DocsSkillTests(unittest.TestCase):
                 "must not require frontmatter `atom_key`",
                 "must not require AID values",
                 "must not use `graph_edges`",
-                "glossary entry is too shallow to resolve",
+                "glossary meaning is too shallow to resolve",
+                "project/atomization-criteria-atom.md",
+                "reviewer logs, or operation status",
+                "source-unverifiable project intent recorded as `confirmation_needed`",
+                "one-line summary",
+                "Do not create or advance baseline metadata",
             ),
         )
 
@@ -283,7 +396,7 @@ class DocsSkillTests(unittest.TestCase):
                 "behavior atom's `Boundaries` section owns only that behavior's local",
                 "Graph frontmatter owns the machine-traversable type",
                 "not the source of truth for a natural-language boundary",
-                "Point to the owning AID or section",
+                "point to the owning AID or section",
                 "Do not repeat the behavior narrative",
             ),
         )
@@ -303,7 +416,7 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Criteria record how documentation decisions are made",
+                "normative owner of the small durable criteria document",
                 "Do not copy the complete skill reference contracts into criteria",
                 "candidate or approved domain maps",
                 "atom candidate or split-proposal maps",
@@ -325,8 +438,8 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Do not perform project-wide source discovery",
-                "Those belong after criteria approval, accepted docs scope, and the Goal handoff",
+                "Do not inspect the whole project",
+                "After criteria approval and docs-scope acceptance",
                 "first place where source-derived domain and atom candidates are recorded",
                 "do not copy this candidate map into criteria",
                 "project-native name",
@@ -439,8 +552,8 @@ class DocsSkillTests(unittest.TestCase):
                 "use `confirmation_needed` or a coverage gap instead of a stronger judgment",
                 "explicit compliance operations continue to require AID-backed rows",
                 "changed in-scope required decisions",
-                "when those AIDs already exist or independently need stable reference",
-                "without creating an AID for the mapping",
+                "does not create an AID merely to make the judgment possible",
+                "does not redefine controlled labels or their precedence",
             ),
         )
 
@@ -680,18 +793,21 @@ class DocsSkillTests(unittest.TestCase):
         )
 
     def test_first_pass_review_routes_meaning_structure_and_source_locators(self) -> None:
-        text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
+        flow = read(REFS / "docs-generation-flow.md")
+        text = read(REFS / "reviewer-perspectives.md")
+        self.assertIn("authoritative change-type table in `reviewer-perspectives.md`", flow)
+        self.assertNotIn("new atom, `atom_key`, `Intent`", flow)
         assert_all(
             self,
             text,
             (
-                "new atom, `atom_key`, `Intent`, `Outcomes`, `Boundaries`, `Rules`, behavior/contract meaning",
-                "graph `type`, or graph `target_key`",
-                "Markdown formatting, file relocation, or graph `target_path`",
-                "scoped validator only",
-                "source locator/evidence correction with unchanged claim",
+                "Intent, rule, observable contract, verification condition, behavior ownership, or judgment label",
+                "Atom boundary, owner, edge type/target",
+                "Markdown formatting, graph path repair",
+                "structural preflight only",
+                "Source locator/evidence index correction with unchanged documented claim",
                 "narrowed source-evidence check",
-                "An `initial-baseline` still requires development review for every domain bundle",
+                "reviews every domain bundle for `initial-baseline`",
                 "Targeted structural-only single-domain change",
             ),
         )
@@ -794,19 +910,21 @@ class DocsSkillTests(unittest.TestCase):
         )
 
     def test_integration_reviewer_scales_from_affected_closure_to_baseline(self) -> None:
-        text = refs("docs-generation-flow.md", "reviewer-perspectives.md")
+        flow = read(REFS / "docs-generation-flow.md")
+        text = read(REFS / "reviewer-perspectives.md")
+        self.assertIn("selected by `reviewer-perspectives.md`", flow)
         assert_all(
             self,
             text,
             (
-                "Run one integration reviewer",
-                "inspect only the affected closure",
-                "Independent changes in several domains do not require this reviewer",
+                "Run one integration/baseline reviewer only when",
+                "review only the affected closure",
+                "Do not add this reviewer merely because several independent bundles changed",
                 "expand the review to the whole project",
-                "does not repeat complete domain review",
+                "Do not repeat unchanged domain detail",
                 "cross-domain ownership",
                 "shared payload/state/storage/permission/integration contracts",
-                "newly run domain review uses the operation's `source_commit_observed`",
+                "Every newly run domain review uses the operation's `source_commit_observed`",
                 "Only the project-wide form of this reviewer can approve global baseline",
                 "reopen the affected bundle",
             ),
@@ -978,13 +1096,15 @@ class DocsSkillTests(unittest.TestCase):
         )
 
     def test_source_conflict_routing_covers_every_semantic_owner(self) -> None:
-        text = read(REFS / "source-baseline-and-change-plan.md")
+        baseline = read(REFS / "source-baseline-and-change-plan.md")
+        text = read(REFS / "change-judgment-policy.md")
+        self.assertIn("conflict, planned-change, and gap classification follow", baseline)
         assert_all(
             self,
             text,
             (
                 "conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`",
-                "preserve it as a `bug_or_regression` or another judgment-labeled gap",
+                "preserve it as `bug_or_regression` or the first other supported label",
                 "Do not classify behavior as healthy only because no related gap exists",
             ),
         )
@@ -1023,9 +1143,9 @@ class DocsSkillTests(unittest.TestCase):
                 "project/source-convention.md",
                 "non-atom document",
                 "runtime-impacting conventions",
-                "natural-language service logic owner",
+                "natural-language behavior in the relevant service logic atom",
                 "include its AID when one exists",
-                "Do not create an AID solely for this link",
+                "do not create an AID solely for this link",
                 "Non-runtime code style",
                 "must also appear as natural-language behavior",
                 "cannot support `bug_or_regression`",

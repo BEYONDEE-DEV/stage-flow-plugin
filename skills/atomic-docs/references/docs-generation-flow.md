@@ -2,6 +2,7 @@
 
 ## Contents
 
+- [Responsibility](#responsibility)
 - [Atomic Docs Goal Gate](#atomic-docs-goal-gate)
 - [Atomic Docs Operation State](#atomic-docs-operation-state)
 - [Required Subagent Authorization](#required-subagent-authorization)
@@ -9,6 +10,10 @@
 - [Bundle Preflight And Review](#bundle-preflight-and-review)
 - [Conditional Integration And Baseline Gate](#conditional-integration-and-baseline-gate)
 - [Progress Guard](#progress-guard)
+
+## Responsibility
+
+This reference owns post-approval execution orchestration: Goal handoff, operation state, persistent agents, sequential bundles, preflight order, and progress handling. Operation-profile definitions belong to `refresh-flow.md`, semantic reviewer selection and rerun verdicts to `reviewer-perspectives.md`, and baseline eligibility to `source-baseline-and-change-plan.md`.
 
 ## Atomic Docs Goal Gate
 
@@ -76,11 +81,7 @@ python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root
 
 Also check operation-local ownership closure, source basis, and planned atom keys against actual atom keys. Compare keys and dispositions, not raw document counts. Do not add an active/retired AID lifecycle merely for preflight; report total discovered AIDs and deterministic duplicate/shape failures.
 
-If preflight FAILs, return to the writer without spending a semantic review. After PASS, classify what changed:
-
-- new atom, `atom_key`, `Intent`, `Outcomes`, `Boundaries`, `Rules`, behavior/contract meaning, `Planned Changes`, `Gaps`, judgment, owner, graph `type`, or graph `target_key`: run the development-quality reviewer
-- Markdown formatting, file relocation, or graph `target_path` with unchanged meaning/key: scoped validator only
-- source locator/evidence correction with unchanged claim: narrowed source-evidence check by the development reviewer, not a complete domain review
+If preflight FAILs, return to the writer without spending a semantic review. After PASS, route semantic, structural-only, and source-locator-only changes through the authoritative change-type table in `reviewer-perspectives.md`; do not maintain a second routing table here.
 
 Record one review input revision. When development and risk reviews both apply, run the persistent reviewers in parallel against that same revision and source basis. An `initial-baseline` still requires development review for every domain bundle.
 
@@ -98,17 +99,11 @@ After a shared-owner bundle PASSes, record its reviewed revision as the owner ba
 
 ## Conditional Integration And Baseline Gate
 
-Run one integration reviewer after applicable domain reviews PASS when a shared cross-domain contract, ownership, glossary source of truth, or graph relationship changed. For `targeted` or `change-impact-refresh`, inspect only the affected closure. Independent changes in several domains do not require this reviewer merely because more than one bundle changed.
-
-For `initial-baseline` or `baseline-diff-refresh`, expand the same role to a project-wide integration/baseline review. Do not run it for an ordinary targeted single-domain operation with no shared relationship or baseline effect.
-
-The reviewer checks cross-domain ownership and graph consistency, shared contracts, changed evidence, reporting accuracy, and baseline eligibility when applicable. It trusts unchanged local detail and does not repeat complete domain review.
-
-If the project-wide reviewer finds a domain defect, reopen the affected bundle, rerun its writer and affected reviewers, then rerun the project-wide reviewer.
+Run the integration or baseline reviewer selected by `reviewer-perspectives.md` after applicable domain reviews PASS. Execute its affected-closure or project-wide scope and any bundle reopen/rerun exactly as that reviewer contract defines; independent multi-domain work does not create another flow-local trigger.
 
 Do not reconcile discovered domains, atom candidates, source evidence, or review results back into durable criteria. Update criteria after writing only when the user approved a durable rule, project exception, or previously unresolved criteria decision.
 
-For an initial global baseline, do not create metadata until every domain/risk review PASSes at `source_commit_observed`. For `baseline-diff-refresh`, impacted reviews must PASS at the new commit; unchanged reviews may be carried from the trusted prior baseline only when the operation records the old/new commits, unchanged bundles, complete diff-impact rationale, and project-wide reviewer approval. Structural validation and the reviewer must PASS before the baseline advances.
+Create or advance baseline metadata only under the eligibility and carry-forward contract in `source-baseline-and-change-plan.md`. This flow records and executes the selected gate; it does not define a second baseline acceptance rule.
 
 ## Progress Guard
 

@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference routes full refresh and targeted docs operations against source code and existing atom files. Keep detailed phase rules in sibling references linked directly from `SKILL.md`; do not hide required gates behind nested reference chains.
+This reference is the normative owner of operation-profile selection and routes full refresh, targeted work, and inspection against source code and existing atom files. Detailed execution, reviewer, baseline-eligibility, and semantic domain rules stay in sibling references linked directly from `SKILL.md`.
 
 ## Contents
 
@@ -18,7 +18,7 @@ A full refresh is a first-class operation when the user explicitly asks for it. 
 For refresh or targeted docs work:
 
 1. Confirm the configured docs root and source root.
-2. Inspect changed or targeted source behavior files and classify runtime-relevant schemas, migrations, settings, route configuration, and behavior-describing tests instead of excluding those file classes by default.
+2. Inspect changed or targeted source behavior files. Include DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they define or disambiguate runtime behavior. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files only when they have no runtime or product/operations meaning.
 3. Inspect existing project, common, and domain context before assigning source behavior to a domain.
 4. Use source-to-atom seed discovery to find likely domain and atom candidates.
 5. Follow criteria, Goal, inventory, writer/reviewer, graph, source-baseline, and change-plan rules from the sibling references below.
@@ -48,9 +48,7 @@ Before assigning changed source behavior to a domain, inspect the context atoms 
 
 If legacy `project/project-goal-atom.md` or `project/project-glossary-atom.md` exists, treat it as migration source material and propose a move/update to the non-atom project document paths instead of using the legacy atom paths as defaults.
 
-If a new domain, new common atom, category/subdomain path, or domain move is plausible, include the candidate domain path, evidence, affected atom files, and unresolved boundary questions in the change plan before writing docs.
-
-If a domain candidate or category grouping looks broad instead of being a durable ownership boundary, do not write it as confirmed structure and do not keep it as `candidate`, `approved`, or `needs_confirmation`. Record it as a `rejected` broad grouping or present a split proposal using observed capabilities, workflows, responsibilities, contracts, or policies, and keep unresolved boundary questions in the change plan or `Gaps`.
+If a new domain, common atom, category/subdomain path, or domain move is plausible, route its evidence and unresolved boundary questions through the domain rules in `source-convention-and-domain-policy.md` and the accepted change plan. This flow selects what context to inspect; it does not independently define candidate validity or broad-domain failure conditions.
 
 ## Reference Routing
 
@@ -60,5 +58,6 @@ Read these sibling references directly from `SKILL.md` as needed:
 - `docs-generation-flow.md` for Atomic Docs Goal Gate, sequential domain bundles, conditional risk review, and conditional project-wide review.
 - `reviewer-perspectives.md` for the required development-quality reviewer, conditional risk/contract reviewer, and project-wide integration/baseline reviewer.
 - `project-documents-and-inventory.md` for `project/project-goal.md`, `project/project-glossary.md`, `project/service-logic-inventory.md`, `project/source-convention.md`, and service logic inventory rules.
-- `source-baseline-and-change-plan.md` for source-code commit baseline metadata, full refresh sequencing, targeted docs scope, change plan requirements, and inference/gap judgment rules.
+- `source-baseline-and-change-plan.md` for source-code commit baseline schema and eligibility, carry-forward evidence, and change plan requirements.
+- `change-judgment-policy.md` for inference, confirmation, conflict, planned-change, and gap classification.
 - `validation-contract.md` for plugin-bundled structural validator phases and limits.

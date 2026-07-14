@@ -1,5 +1,9 @@
 # Criteria Flow
 
+## Responsibility
+
+This reference owns criteria bootstrap sequencing, reviewer invocation and revision cycles, and the user approval handoff. `atomization-criteria-contract.md` is the detailed owner of criteria structure, allowed content, narrow evidence limits, and review failure conditions.
+
 ## First Setup And Draft
 
 Explain criteria bootstrap as preparation before real atom writing. In Korean interactions, use this shape for repository storage:
@@ -11,23 +15,17 @@ Explain criteria bootstrap as preparation before real atom writing. In Korean in
 
 Do not reduce this message to raw `storage_mode`, `docs_root`, or write-path key/value lines.
 
-When criteria are needed, make `<doc-root>/project/atomization-criteria.md` the first managed-docs write. If the request explicitly selects storage mode and docs root and asks to start, redo, regenerate, or recreate atomic docs, treat it as accepted bootstrap scope for only config and criteria. Otherwise present that narrow change before writing.
-
-Bootstrap must not create project goal/glossary/source convention, inventories, evidence indexes, domain maps, atom candidates, common/domain atoms, graph edges, domain agents, or baseline metadata.
-
-Write only the compact durable sections from `atomization-criteria-contract.md`. Record user-stated goals, prohibitions, project exceptions, and approval blockers without copying complete skill rules or reference examples.
+When criteria are needed, make `<doc-root>/project/atomization-criteria.md` the first managed-docs write. If the request explicitly selects storage mode and docs root and asks to start, redo, regenerate, or recreate atomic docs, treat it as accepted bootstrap scope for only config and criteria. Otherwise present that narrow change before writing. Apply the allowed-content and operation-local exclusions from `atomization-criteria-contract.md`; this flow does not maintain another exclusion list.
 
 ## Narrow Evidence Check
 
-Do not perform project-wide source discovery, feature inventory, domain discovery, atom candidate discovery, ownership prepass, or aggregate disposition during criteria bootstrap. Those belong after criteria approval, accepted docs scope, and the Goal handoff.
-
-Inspect source during bootstrap only when a user criterion names a specific code boundary and a narrow check is necessary to phrase that durable rule accurately. Use temporary locators only in the active reviewer context; bootstrap does not persist a separate evidence or state file. Do not promote the inspected surface into a candidate map.
+Apply the narrow source-inspection boundary from `atomization-criteria-contract.md` during bootstrap. Source discovery, candidates, inventory, and execution state begin only after criteria approval, accepted docs scope, and the Goal handoff.
 
 ## Criteria Review Gate
 
 Run one independent criteria reviewer after drafting and before asking the user for approval. Reuse that reviewer for revision cycles. Criteria review is part of accepted bootstrap scope and does not require a Codex Goal or separate approval.
 
-Apply the compact failure rules from `atomization-criteria-contract.md`. FAIL only for missing or contradictory durable rules, unclear user language, inaccurate approval state, unsupported inference/action, or leaked operation-local content. Do not FAIL because domain candidates, atom candidates, perspective rows, source coverage, or aggregate dispositions are absent.
+Apply the complete criteria-review checks and failure conditions from `atomization-criteria-contract.md`; do not add flow-local validity criteria.
 
 If review FAILs, revise only the criteria document and rerun the same reviewer. Continue until PASS or until PASS requires a user decision. PASS means ready for user review; it does not approve the criteria.
 

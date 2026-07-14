@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines how atomic docs support future code review judgments against the documented source baseline. It does not add top-level per-atom status fields. Record judgment labels on specific `Gaps`, change plan items, review findings, or evidence packet items.
+This reference is the normative owner of controlled judgment and planned-change labels, decision precedence, finding evidence, confirmation/conflict handling, and explicit implementation-compliance rows. It does not add top-level per-atom status fields. Record judgment labels on specific `Gaps`, change plan items, review findings, or evidence packet items.
 
 The labels in this file are reusable controlled vocabulary. Explanatory prose in this file is not reusable managed-docs content and must not be copied into criteria documents, atom drafts, gaps, or review findings.
 
@@ -48,6 +48,8 @@ Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_
 `matches_confirmed_intent` is an explicit review judgment, not the absence of a `Gaps` item. Do not mark behavior as matching unless the review inspected relevant source evidence and confirmed no higher-priority label applies.
 
 When the source behavior is present in code but absent from natural-language docs, do not classify it as matching. Record a coverage gap or `confirmation_needed` only when the missing basis matters to the accepted implementation or review judgment, unless an approved boundary makes it `out_of_scope_behavior`, an approved requirement makes it `missing_required_behavior`, or an approved baseline mismatch makes it `bug_or_regression`. Do not create a gap for every untested branch, possible runtime exception, or source observation outside that decision need.
+
+If observed code conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, do not resolve the conflict silently; preserve it as `bug_or_regression` or the first other supported label in the decision order. Do not classify behavior as healthy only because no related gap exists.
 
 `Planned Changes` must distinguish:
 

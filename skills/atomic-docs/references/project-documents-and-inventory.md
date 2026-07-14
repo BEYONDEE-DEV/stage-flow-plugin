@@ -1,22 +1,20 @@
 # Project Documents And Inventory
 
+## Responsibility
+
+This reference owns when non-atom project documents are created or retained and how operation-local inventory, ownership, and evidence state is produced and retired. `atomic-document-contract.md` owns their structural kind and paths; `source-convention-and-domain-policy.md` owns source-convention content and semantic failure conditions.
+
 ## Source Convention Document Flow
 
-When repeated source interpretation conventions would otherwise leak into service logic atoms, propose a separate write scope for `<doc-root>/project/source-convention.md`.
-
-The source convention document is not part of criteria bootstrap. Create or update it only after criteria approval, accepted docs scope, and the Atomic Docs Goal Gate.
-
-Separate behavior-neutral code style from runtime-impacting conventions. Formatting, naming, package placement, imports, and layer placement belong only in source convention docs. Validation activation, authorization wiring, error mapping, transaction behavior, lock ordering, or persistence ordering may be summarized there, but any resulting product rule or observable contract belongs in the related atom.
-
-Review must fail when an atom treats code taxonomy or formatting as service behavior. If a runtime convention creates a decision or contract and appears only in `source-convention.md`, record a gap instead of treating the convention document as enough for an implementation judgment.
+When repeated source interpretation conventions would otherwise leak into service logic atoms, propose a separate write scope for `<doc-root>/project/source-convention.md`. It is not part of criteria bootstrap; create or update it only after criteria approval, accepted docs scope, and the Atomic Docs Goal Gate. Apply its content, atom-boundary, and review rules from `source-convention-and-domain-policy.md` rather than defining another source-convention contract here.
 
 ## Project Document Workflow
 
 Project documents are non-atom documents. Use:
 
-- `project/project-goal.md` for product purpose, users/callers, success criteria, non-goals, and unresolved project intent
+- `project/project-goal.md` for product purpose, users/callers, success criteria, non-goals, and source-unverifiable project intent recorded as `confirmation_needed`
 - `project/project-glossary.md` for ambiguous or shared term meaning, ownership, source of truth, aliases, forbidden conflations, and uncertainty
-- `project/source-convention.md` for source interpretation
+- `project/source-convention.md` for source interpretation under `source-convention-and-domain-policy.md`
 - `project/atomization-criteria.md` for durable documentation criteria, project exceptions, and unresolved approval decisions
 
 Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom sections unless an explicit accepted migration converts one into an atom.
@@ -33,7 +31,7 @@ A retained inventory is a decision-level coverage index, not a progress log or a
 
 Do not require every inventory row to contain fields for validation, state, persistence, integration, failure, UI, backend, schema, transaction, and recovery. Include a field only when it changes the documented decision, risk, verification, or ownership.
 
-Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, when a retained inventory is stale or lacks ownership/disposition, or when a runtime-impacting source convention has no related atom/gap for the decision it changes.
+Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, or when `project-goal.md` treats docs config, baseline/cache paths, reset/delete notes, reviewer logs, or operation status as the service or product goal. A retained project inventory must also FAIL when it is a one-line summary, lacks the behavior-level owner/disposition information required by this reference, or is not synchronized to real `atom_key` and existing AID references. Do not create or advance baseline metadata while the retained inventory is in that state. Source-convention-specific failures come only from `source-convention-and-domain-policy.md`.
 
 ## Lightweight Operation Inventory
 

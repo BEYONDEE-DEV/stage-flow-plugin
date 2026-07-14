@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines the required domain development-quality reviewer, the conditional risk/contract reviewer, and the conditional affected-closure integration or project-wide baseline reviewer. Review effort scales with the accepted scope and risk instead of using a fixed reviewer count.
+This reference is the normative owner of semantic reviewer selection, report/verdict requirements, change-type routing, and rerun scope for the required domain development-quality reviewer, conditional risk/contract reviewer, and conditional affected-closure integration or project-wide baseline reviewer. `docs-generation-flow.md` owns when the selected roles are invoked and persisted.
 
 ## Findings-Only Report Contract
 

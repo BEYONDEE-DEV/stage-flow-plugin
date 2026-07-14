@@ -46,26 +46,27 @@ Create and maintain source-based project documentation that preserves the decisi
 - Use the selected docs language. Korean docs use Korean-first prose and labels around fixed schema headings, identifiers, AIDs, and controlled labels.
 - Run the plugin-bundled validator from `<plugin-root>/scripts/validate_atomic_docs.py`; never look for that validator under the target project's `scripts/` directory.
 - During local plugin iteration, use a fresh cachebuster, reinstall the plugin, and verify installed skill/reference/validator files match the source tree before testing in a new task.
+- Treat each direct reference as the detailed owner named in its routing description. Core rules and flow files may summarize when a rule applies, but they must point to the detailed owner instead of independently redefining its failure conditions, state transitions, schema, or controlled vocabulary.
 
 ## Required References
 
 Read only the direct references needed for the current operation:
 
 - `references/docs-root-and-config.md` for storage mode, docs-root discovery, config, and recovery.
-- `references/atomic-document-contract.md` for atom paths, stable `atom_key`, project documents, and context atoms.
-- `references/atomization-criteria-contract.md` for compact criteria structure, decision depth, and criteria-review rules.
-- `references/source-convention-and-domain-policy.md` for source interpretation, domain discovery, naming, and boundary review.
-- `references/service-logic-coverage.md` for decision-complete behavior coverage, conditional detail, source fidelity, and Goal boundaries.
-- `references/atom-format-and-judgment.md` for selective AIDs, required sections, judgment evidence, and atomicity.
+- `references/atomic-document-contract.md` for the structural path, identity, project-document kind, and context-atom contract.
+- `references/atomization-criteria-contract.md` for the normative criteria structure, allowed content, and criteria-review failure contract.
+- `references/source-convention-and-domain-policy.md` for the normative source-convention meaning, domain discovery, naming, and boundary gates.
+- `references/service-logic-coverage.md` for the normative decision-depth, risk-trigger, accepted-scope coverage, and source-fidelity contract.
+- `references/atom-format-and-judgment.md` for the normative AID, required-section, section-ownership, and atomicity contract.
 - `references/language-policy.md` for docs language, Korean-first prose, and no-example-leakage rules.
-- `references/refresh-flow.md` for full and targeted refresh routing.
-- `references/criteria-flow.md` for bootstrap, criteria review, approval summary, and post-approval handoff.
-- `references/docs-generation-flow.md` for Goal handoff, operation state, domain queue, and conditional review orchestration.
-- `references/reviewer-perspectives.md` for the required domain reviewer, conditional risk reviewer, and project-wide reviewer.
-- `references/project-documents-and-inventory.md` for non-atom project documents and lightweight inventory lifecycle.
-- `references/source-baseline-and-change-plan.md` for full-only baseline, source diff sequencing, and accepted change plans.
+- `references/refresh-flow.md` for operation-profile selection and full or targeted refresh routing.
+- `references/criteria-flow.md` for bootstrap sequencing, criteria-review invocation, approval summary, and post-approval handoff.
+- `references/docs-generation-flow.md` for Goal handoff, operation state, domain queue, and review orchestration.
+- `references/reviewer-perspectives.md` for the normative reviewer selection, verdict, report, and rerun contract.
+- `references/project-documents-and-inventory.md` for non-atom project-document lifecycle and operation inventory/evidence flow.
+- `references/source-baseline-and-change-plan.md` for the normative baseline eligibility, source commit contract, and accepted change-plan shape.
 - `references/validation-contract.md` for validator location, phases, checks, and limits.
-- `references/change-judgment-policy.md` for controlled implementation judgments.
+- `references/change-judgment-policy.md` for the normative judgment labels, decision order, and evidence requirements.
 - `references/atomic-graph.md` for graph keys, paths, traversal, and conflicts.
 - `references/stageflow-integration.md` for work inside Stageflow-controlled requests.
 

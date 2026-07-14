@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines the small durable criteria document approved before source discovery and atom writing. Criteria record how documentation decisions are made; they are not a preliminary domain model, source inventory, or execution ledger.
+This reference is the normative owner of the small durable criteria document, including its structure, allowed content, evidence boundary, and review failure conditions. `criteria-flow.md` owns when the draft, review cycle, and user handoff occur.
 
 ## Criteria Document
 
@@ -12,7 +12,7 @@ The default path is:
 <doc-root>/project/atomization-criteria.md
 ```
 
-After the docs root is confirmed and the user accepts the limited draft write action, create or update this file as the first managed-docs write when criteria are needed. Record user-stated documentation goals, prohibitions, durable exceptions, and unresolved decisions. Do not copy illustrative project examples from skill references.
+At this path, record user-stated documentation goals, prohibitions, durable exceptions, and unresolved decisions. Do not copy illustrative project examples from skill references. The bootstrap timing and first-write sequence are defined in `criteria-flow.md`.
 
 The criteria document is not an atom. It does not use atom frontmatter, AIDs, `graph_edges`, or the required atom sections.
 
@@ -71,4 +71,4 @@ The independent criteria reviewer checks only:
 
 Do not inspect the whole project or require domain candidates, atom candidates, perspective rows, source coverage, aggregate dispositions, or graph completeness for criteria PASS. Inspect source only when a user-stated criterion names a specific code boundary and that narrow check is needed to understand the rule.
 
-If review FAILs, revise only the criteria file inside bootstrap scope and rerun the same criteria reviewer until PASS or a user decision is required. PASS means ready for user review, not user approval.
+Any violation of these checks is criteria-review FAIL. PASS means the criteria are structurally ready for user review, not user approval. Revision cycles and approval handoff follow `criteria-flow.md`.

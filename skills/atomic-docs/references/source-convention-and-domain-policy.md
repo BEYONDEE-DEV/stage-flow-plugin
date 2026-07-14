@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines source-convention documents, domain discovery, hybrid domain naming, domain boundary review, and core business term coverage.
+This reference is the normative owner of source-convention content and semantic review failures, domain discovery, hybrid domain naming, domain boundary review, and core business term coverage. `atomic-document-contract.md` owns structural paths and non-atom classification; `project-documents-and-inventory.md` owns creation and retention timing.
 
 ## Source Convention Document
 
@@ -37,7 +37,7 @@ The source convention document is not a general style guide for its own sake. It
 Keep source convention and service logic judgment separate:
 
 - Non-runtime code style belongs only in `project/source-convention.md`; do not put it in service logic atom `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, or `Gaps` unless the user explicitly asks for a style atom outside normal service-logic docs.
-- Runtime-impacting conventions may be summarized in `project/source-convention.md`, but the actual code judgment basis must also appear as natural-language behavior in the relevant service logic atom with source evidence.
+- Runtime-impacting conventions may be summarized in `project/source-convention.md`, but the actual code judgment basis must also appear as natural-language behavior in the relevant service logic atom with source evidence. Link to its `atom_key` and include its AID when one exists; do not create an AID solely for this link. When no atom exists yet, link to a coverage gap.
 - The source convention document alone cannot support `bug_or_regression`, `missing_required_behavior`, `matches_confirmed_intent`, `unapproved_implemented_behavior`, or `out_of_scope_behavior` for service logic. Use it as interpretation context, then connect the judgment to service logic atoms, source evidence, baseline metadata, and judgment labels.
 - If a service logic atom contains simple code convention, source folder taxonomy, import order, formatting, naming, or layer-placement notes as if they were runtime behavior, reviewer must fail or request moving that material to `project/source-convention.md`.
 - If a source convention has runtime impact but no related service logic atom records the behavior, leave a coverage gap or `confirmation_needed` item instead of treating the source convention as sufficient code judgment evidence.

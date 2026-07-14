@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines decision-complete service logic coverage, proportional documentation depth, source fact fidelity, and the Codex Goal boundary.
+This reference is the normative owner of decision-complete service logic coverage, proportional documentation depth, risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing.
 
 ## Development Decision Coverage
 
@@ -81,7 +81,7 @@ When validation, refusal, defaulting, fallback, exception, read-only behavior, o
 
 If source allows a fallback instead of refusing input, preserve that observable branch or record uncertainty. Do not describe a path as recovered when source can throw an unhandled runtime exception. When source cannot prove intent, use `confirmation_needed` rather than promoting observed behavior into a confirmed rule.
 
-Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and a stable `atom_key` plus related AIDs when they exist. Use the related AID or exact owning section for the complete behavior and keep the gap's source evidence to the locator and differential fact needed to support the unresolved finding. Missing tests or possible runtime failures become gaps only when their absence prevents the accepted implementation or review judgment.
+Apply finding fields, label precedence, and AID-or-owning-section evidence from `change-judgment-policy.md`. This source-fidelity contract adds only that evidence must reach the relevant behavior path and that missing tests or possible runtime failures become gaps only when their absence prevents the accepted implementation or review judgment.
 
 ## Atomic Docs Goal Boundary
 

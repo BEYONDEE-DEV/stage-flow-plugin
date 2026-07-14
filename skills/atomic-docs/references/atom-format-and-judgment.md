@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference defines selective atom IDs, required atom sections, judgment evidence, forbidden shapes, and atomicity rules.
+This reference is the normative owner of selective atom IDs, required sections, section ownership, forbidden shapes, and atomicity. It owns where a judgment may appear inside an atom, while `change-judgment-policy.md` owns judgment labels, precedence, and evidence fields.
 
 ## Atom Line ID Policy
 
@@ -86,30 +86,15 @@ Do not force every atom to include every subheading. Use only the subsections ne
 
 `Source Evidence` is a locator inside `Current Implementation`, not another semantic section. List the smallest authoritative file, test, schema, setting, or approved artifact identifiers needed to verify the owning claims. Do not repeat the behavior narrative, rule, boundary, or gap under each locator.
 
-`Planned Changes` records future intended work that is not yet confirmed as implemented and must classify each planned item as `approved_required_change`, `approved_optional_change`, `tentative_future_change`, `implemented_pending_confirmation`, or `deferred_decision`. A user-confirmed future implementation or behavior change is not `confirmation_needed`; record the concrete future behavior as `approved_required_change` or `approved_optional_change`. A user-confirmed plan to decide a policy, boundary, condition, API contract, or permission mapping later is `deferred_decision`.
+`Planned Changes` records future intended work that is not yet confirmed as implemented. Classify each item with the controlled planned-change values and decision rules in `change-judgment-policy.md`; this section owns the future delta, not the label vocabulary.
 
-`Gaps` records judgment-labeled mismatches, uncertain inference, bug candidates, missing required behavior, missing intent, unapproved implementation, out-of-scope behavior, docs-stale findings, implemented-plan candidates, deferred-decision blockers, rename/merge candidates, service logic coverage gaps, and confirmation-needed boundaries. Create an item only when the unresolved difference or missing evidence prevents a stronger implementation or review judgment. A missing test, possible runtime exception, nullable field, or isolated source observation is not a gap by itself. Point to the owning AID or section, then record only the unresolved difference, evidence locator, impact, and decision or action needed. When a gap is resolved, put the resulting durable meaning in its proper owning section; do not preserve a resolved question by copying its full narrative into both places.
+`Gaps` owns only an unresolved difference or missing evidence that prevents a stronger implementation or review judgment. Classify the item under `change-judgment-policy.md`, point to the owning AID or section, and record only the differential fact, impact, and decision or action needed. A missing test, possible runtime exception, nullable field, or isolated source observation is not a gap by itself. When a gap is resolved, put the resulting durable meaning in its proper owning section; do not preserve a resolved question by copying its full narrative into both places.
 
 Combine several observations into one gap only when they use the same judgment label, support one unresolved decision, and lead to a compatible resolution. Do not merge different labels, independently resolvable behavior, separate high-risk contracts, adverse branches, or verification outcomes merely because they share an owner or next action. A gap keeps a concise verification target when needed; it does not own a Cartesian test matrix or step-by-step test procedure.
 
 ## Judgment Evidence Policy
 
-Atomic docs should let a reviewer determine what is implemented, what should be implemented, what is missing, what is buggy, what is unapproved or out of scope, and what still needs confirmation for the documented source baseline.
-
-Do not add top-level per-atom status fields for these judgments. Instead, attach controlled judgment labels from `change-judgment-policy.md` to specific `Gaps`, change plan items, review findings, or domain evidence packet items.
-
-Each judgment-bearing item must include:
-
-- one judgment label from `change-judgment-policy.md`
-- source evidence for the observed behavior or missing behavior
-- confirmed or inferred basis from the relevant atom section, boundary, baseline metadata, or user approval
-- next action for resolving the finding
-
-For Korean managed docs, write judgment-bearing `Gaps`, `Planned Changes`, change plan items, and review findings with Korean-visible field labels or Korean sentence wording. Keep the controlled judgment label itself unchanged, but render the surrounding structure as `판정 라벨`, `소스 근거`, `근거`, `영향받는 동작`, `다음 조치`, and `관련 AID` when structured fields are useful. Do not use English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, or `judgment label` inside Korean atom prose.
-
-`matches_confirmed_intent` is allowed only as an explicit review finding after the reviewer inspects source evidence and confirms that no higher-priority judgment label applies. Do not treat the lack of a `Gaps` item as proof that code matches confirmed intent.
-
-Approved project documents may provide context such as non-goals or terminology boundaries, and domain context atoms must preserve excluded behavior and adjacent-domain boundaries clearly enough for `out_of_scope_behavior` review. A service judgment still needs service logic atom content, source evidence, baseline metadata, and a controlled judgment label.
+This section owns only atom-local placement: do not add top-level per-atom status fields, and keep judgment-bearing future deltas in `Planned Changes` and unresolved differences in `Gaps`. The complete controlled vocabulary, precedence, evidence fields, confirmation behavior, and Korean-visible finding shape come from `change-judgment-policy.md` and `language-policy.md`; do not maintain a second judgment contract here.
 
 ## Forbidden Shapes
 
