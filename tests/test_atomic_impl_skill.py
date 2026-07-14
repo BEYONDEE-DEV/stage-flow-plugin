@@ -97,6 +97,18 @@ class AtomicImplSkillTests(unittest.TestCase):
         ):
             self.assertIn(required, text)
 
+    def test_incomplete_implementation_basis_blocks_review_and_code(self) -> None:
+        text = read(SKILL) + read(FLOW)
+        for required in (
+            "Implementation-basis docs review must FAIL",
+            "code implementation must not begin",
+            "changed in-scope required behavior lacks its required AID",
+            "same-item observable verification condition or invariant",
+            "looser context depth of ordinary Atomic Docs does not apply",
+            "code stage must not begin",
+        ):
+            self.assertIn(required, text)
+
     def test_implementation_compliance_uses_linked_post_write_review(self) -> None:
         text = read(SKILL) + read(FLOW)
         for required in (
@@ -111,6 +123,8 @@ class AtomicImplSkillTests(unittest.TestCase):
             "Draft one `## 구현 검증` section",
             "Preserve the draft `## 구현 검증` section",
             "Finalize the linked `post-write-review.md` `## 구현 검증` section",
+            "Compliance must FAIL when any required row or evidence cell is missing",
+            "Final docs/code compliance must FAIL",
         ):
             self.assertIn(required, text)
         self.assertNotIn("verification-trace.json", text)

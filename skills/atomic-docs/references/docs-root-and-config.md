@@ -46,7 +46,7 @@ Required fields:
 - `storage_mode` is either `submodule` or `repository`.
 - `docs_root` is the selected managed docs root.
 - `source_root` is the source repository root used for diffs. It defaults to the parent repository root and may be overridden by configuration.
-- `baseline_metadata_path` is a docs-root-relative path to the metadata file that stores the complete project-wide source baseline. The default is `source-baseline.json`; with `docs_root` set to `docs`, this resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`. Partial or targeted operations must not create or update this file.
+- `baseline_metadata_path` is a docs-root-relative path to the metadata file that stores the reviewed project-wide context baseline. The default is `source-baseline.json`; with `docs_root` set to `docs`, this resolves to `docs/source-baseline.json`, not `docs/docs/source-baseline.json`. Partial or targeted operations must not create or update this file.
 
 For `repository` mode, the config shape is the same except `storage_mode` is `repository`:
 

@@ -19,39 +19,39 @@ Project documents are non-atom documents. Use:
 
 Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom sections unless an explicit accepted migration converts one into an atom.
 
-A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` while writer/reviewer cycles run. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final coverage index.
+A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` while writer/reviewer cycles run. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final implementation-context index.
 
-A retained inventory is a decision-level coverage index, not a progress log or a second copy of every atom. Each behavior aggregate records:
+A retained inventory is a selected implementation-context index, not a behavior-coverage proof, progress log, or second copy of every atom. Each selected context entry records:
 
-- concise behavior or decision summary
+- concise reason the context is useful before source inspection or change
 - inspected source identifiers
-- candidate or final owning `atom_key`, or explicit gap/`out_of_scope`/not-applicable disposition
+- candidate or final owning `atom_key`
 - related AIDs and judgment label only when they exist
-- risk trigger, rule, state/effect, external contract, or unresolved decision only when applicable
+- important owner, shared/external contract, non-obvious constraint, risk trigger, or unresolved decision only when applicable
 
 Do not require every inventory row to contain fields for validation, state, persistence, integration, failure, UI, backend, schema, transaction, and recovery. Include a field only when it changes the documented decision, risk, verification, or ownership.
 
-Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, or when `project-goal.md` treats docs config, baseline/cache paths, reset/delete notes, reviewer logs, or operation status as the service or product goal. A retained project inventory must also FAIL when it is a one-line summary, lacks the behavior-level owner/disposition information required by this reference, or is not synchronized to real `atom_key` and existing AID references. Do not create or advance baseline metadata while the retained inventory is in that state. Source-convention-specific failures come only from `source-convention-and-domain-policy.md`.
+Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, or when `project-goal.md` treats docs config, baseline/cache paths, reset/delete notes, reviewer logs, or operation status as the service or product goal. A retained project inventory must also FAIL when it is only a source identifier list, lacks the selection reason or important owner/contract context required by this reference, claims exhaustive behavior coverage, or is not synchronized to real `atom_key` and existing AID references. Do not create or advance baseline metadata while the retained inventory is in that state. Source-convention-specific failures come only from `source-convention-and-domain-policy.md`.
 
 ## Lightweight Operation Inventory
 
-Only after criteria approval, accepted docs scope, and the Goal handoff, create a lightweight operation inventory grouped by durable domain candidate and meaningful behavior aggregate, not endpoint, class, method, component, or file. This is the first place where source-derived domain and atom candidates are recorded.
+Only after criteria approval, accepted docs scope, and the Goal handoff, create a lightweight operation inventory grouped by durable domain and selected implementation-context candidate, not endpoint, class, method, component, or file. This is the first place where source-derived domain and atom candidates are recorded. Do not add every observed behavior merely to prove coverage.
 
-For each domain candidate, record the project-native name, tentative path, owned and excluded behavior, adjacent boundary, source evidence, and whether it is accepted for this operation, rejected as broad, or blocked by a concrete ownership decision. Put reviewed durable boundaries in domain context atoms; do not copy this candidate map into criteria.
+For each domain candidate, record the project-native name, tentative path, durable responsibility, important excluded capability or adjacent boundary, source evidence, and whether it is accepted for this operation, rejected as broad, or blocked by a concrete ownership decision. Put reviewed durable boundaries in domain context atoms; do not copy this candidate map into criteria.
 
 The minimum row is:
 
 ```text
-동작/결정 | 잠정/확정 owner | 공유 계약과 참조 도메인 | 소스 근거 | 관련 AID/판정 | 위험 트리거/미해결
+맥락 후보와 선택 이유 | 잠정/확정 owner | 중요한 계약·제약과 참조 도메인 | 소스 근거 | 관련 AID/판정
 ```
 
-Each aggregate row identifies its candidate `atom_key` or split proposal in the owner field. Add short notes for consequential rules, state/effects, contracts, or failures only when the writer needs them to avoid losing a decision. The atom is the durable explanation; the inventory is candidate routing and closure state.
+Each selected row identifies its candidate `atom_key` or split proposal in the owner field. Add short notes only for important rules, state/effects, contracts, or failures the writer needs to understand the context. The atom is the durable explanation; the inventory is selection and routing state, not behavior closure state.
 
-One behavior aggregate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, or setting when they implement the same decision.
+One context candidate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, setting, branch, or ordinary behavior.
 
 ## Ownership And Evidence Prepass
 
-For multi-domain or `initial-baseline` work, run one prepass over accepted behavior aggregates before the first writer. A targeted single-domain operation checks only the target owner and adjacent contracts; it does not perform project-wide ownership discovery.
+For multi-domain or `initial-baseline` work, run one prepass over selected shared/high-impact context candidates before the first writer. A targeted single-domain operation checks only the target owner and adjacent contracts; it does not perform project-wide ownership discovery.
 
 - identify shared payload, storage, permission, policy, integration, transaction, and glossary source-of-truth owners
 - record which domains reference each shared owner and use reference count only as queue-order evidence
@@ -61,10 +61,10 @@ For multi-domain or `initial-baseline` work, run one prepass over accepted behav
 
 Do not build a complete semantic graph or freeze every aggregate owner before writing. Uncertain shared ownership remains an explicit blocker; uncertain local ownership may be resolved in its bundle.
 
-Create one operation-local `evidence.md` beside request state and pin it to `source_commit_observed`. For each aggregate, record source entry points and only applicable storage, transaction, integration, schema, setting, and test locations. Writers and reviewers reuse this index to navigate source. Reviewers reopen changed or risk-bearing claims, sample unchanged high-consequence claims, and update the index when evidence changes; they do not rediscover every entry point.
+Create one operation-local `evidence.md` beside request state and pin it to `source_commit_observed`. For each selected context candidate, record the smallest useful source anchors and only applicable storage, transaction, integration, schema, setting, and test locations. Writers and reviewers reuse this index to navigate source. Reviewers reopen changed or risk-bearing claims, sample unchanged high-consequence claims, and update the index when evidence changes; they do not rediscover every entry point.
 
-Every meaningful aggregate in accepted scope must close to an owner or explicit disposition before review PASS. If ownership is unclear, record a coverage gap with source evidence and `confirmation_needed`.
+Every context candidate accepted into the write queue must resolve to an owner, an explicit unresolved decision, or removal from the queue with a selection reason before review PASS. Ordinary unselected behavior needs no row or disposition. If a selected high-impact owner remains unclear and that uncertainty would mislead the atom's stated scope, record a gap with source evidence and `confirmation_needed`.
 
-The required development-quality reviewer checks aggregate-level closure against source and may identify an omitted aggregate. It must not demand row-level duplication of source mechanics.
+The required context-quality reviewer checks the selected queue and may identify a missing shared/external owner or non-obvious constraint only when its omission would make an atom's stated scope misleading. It must not search for or disposition every source behavior.
 
-After accepted atom docs are written and reviewed, delete or ignore the operation-local inventory unless the user explicitly approved retaining a synced project coverage index.
+After accepted atom docs are written and reviewed, delete or ignore the operation-local inventory unless the user explicitly approved retaining a synced project context index.

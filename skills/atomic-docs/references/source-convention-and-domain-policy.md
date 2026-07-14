@@ -37,10 +37,10 @@ The source convention document is not a general style guide for its own sake. It
 Keep source convention and service logic judgment separate:
 
 - Non-runtime code style belongs only in `project/source-convention.md`; do not put it in service logic atom `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, or `Gaps` unless the user explicitly asks for a style atom outside normal service-logic docs.
-- Runtime-impacting conventions may be summarized in `project/source-convention.md`, but the actual code judgment basis must also appear as natural-language behavior in the relevant service logic atom with source evidence. Link to its `atom_key` and include its AID when one exists; do not create an AID solely for this link. When no atom exists yet, link to a coverage gap.
+- Runtime-impacting conventions may be summarized in `project/source-convention.md`. Repeat or link one in a service logic atom only when it is important context for that atom's stated scope or supports an implementation/compliance judgment. Link to its `atom_key` and include its AID when one exists; do not create an atom, AID, or gap solely because a runtime convention exists.
 - The source convention document alone cannot support `bug_or_regression`, `missing_required_behavior`, `matches_confirmed_intent`, `unapproved_implemented_behavior`, or `out_of_scope_behavior` for service logic. Use it as interpretation context, then connect the judgment to service logic atoms, source evidence, baseline metadata, and judgment labels.
 - If a service logic atom contains simple code convention, source folder taxonomy, import order, formatting, naming, or layer-placement notes as if they were runtime behavior, reviewer must fail or request moving that material to `project/source-convention.md`.
-- If a source convention has runtime impact but no related service logic atom records the behavior, leave a coverage gap or `confirmation_needed` item instead of treating the source convention as sufficient code judgment evidence.
+- If a source convention is used as the basis of a service-logic judgment, connect that judgment to an existing relevant atom and reachable source evidence. If no atom was selected because the convention is ordinary navigation context, no coverage gap is required.
 
 ## Domain Discovery Policy
 
@@ -57,11 +57,11 @@ Do not confirm a domain solely from a code folder name.
 
 Category and subdomain folders are allowed only as organization inside an approved durable boundary. They must not hide a broad domain, generic bucket, lifecycle status group, or code-layer grouping. If a category label is broad, record it as `rejected` or split it into concrete durable boundary proposals before atom writing.
 
-When a broad source root or category/root surface is rejected, still inspect below it for concrete business aggregates. A concrete aggregate is a source-observed responsibility where routes, controllers, service methods, policy rules, persistence side effects, or user-visible workflow steps repeatedly describe the same capability, operation, lifecycle, or management task and tend to change together. Promote that aggregate to a concrete domain candidate or concrete split proposal with owned behavior, excluded behavior, adjacent boundary, and unresolved questions instead of stopping at the broad rejection.
+When a broad source root or category/root surface is rejected, inspect below it far enough to find concrete durable responsibilities that would be useful implementation context. Repeated project-native business language, ownership, shared contracts, or change impact can justify a concrete domain candidate or split proposal. Do not stop at the broad rejection when an obvious high-value responsibility is present, but do not enumerate every sub-aggregate merely to prove coverage.
 
-Rejected broad roots need concrete aggregate disposition in the operation inventory. For each obvious sub-aggregate, record whether it becomes an atom candidate, concrete split proposal, coverage gap, `out_of_scope`, or not-applicable item. A broad root rejection with no sub-aggregate disposition is not enough for domain writing or review PASS.
+Record concrete candidates found beneath a rejected broad root in the operation inventory with their selection reason and source evidence. A broad root rejection with no follow-up is insufficient only when source evidence shows an obvious durable owner, shared/external contract, or non-obvious responsibility whose omission would make the proposed docs misleading.
 
-Treat management/operational aggregate evidence as a domain discovery trigger when management verbs such as manage, register, approve, issue, settle, recover, disable, restore, or delete appear with an endpoint/service entry and a persistence, permission, policy, or workflow effect. The candidate name should preserve project/user business language unless user-approved or source-observed evidence supports promotion.
+Treat management/operational responsibility as a domain candidate signal when project-native verbs such as manage, register, approve, issue, settle, recover, disable, restore, or delete repeatedly appear with durable ownership, policy, shared contracts, or change impact. A verb plus an endpoint or persistence call alone does not require a candidate. The candidate name should preserve project/user business language unless user-approved or source-observed evidence supports promotion.
 
 ## Hybrid Domain Naming Policy
 
@@ -107,22 +107,22 @@ A first-level domain is valid only when it describes a durable ownership boundar
 - an integration contract
 - a shared policy or platform concern
 
-Before creating or moving a domain, the domain context or change plan must state:
+Before creating or moving a domain, the domain context or change plan must state the applicable navigation context:
 
-- the behavior the domain owns
-- the behavior the domain excludes
+- the durable responsibility the domain owns
+- an important excluded capability when needed to prevent confusion
 - the adjacent-domain boundary
 - why the atom files in the domain tend to change together
 
 Do not confirm a first-level domain when its main rationale is a documentation section type, lifecycle state, task status, freshness state, review state, temporary work grouping, code-layer grouping, screen grouping, category grouping, or generic catch-all bucket. If a candidate boundary is broad or unclear, the development reviewer must FAIL it unless the operation inventory records it as a rejected broad grouping or a concrete split proposal based on observed capabilities, workflows, responsibilities, contracts, or policies.
 
-The development reviewer must also FAIL a bundle that rejects a broad source root but does not account for obvious concrete aggregates underneath it. The operation inventory needs concrete aggregate candidates, split proposals, or an evidence-backed explanation that no route/controller/service/policy/persistence/workflow surface supports a durable lower-level boundary.
+The development reviewer must also FAIL a bundle that rejects a broad source root while hiding an obvious high-value lower-level owner or shared contract needed to understand the proposed docs. It must not require a candidate, split, or disposition for every route/controller/service/policy/persistence/workflow surface underneath that root.
 
 ## Core Business Term Coverage Gate
 
-Before writing or refreshing atom files, identify business terms whose meaning is ambiguous, shared across domains, ownership-sensitive, or necessary to understand the accepted decision. Define those terms in `project/project-glossary.md` or an appropriate domain atom. Do not create glossary entries for every repeated type, collection key, UI title, or payload noun.
+Before writing or refreshing selected atom files, identify business terms whose meaning is ambiguous, shared across domains, ownership-sensitive, or necessary to understand those atoms. Define those terms in `project/project-glossary.md` or an appropriate domain atom. Do not inventory project-wide terminology or create glossary entries for every repeated type, collection key, UI title, or payload noun.
 
-Do not document a derived concept while its parent business term is missing or underdefined. If the parent meaning is uncertain, put the missing definition and source evidence in the change plan or `Gaps` instead of writing confirmed intent.
+When a selected derived concept depends on an ambiguous parent business term, define or flag only the parent meaning needed to understand that concept. Do not turn unrelated missing vocabulary into a project-wide gap.
 
 Do not force admin, operator, or screen-centric language when the source project is not an admin UI. For non-UI services, libraries, jobs, agents, or APIs, describe the relevant caller, service, job, policy, or system flow instead of inventing an operator workflow. When a UI or command entry point exists, include that entry point as source evidence.
 

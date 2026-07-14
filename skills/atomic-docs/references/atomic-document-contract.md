@@ -34,7 +34,7 @@ Every atom uses this exact organization:
 
 Use generic context atoms to preserve project and domain intent without hardcoding project-specific folder names.
 
-A domain context atom owns domain-wide purpose, outcomes, included and excluded capabilities, and adjacent-domain boundaries. A behavior atom's `Boundaries` section owns only that behavior's local inclusion, exclusion, and handoff to an adjacent atom. The behavior atom references the context atom for a shared domain boundary instead of repeating it, and the context atom does not enumerate every behavior-local boundary.
+A domain context atom owns domain-wide purpose, important capabilities, durable ownership, and adjacent-domain boundaries needed for navigation and change impact. A behavior atom's `Boundaries` section owns only a local distinction that prevents ownership or handoff confusion. The behavior atom references the context atom for a shared domain boundary instead of repeating it, and the context atom does not enumerate every behavior or local boundary.
 
 Default shared-domain atom:
 
@@ -52,8 +52,8 @@ Default domain-level atom:
 <doc-root>/<domain>/<domain>-context-atom.md
 ```
 
-- A domain context atom combines the domain goal and domain boundary.
-- It records the domain purpose, responsibilities, included behavior, excluded behavior, adjacent-domain boundaries, and conditions for promoting shared concepts to `common`.
+- A domain context atom combines the domain goal and important ownership boundary.
+- It records the domain purpose, durable responsibilities, important included/excluded capabilities, adjacent-domain boundaries, and conditions for promoting shared concepts to `common`; it is not a complete behavior catalog.
 - When creating a new domain, create or update its context atom in the same accepted change plan. If the domain goal or boundary is unclear, present candidate boundaries and ask instead of writing confirmed intent.
 - Do not create a domain-specific glossary by default. Add domain-only terms to `project/project-glossary.md` with their domain scope unless the user explicitly wants separate glossary documents or glossary atoms.
 
@@ -89,6 +89,6 @@ Keep this reference under 200 lines as the structural entrypoint. Load the sibli
 - `references/atomization-criteria-contract.md` for the first criteria document, approved criteria shape, and criteria-review contract.
 - `references/project-documents-and-inventory.md` for project-document lifecycle, inventory retention, and operation inventory/evidence flow.
 - `references/source-convention-and-domain-policy.md` for source convention documents, domain discovery, hybrid naming, domain boundary review, and core business term coverage.
-- `references/service-logic-coverage.md` for decision-complete service logic coverage, proportional depth, source fact fidelity, and Goal boundary rules.
+- `references/service-logic-coverage.md` for implementation-context selection, proportional depth, source exploration, source fact fidelity, and Goal boundary rules.
 - `references/atom-format-and-judgment.md` for AID policy, required atom sections, atom-local judgment placement, forbidden shapes, and atomicity rules.
 - `references/change-judgment-policy.md` for controlled labels, judgment precedence, and finding evidence.

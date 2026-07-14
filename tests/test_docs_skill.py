@@ -30,7 +30,7 @@ class DocsSkillTests(unittest.TestCase):
         text = read(SKILL)
         self.assertIn("name: atomic-docs", text)
         self.assertIn("development decisions, implementation review, and change-impact analysis", text)
-        self.assertIn("they do not replace the source tree", text)
+        self.assertIn("do not replace the source tree", text)
         expected = {
             "docs-root-and-config.md",
             "atomic-document-contract.md",
@@ -164,7 +164,7 @@ class DocsSkillTests(unittest.TestCase):
             "Select one profile before source discovery": "refresh-flow.md",
             "| Change after review | Required rerun |": "reviewer-perspectives.md",
             "Create the first baseline only when": "source-baseline-and-change-plan.md",
-            "Document until all of these questions can be answered": "service-logic-coverage.md",
+            "Document until the applicable questions can be answered": "service-logic-coverage.md",
             "Each atom file must preserve these sections": "atom-format-and-judgment.md",
             "Apply the first matching judgment that is supported by evidence": "change-judgment-policy.md",
         }
@@ -180,14 +180,14 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 'display_name: "Atomic Docs"',
-                'short_description: "Docs for development decisions and implementation review."',
+                'short_description: "Source-guided implementation context for development decisions."',
                 'default_prompt: "Use $atomic-docs',
-                "current source contracts",
-                "without mirroring or auditing the whole source tree",
+                "high-value implementation context",
+                "without creating a product-behavior specification",
             ),
         )
 
-    def test_skill_does_not_use_source_replacement_as_quality_target(self) -> None:
+    def test_skill_uses_implementation_context_not_behavior_specification_as_quality_target(self) -> None:
         text = read(SKILL) + read(OPENAI_YAML) + "\n".join(
             read(path) for path in sorted(REFS.glob("*.md"))
         )
@@ -195,9 +195,10 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "they do not replace the source tree",
-                "decision completeness",
-                "internal technical choices remain free",
+                "useful implementation context",
+                "not a product-behavior specification",
+                "Exact fields, branches, state mechanics, and failure paths may remain in source",
+                "docs-only implementation is not the review target",
             ),
         )
         for obsolete in (
@@ -205,6 +206,8 @@ class DocsSkillTests(unittest.TestCase):
             "docs-only reconstruction reviewer",
             "implementation-reconstruction-ready",
             "exactly four independent draft reviewers",
+            "FAIL when a developer still must invent product behavior",
+            "product behavior is unambiguous, verification can be derived",
         ):
             self.assertNotIn(obsolete, text)
 
@@ -302,7 +305,7 @@ class DocsSkillTests(unittest.TestCase):
                 "project/atomization-criteria-atom.md",
                 "reviewer logs, or operation status",
                 "competing source-unverifiable purpose interpretations",
-                "one-line summary",
+                "only a source identifier list",
                 "Do not create or advance baseline metadata",
             ),
         )
@@ -374,12 +377,12 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Each section owns one question",
+                "not a completeness checklist",
                 "Why does this atom exist?",
-                "What normal result can a user, caller, operator, or system observe?",
-                "What behavior is included or excluded",
-                "Which conditions, invariants, refusals",
-                "A second specification of their complete conditions",
+                "What smallest normal result helps orient a reader",
+                "Which important ownership, inclusion/exclusion",
+                "Which non-obvious rule, invariant, refusal",
+                "A second specification of complete fields",
                 "A complete restatement of the owning rule",
                 "another section needs a short reference, not a paraphrase",
             ),
@@ -442,7 +445,7 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "A domain context atom owns domain-wide purpose",
-                "behavior atom's `Boundaries` section owns only that behavior's local",
+                "behavior atom's `Boundaries` section owns only a local distinction",
                 "Graph frontmatter owns the machine-traversable type",
                 "not the source of truth for a natural-language boundary",
                 "point to the owning AID or section",
@@ -492,7 +495,7 @@ class DocsSkillTests(unittest.TestCase):
                 "first place where source-derived domain and atom candidates are recorded",
                 "do not copy this candidate map into criteria",
                 "project-native name",
-                "concrete business aggregates",
+                "concrete durable responsibilities",
             ),
         )
 
@@ -515,22 +518,31 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_source_coverage_is_decision_complete_and_proportional(self) -> None:
+    def test_source_docs_select_high_value_context_and_leave_exact_behavior_in_source(self) -> None:
         text = refs("service-logic-coverage.md", "atom-format-and-judgment.md")
         assert_all(
             self,
             text,
             (
-                "durable development-decision standard",
-                "must not rediscover from scattered code or invent during implementation",
-                "observable verification condition",
-                "related domains, shared contracts, graph relationships, and conflicts",
-                "Do not narrate every function call",
-                "Stop adding detail when every remaining choice is an internal technical choice",
+                "Implementation Context Selection",
+                "shared or external contract",
+                "non-obvious implementation constraint",
+                "Do not select a behavior merely because a route, field, branch, state",
+                "are not a completion checklist",
+                "does not need an observable verification target",
+                "do not narrate every function call",
+                "Stop adding detail once the reader can navigate to source",
+                "Exact fields, payload mappings, ordinary branches",
                 "Do not use atom count, file count, line count, or source-surface count",
                 "Use tables or structured lists only when compact prose would obscure",
             ),
         )
+        for obsolete in (
+            "For each meaningful behavior aggregate in the accepted scope",
+            "Maintain closure from each meaningful behavior aggregate",
+            "until each meaningful product or operational aggregate has a disposition",
+        ):
+            self.assertNotIn(obsolete, text)
 
     def test_semantic_reviewers_use_source_and_do_not_treat_source_access_as_failure(self) -> None:
         text = refs(
@@ -544,12 +556,30 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "Reviewers may inspect source",
                 "Source access is required when checking fidelity",
-                "docs preserve the decisions needed for implementation, verification, and conflict analysis",
-                "Do not FAIL merely because internal code structure",
-                "Review must not fail merely because the reader needs source for internal mechanics",
+                "orient source inspection and expose the important constraints",
+                "Do not FAIL because general docs omit ordinary fields",
+                "Reopening source for exact behavior is expected",
             ),
         )
         self.assertNotIn("docs-only reviewer", text)
+
+    def test_context_review_fails_misleading_omissions_not_ordinary_detail_omissions(self) -> None:
+        text = refs(
+            "service-logic-coverage.md",
+            "project-documents-and-inventory.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "hides a known shared/external contract, owner, or non-obvious constraint",
+                "whose omission makes the atom's stated scope misleading",
+                "ordinary fields, inputs/outputs, branches, states, failures",
+                "A developer needing source to determine exact product behavior is expected",
+                "Ordinary unselected behavior needs no row or disposition",
+            ),
+        )
 
     def test_required_aids_keep_verification_conditions_inline(self) -> None:
         text = read(REFS / "atom-format-and-judgment.md")
@@ -566,7 +596,7 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_atoms_keep_verification_targets_not_exhaustive_test_plans(self) -> None:
+    def test_general_atoms_skip_verification_targets_but_implementation_basis_keeps_them(self) -> None:
         text = read(SKILL) + refs(
             "atom-format-and-judgment.md",
             "service-logic-coverage.md",
@@ -576,12 +606,14 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "durable verification target",
-                "not an exhaustive test design",
+                "do not require a verification target for every observed behavior",
+                "only for an approved implementation-basis change",
+                "changed in-scope required AID",
+                "observable verification condition",
                 "Cartesian products of inputs, states, failures",
-                "do not create another artifact by default",
+                "do not preserve them in managed docs",
                 "matrix must itself express a product or contract decision",
-                "derive concrete test combinations",
+                "does not need an observable verification target",
             ),
         )
 
@@ -644,7 +676,7 @@ class DocsSkillTests(unittest.TestCase):
                 "Record execution order only when",
                 "complete method-call sequence",
                 "substitute for reopening source",
-                "source-level mechanics whose only value is exhaustive reproduction",
+                "source-level mechanics whose only value is specification completeness",
             ),
         )
 
@@ -689,12 +721,12 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "supporting evidence rather than a substitute for reachable production behavior",
                 "Exclude generated, build, vendor, formatting",
-                "behavior aggregate in the accepted scope",
-                "do not require a separate inventory row or AID for every mechanical source surface",
+                "selected context candidate may span routes",
+                "do not require a separate inventory row or AID for each surface",
             ),
         )
 
-    def test_high_risk_behavior_adds_conditional_depth_and_review(self) -> None:
+    def test_high_risk_review_checks_selected_context_without_starting_an_audit(self) -> None:
         text = read(REFS / "service-logic-coverage.md")
         for category in (
             "authentication, authorization, security, privacy",
@@ -709,17 +741,17 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Apply additional detail and the independent risk/contract reviewer",
-                "Add a matrix only when the alternatives form a durable contract",
-                "full cross-product in the atom",
-                "A trigger does not require unrelated detail",
+                "selected context candidate or approved implementation-basis change",
+                "Source presence alone does not start a risk audit",
+                "Do not discover or preserve every adverse branch",
+                "Require an adverse outcome and verification target only for an approved implementation-basis requirement",
                 "Ordinary CRUD, reversible preference persistence",
                 "authoritative local or user-approved provider evidence",
                 "Record `confirmation_needed` only when",
             ),
         )
 
-    def test_inventory_is_operation_local_and_closes_to_atoms(self) -> None:
+    def test_inventory_is_operation_local_and_tracks_only_selected_context(self) -> None:
         text = read(REFS / "project-documents-and-inventory.md")
         assert_all(
             self,
@@ -727,11 +759,13 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "operation-local by default",
                 "lightweight operation inventory",
-                "grouped by durable domain candidate and meaningful behavior aggregate",
+                "grouped by durable domain and selected implementation-context candidate",
                 "first place where source-derived domain and atom candidates are recorded",
                 "Do not require every inventory row",
                 "Do not create one inventory row per route",
                 "candidate or final owning `atom_key`",
+                "Ordinary unselected behavior needs no row or disposition",
+                "must not search for or disposition every source behavior",
                 "delete or ignore the operation-local inventory",
             ),
         )
@@ -789,11 +823,11 @@ class DocsSkillTests(unittest.TestCase):
                 "One bundle may own several atoms",
                 "Create one writer and one independent development-quality reviewer for the operation",
                 "record their agent IDs in `work-state.json`",
-                "Reuse them for every sequential bundle",
+                "Reuse them for every sequential selected bundle",
                 "create one risk/contract reviewer and reuse it",
                 "same-role replacement using a compact handoff",
                 "not the writer's private reasoning conversation",
-                "Ordinary CRUD or preference persistence is not a trigger by itself",
+                "Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
                 "every reviewer applicable to the active bundle PASSes",
                 "reopen that bundle",
@@ -817,7 +851,7 @@ class DocsSkillTests(unittest.TestCase):
                 "scopes this preflight to the active bundle",
                 "Unrelated pre-existing structural findings do not block the bundle",
                 "Run unscoped docs validation after the accepted queue finishes",
-                "Compare keys and dispositions, not raw document counts",
+                "Compare planned selected keys, not raw source or document counts",
                 "If preflight FAILs, return to the writer without spending a semantic review",
                 "same revision and source basis",
                 "in parallel",
@@ -850,13 +884,13 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "Intent, rule, observable contract, verification condition, behavior ownership, or judgment label",
+                "Intent, important context, rule/contract, ownership, approved verification condition, or judgment label",
                 "Atom boundary, owner, edge type/target",
                 "Markdown formatting, graph path repair",
                 "structural preflight only",
                 "Source locator/evidence index correction with unchanged documented claim",
                 "narrowed source-evidence check",
-                "reviews every domain bundle for `initial-baseline`",
+                "reviews every selected domain bundle for `initial-baseline`",
                 "Targeted structural-only single-domain change",
             ),
         )
@@ -868,10 +902,10 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "one meaning has one complete owner",
-                "substantively repeated across sections or ownership artifacts",
+                "substantive repetition across sections",
                 "A short reference plus the minimum local reading context is not duplication",
-                "Require the missing detail in its owning section",
-                "do not request a second full copy in `Current Implementation` or `Gaps`",
+                "Do not FAIL a general context atom merely because an unmentioned refusal",
+                "docs-only implementation is not the review target",
             ),
         )
 
@@ -881,12 +915,12 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "exhaustive test combinations",
+                "specify every behavior",
                 "gap economy",
                 "Cartesian test plan",
-                "mechanical AIDs/gaps",
-                "AIDs preallocated across every `Outcome`/`Boundary`/`Rule` without actual references",
-                "substitute for source inspection",
+                "mechanical AID allocation",
+                "Current Implementation` written as a source substitute",
+                "product-behavior specification",
                 "concrete test cases",
             ),
         )
@@ -928,10 +962,10 @@ class DocsSkillTests(unittest.TestCase):
                 "검토 범위 | source/revision | verdict | 확인한 대표 근거 | 재실행 필요 여부",
                 "A FAIL report adds only blocking findings",
                 "do not repeat it in every PASS report",
-                "decision completeness",
+                "context usefulness",
                 "proportional depth",
                 "source fact fidelity",
-                "accepted-scope closure",
+                "selected-scope trace",
                 "cannot replace a required independent reviewer",
                 "Do not persist an answer sheet for an ordinary development PASS",
                 "Persist a decision comparison table only when",
@@ -994,7 +1028,9 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "process every discovered bundle",
+                "Consider every project-native feature area",
+                "select durable high-value context bundles",
+                "Do not turn source exploration into a behavior-disposition inventory",
                 "Start from `git diff <source_commit>..HEAD`",
                 "process affected bundles only",
                 "Do not run the initial-baseline procedure for an ordinary refresh",
@@ -1091,7 +1127,7 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "Bootstrap criteria drafting and criteria-review/revision do not require a Codex Goal",
                 "call `create_goal` before creating project docs, inventory, atom files, graph edges",
-                "decision-complete documentation requirement",
+                "implementation-context selection requirement",
                 "applicable domain/risk/project review gates",
                 "If Goal creation is unavailable or fails, stop before docs generation",
                 "Complete the Goal only after",
@@ -1115,7 +1151,8 @@ class DocsSkillTests(unittest.TestCase):
                 "Never use this operation-local value to advance",
                 "required development-quality review and applicable risk review PASS",
                 "project-wide integration/baseline reviewer PASSes",
-                "managed docs accurately preserve the source-established current contracts",
+                "retained managed-doc claims were reviewed at that revision",
+                "does not mean every product behavior, field, branch, state, or failure is documented",
                 "Baseline PASS does not mean product policy approval",
             ),
         )
@@ -1195,11 +1232,11 @@ class DocsSkillTests(unittest.TestCase):
                 "project/source-convention.md",
                 "non-atom document",
                 "runtime-impacting conventions",
-                "natural-language behavior in the relevant service logic atom",
+                "important context for that atom's stated scope",
                 "include its AID when one exists",
-                "do not create an AID solely for this link",
+                "do not create an atom, AID, or gap solely because a runtime convention exists",
                 "Non-runtime code style",
-                "must also appear as natural-language behavior",
+                "no coverage gap is required",
                 "cannot support `bug_or_regression`",
             ),
         )

@@ -50,7 +50,7 @@ Avoid endpoint lists, source identifier lists, class-role summaries, or method-c
 
 After the docs write/review gates pass, summarize the docs for the user before coding.
 
-The required domain development-quality reviewer and any applicable risk/contract reviewer must have PASSed using the docs, requirements, and relevant source evidence. If implementation would still require an unstated product decision, return to docs writing rather than approving implementation. Needing source for internal mechanics is expected.
+The required domain development-quality reviewer and any applicable risk/contract reviewer must have PASSed using the docs, requirements, and relevant source evidence. The implementation-basis docs review must FAIL and the code stage must not begin if a changed in-scope required behavior lacks its required AID or that AID lacks a same-item observable verification condition or invariant. If implementation would still require an unstated product decision, return to docs writing rather than approving implementation. Needing source for internal mechanics is expected.
 
 The summary must include:
 
@@ -117,6 +117,6 @@ After final docs update, validate the real affected flow rather than only checki
 
 1. Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
 2. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
-3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used for that compliance result.
+3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used for that compliance result. Compliance must FAIL when any required row or evidence cell is missing.
 4. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
 5. Summarize the final docs/code compliance result, validations run, final docs paths, and remaining out-of-scope or pre-existing issues.

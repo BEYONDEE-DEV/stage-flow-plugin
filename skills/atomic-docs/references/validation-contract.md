@@ -60,9 +60,10 @@ The baseline commit must resolve in the configured `source_root`. `coverage` val
 The validator must not decide:
 
 - whether a domain boundary is meaningful
-- whether source discovery is complete
-- whether natural-language behavior is sufficiently detailed
-- whether development decisions are complete enough for the accepted implementation or review scope
+- whether source exploration found the useful context candidates
+- whether natural-language implementation context is accurate or useful
+- whether an important owner, shared/external contract, or non-obvious constraint is missing
+- whether an Atomic Impl/compliance requirement is complete enough for its approved implementation scope
 - whether user intent or a judgment label is correct
 - whether a global baseline is semantically authorized by reviewer PASS results
 

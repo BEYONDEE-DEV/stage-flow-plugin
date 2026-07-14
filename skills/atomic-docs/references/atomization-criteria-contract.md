@@ -33,11 +33,11 @@ Keep only rules that remain useful across operations:
 
 - what the docs are for and what source or operation scope they may cover
 - how durable domain ownership differs from a broad category, source folder, screen, task group, or generic catch-all
-- when independent product decisions, ownership, verification, conflict, or change boundaries require separate atoms, and when related behavior stays together
-- decision-depth rules: preserve product, business, contract, operational, verification, dependency, and unresolved decisions without mirroring source mechanics
+- when distinct durable purpose, ownership, shared-contract, navigation, conflict, or change-impact boundaries require separate atoms, and when related context stays together
+- context-depth rules: preserve high-value purpose, business/operational rules, contracts, non-obvious constraints, source anchors, dependencies, and unresolved decisions without creating a complete product-behavior specification
 - evidence rules: current-contract claims need reachable source evidence, desired changes need approved requirement evidence, and identifiers alone do not prove behavior; user approval absence alone does not turn a source-established contract into a Gap
 - selective identity rules: use stable `atom_key`; assign AIDs only to durable decisions that need independent reference; use graph relationships only for meaningful impact or ownership traversal
-- shared writer/reviewer acceptance rules and conditional risk triggers in compact form
+- shared writer/reviewer acceptance rules, context selection signals, explicit permission to leave ordinary details in source, and conditional risk triggers in compact form
 - selected documentation language, user-specific prohibitions, project-specific durable exceptions, and decisions that still block approval
 
 Do not copy the complete skill reference contracts into criteria. One clear project-facing rule may point to the active Atomic Docs contract for mechanical schema details.
@@ -54,7 +54,7 @@ Do not put any of the following in durable criteria:
 - bundle queues, agent identities, reviewer results, Goal status, baseline readiness, cache paths, or current-run progress
 - subagent instruction sheets or repeated judgment-label catalogs
 
-After criteria approval and docs-scope acceptance, put domain/atom candidates, source evidence, owners, risk triggers, and dispositions in `.stageflow/atomic-docs/requests/<request-id>/inventory.md`, `evidence.md`, or `work-state.json`. Preserve a reviewed durable domain boundary in its domain context atom. Keep a retained project coverage index only when the user explicitly requests it.
+After criteria approval and docs-scope acceptance, put selected domain/context candidates, source evidence, owners, risk triggers, and queue state in `.stageflow/atomic-docs/requests/<request-id>/inventory.md`, `evidence.md`, or `work-state.json`. Preserve a reviewed durable domain boundary in its domain context atom. Keep a retained project context index only when the user explicitly requests it.
 
 An existing approved criteria file that contains the older maps or perspective table remains a valid superset. Do not migrate or delete that content automatically. New criteria and user-approved criteria revisions use the compact contract; unrelated docs work may read the durable rules and ignore legacy discovery/progress sections.
 
@@ -64,7 +64,7 @@ The independent criteria reviewer checks only:
 
 - all six compact sections exist and use understandable language
 - draft/approved state is accurate
-- split/merge, decision depth, selective identity, evidence, and review rules do not contradict one another
+- split/merge, context depth, selective identity, evidence, and review rules do not contradict one another or turn general Atomic Docs into a product-behavior specification
 - project exceptions and unresolved approval blockers are explicit
 - operation-local discovery, candidates, evidence, and progress have not leaked into the durable file
 - no unsupported inference, example leakage, migration, deletion, or external action is claimed

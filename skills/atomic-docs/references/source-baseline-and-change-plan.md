@@ -13,7 +13,7 @@ This reference is the normative owner of global source-baseline schema and eligi
 
 ## Source Baseline
 
-Project-wide freshness is tracked with one source-code commit hash stored in metadata at the managed docs root. The baseline metadata is outside individual atom files and exists only for complete project-wide coverage.
+Project-wide context freshness is tracked with one source-code commit hash stored in metadata at the managed docs root. The baseline metadata is outside individual atom files and exists only for a reviewed project-wide context refresh. The fixed schema value remains `project-wide`; it does not mean complete behavior coverage.
 
 Use this exact baseline shape:
 
@@ -25,17 +25,17 @@ Use this exact baseline shape:
 }
 ```
 
-The baseline records the source commit used for a complete reviewed project-wide docs refresh. It means the managed docs accurately preserve the source-established current contracts and required unresolved decisions at that revision. Baseline PASS does not mean product policy approval, user approval of every current behavior, or approval of a future implementation requirement. Compare `git diff <source_commit>..HEAD` or the equivalent source-root diff to prioritize later changes.
+The baseline records the source commit used for a reviewed project-wide implementation-context refresh. It means every project-native feature area was considered for context selection and the retained managed-doc claims were reviewed at that revision. It does not mean every product behavior, field, branch, state, or failure is documented; it is not a docs-only implementation guarantee. Baseline PASS does not mean product policy approval, user approval of every current behavior, or approval of a future implementation requirement. Compare `git diff <source_commit>..HEAD` or the equivalent source-root diff to prioritize later context refreshes.
 
-When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
+When judging code against docs, first determine whether a relevant atom actually documents the context or requirement being compared. If no atom owns that meaning, the baseline does not create an implicit specification; inspect source or create an explicitly accepted docs scope. If an owning atom exists but its source basis is older than the relevant behavior, classify the finding as `docs_stale` or refresh it before making a stronger judgment.
 
-Create the first baseline only when the accepted scope is the whole project, every discovered domain bundle has its required development-quality review and applicable risk review PASS at the same source commit, the project-wide integration/baseline reviewer PASSes, structural baseline validation PASSes, and no blocker prevents project-wide development judgment.
+Create the first baseline only when the accepted scope is the whole project, every project-native feature area was considered, obvious high-impact shared/external context was documented or excluded with a reason, every selected domain bundle has its required development-quality review and applicable risk review PASS at the same source commit, the project-wide integration/baseline reviewer PASSes, and structural baseline validation PASSes.
 
 Advance an existing trusted baseline through `baseline-diff-refresh` without rerunning unaffected domain reviewers. Required reviews for impacted bundles must PASS at the new `source_commit_observed`. The project-wide reviewer may carry prior PASS results forward only after verifying a complete old-to-new source diff, ownership and graph expansion, shared-contract and criteria impact, and an operation-state record of prior/new commits, affected bundles, unchanged bundle classes, and carry-forward rationale. Carry-forward means the reviewed decision basis is unchanged; it is not a claim that an old review ran at the new commit.
 
 Partial or targeted operations must not create, replace, or advance baseline metadata. Record their inspected commit as `source_commit_observed` in `.stageflow/atomic-docs/requests/<request-id>/work-state.json` and report the result as partial scope. That operation-local value is audit/resume state, not a global freshness claim.
 
-Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide decision coverage, source fidelity, applicable risk review, and integration consistency.
+Provisional atoms from `candidate` or `needs_confirmation` domains may be review targets, but they cannot support global baseline creation. In operation summaries, use project-wide baseline-ready wording only when the operation-local post-write review verifies project-wide context exploration, selected-claim source fidelity, applicable risk review, and integration consistency. Never describe baseline readiness as complete product-behavior documentation.
 
 ## Change Scope Inputs
 
@@ -50,9 +50,9 @@ A compact change plan groups by domain and lists only applicable items from the 
 - criteria/config actions and approval state when criteria are new or changing
 - accepted operation profile, Goal/state actions, source commit basis, temporary inventory/evidence paths, and post-write gate status
 - project-document creation, retention, or accepted migration actions
-- inspected source behavior and operation-local domain/atom candidates, owners, boundaries, dispositions, and coverage gaps
+- inspected source areas and operation-local selected domain/context candidates, owners, important boundaries, selection reasons, and material gaps
 - affected atom files, sections, stable identities, splits/merges/moves, and selective AID actions under `atomic-document-contract.md` and `atom-format-and-judgment.md`
-- decision-depth, source-fidelity, and risk-trigger impacts under `service-logic-coverage.md`
+- context-depth, source-fidelity, and risk-trigger impacts under `service-logic-coverage.md`
 - applicable judgment, planned-change, gap, and confirmation actions under `change-judgment-policy.md`
 - graph target/path/relationship actions under `atomic-graph.md`
 - development, risk, integration, and baseline review gates selected by `reviewer-perspectives.md`

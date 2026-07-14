@@ -2,75 +2,72 @@
 
 ## Responsibility
 
-This reference is the normative owner of decision-complete service logic coverage, proportional documentation depth, risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing.
+This reference is the normative owner of implementation-context selection, proportional documentation depth, accepted-scope source exploration, risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing.
 
-## Development Decision Coverage
+## Implementation Context Selection
 
-Atomic docs are a durable development-decision standard, not a source index, source replacement, or default security audit. They preserve source-established current contracts, approved product or operational requirements, and material unresolved decisions developers must not rediscover from scattered code or invent during implementation.
+Atomic docs orient development decisions; they are not a source index, product-behavior specification, source replacement, or default security audit. Select source-established context when at least one of these signals applies:
+
+- the purpose, owner, boundary, or source location is difficult to recover from one obvious place
+- misunderstanding a business or operational rule could change a development decision
+- a shared or external contract, cross-domain dependency, or source-of-truth owner affects change impact
+- a non-obvious implementation constraint, ordering requirement, or side effect is important before editing
+- an approved requirement or material unresolved decision needs a durable home
+
+Do not select a behavior merely because a route, field, branch, state, exception, test, or source file exists. Exact behavior remains in source unless one of the signals above makes it useful implementation context.
 
 ## Current Contract Evidence
 
-A source-established current contract is an observable result, local boundary, rule, state/effect, or integration behavior supported by a reachable production path and, when available, behavior-relevant tests, schemas, settings, or local API contracts. It may be documented without separate user approval. AI authorship alone does not make the meaning inferred or create a Gap; a method name, field annotation, or test name alone still does not establish runtime behavior.
+A selected source-established context claim may describe a purpose, result, local boundary, important rule, state/effect, integration, owner, or constraint supported by a reachable production path and, when available, behavior-relevant tests, schemas, settings, or local API contracts. It may be documented without separate user approval. AI authorship alone does not make the meaning inferred or create a Gap; a method name, field annotation, or test name alone still does not establish runtime behavior.
 
 Reachability or repetition alone does not make behavior a normal contract. An inconsistent branch, violated local invariant, accidental fallback, unsafe bypass, or source quirk without consumer/operational meaning remains implementation context or a differential finding under `atom-format-and-judgment.md`; it must not be normalized merely because the current code executes it.
 
-Trace current contracts through `Current Implementation` source locators and the applicable revision: the project-wide source baseline for complete coverage, or operation-local `source_commit_observed` for targeted/partial work. This establishes what the source currently does. It does not mean product policy approval or make the behavior a future required change.
+Trace documented current context through `Current Implementation` source locators and the applicable revision: the project-wide source baseline for a reviewed context set, or operation-local `source_commit_observed` for targeted/partial work. This establishes the basis of the claims actually made. It does not mean every source behavior is documented, product policy is approved, or the behavior is a future required change.
 
 `Intent` may state the smallest functional purpose supported by entry points, outcomes, ownership, and integration use, but must not present inferred product strategy or necessity as user-approved intent. Create a Gap only when competing purpose interpretations would materially change an outcome, boundary, rule, requirement, or implementation judgment. Section placement and defect routing are owned by `atom-format-and-judgment.md`.
 
-For each meaningful behavior aggregate in the accepted scope, document the applicable items once in the section that owns them:
+For each selected context candidate, record only the applicable context needed to answer: why this area exists, where its important implementation lives, who or what owns it, which non-obvious rule or contract matters before changing it, and what other area may be affected. A short atom may answer only a subset when the others are obvious or immaterial.
 
-- why the behavior exists and what outcome it must preserve
-- source-established or approved rules, invariants, explicit non-goals, and unresolved decisions
-- user, caller, API, event, job, or operational entry points that establish the contract
-- inputs and outputs whose values or shape affect observable behavior
-- authorization, validation, refusal, defaulting, and consequential branches
-- state transitions, persistence effects, external calls, emitted events, or destructive effects
-- failure, retry, fallback, recovery, and runtime exception behavior when it changes the contract
-- a concise observable verification target or invariant for changed requirements being used as an implementation basis
-- related domains, shared contracts, graph relationships, and conflicts that can change the decision
-- source identifiers sufficient to find and verify the relevant implementation
+Inputs, outputs, authorization, validation, branches, state transitions, persistence, external calls, events, failure, retry, fallback, and recovery are not a completion checklist. Include one only when it is an important rule, shared/external contract, non-obvious constraint, or accepted implementation-basis requirement. A general source-context atom does not need an observable verification target. A changed required AID used by Atomic Impl or explicit compliance keeps the verification contract from `atom-format-and-judgment.md`.
 
-Not every item applies to every atom. Omit an item when it has no product, contract, safety, operational, verification, or change-impact meaning. Do not add placeholder matrices or repetitive not-applicable rows merely to satisfy a template. A verification target states what must be observed; it does not enumerate the complete test input matrix or execution procedure.
-
-`Intent` owns only why the atom exists. `Outcomes` owns its concise normal observable result, `Boundaries` owns behavior-local inclusion/exclusion and handoff, and `Rules` owns conditions, invariants, refusals, contracts, and required effects. `Current Implementation` orients a developer to how those decisions are currently realized. Record important entry points, storage or integration ownership, non-obvious constraints, and source locations, then refer to the owning section rather than specifying the same behavior again. Do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose only meaning is already clear from source.
+`Intent` owns only why the atom exists. `Outcomes` gives the smallest normal result needed for orientation, `Boundaries` records a meaningful ownership or handoff boundary, and `Rules` preserves only important non-obvious rules or contracts. `Current Implementation` points to key source anchors and constraints. Do not fill a section merely because the heading exists, and do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose meaning is clear from source.
 
 Context atoms preserve domain-wide purpose, outcomes, vocabulary, ownership, included/excluded capabilities, and adjacent-domain boundaries. Behavior atoms reference that shared context and keep only behavior-local boundaries in their own `Boundaries`; context atoms do not absorb or enumerate concrete rules and workflow boundaries that need independent change or judgment.
 
-## Accepted-Scope Coverage
+## Accepted-Scope Exploration
 
-Maintain closure from each meaningful behavior aggregate in the accepted scope to one of: an owning `atom_key`/AID, a coverage gap, `out_of_scope`, or not-applicable with a reason.
+Explore the accepted source scope enough to identify durable domain boundaries, shared/high-impact owners, and context candidates that meet the selection signals above. The operation inventory closes only the context candidates accepted into its write queue; it is not a disposition table for every source behavior.
 
-A behavior aggregate may span routes, controllers, services, repositories, UI components, settings, schemas, tests, jobs, or integrations. Close the aggregate once at the decision level; do not require a separate inventory row or AID for every mechanical source surface. Tests and configuration are evidence when they change runtime meaning, but behavior-neutral wiring is not documentation work.
+A selected context candidate may span routes, controllers, services, repositories, UI components, settings, schemas, tests, jobs, or integrations. Cite the smallest useful source anchors and do not require a separate inventory row or AID for each surface. Tests and configuration are evidence when they clarify a documented claim, but behavior-neutral wiring is not documentation work.
 
-For full refresh, inspect all project-native feature roots and continue beneath rejected broad roots until each meaningful product or operational aggregate has a disposition. For targeted work, close only the accepted behavior and the adjacent contracts needed to judge its impact. Partial closure must not be reported as project-wide coverage.
+For a full refresh, consider every project-native feature root and continue beneath rejected broad roots far enough to find concrete durable boundaries and high-value context. Do not enumerate or disposition every aggregate. For targeted work, inspect the requested area plus adjacent owners or contracts needed to understand impact. A partial operation must not be reported as a project-wide context refresh.
 
-An endpoint list, class list, source path list, or one-line file summary is not decision coverage. Source identifiers become useful only when the docs explain the durable decision or behavior they support.
+An endpoint list, class list, source path list, or one-line file summary is not useful implementation context. Source identifiers become useful when the docs explain why the location, owner, constraint, or contract matters.
 
 ## Proportional Depth
 
-Document until all of these questions can be answered:
+Document until the applicable questions can be answered:
 
-1. What product or operational behavior must an implementation preserve or change?
-2. What observable result proves success or failure?
-3. Which rules, states, permissions, contracts, or failure paths may not be chosen arbitrarily?
-4. Which other domain or shared contract could conflict with this decision?
+1. Why does this documented area exist, and where should a developer start reading?
+2. Which owner, important rule, shared/external contract, or non-obvious constraint matters before changing it?
+3. Which other domain or source-of-truth could be affected or conflict?
+4. Which approved change or unresolved decision, if any, needs an explicit development judgment?
 
-Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure. Also stop when the remaining work is a forensic defect inventory, attack-scenario catalog, or exhaustive failure reproduction outside an explicitly accepted audit scope. When a meaning is already complete in its owning section, another section needs a short reference, not a paraphrase.
+Stop adding detail once the reader can navigate to source and recognize the important development context. Exact fields, payload mappings, ordinary branches, routine state mechanics, error paths, function decomposition, library choices, framework conventions, DTO copying, and component structure may remain in source. Also stop before a forensic defect inventory, attack-scenario catalog, exhaustive failure reproduction, or docs-only implementation specification. When a meaning is already complete in its owning section, another section needs a short reference, not a paraphrase.
 
-Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification target. Review must not fail merely because the reader needs source for internal mechanics or must derive concrete test cases from a clear invariant.
+Review must FAIL when a documented claim is false or unsupported, when the atom's stated scope hides a known shared/external contract, owner, or non-obvious constraint whose omission would mislead change impact, or when an approved implementation-basis requirement remains ambiguous. Review must not fail because ordinary fields, branches, state transitions, failure outcomes, or verification targets are absent from general source-context docs. Reopening source for exact behavior is expected.
 
 Do not use atom count, file count, line count, or source-surface count as a quality threshold. A short atom can preserve every relevant decision, while a long source narrative can still be shallow.
 
 Use tables or structured lists only when compact prose would obscure independently varying durable decisions. For example, a matrix may be useful when several states have different product-authorized actions or several failure types have distinct contractual recovery behavior. The matrix must itself express a product or contract decision; do not use it merely to enumerate a Cartesian test plan. Do not require field, payload, branch, state, and failure matrices as a fixed set.
 
-For frontend/UI behavior, include fields, routes, screen states, access guards, persistence, payload transforms, feedback, and design constraints only when they affect product behavior, verification, or an explicitly requested style. Display-only fields and exact CSS values are normally source-level details.
+For frontend/UI context, include fields, routes, screen states, access guards, persistence, payload transforms, feedback, or design constraints only when they are important to ownership, a non-obvious product rule, a shared contract, change impact, or an explicitly requested style. Display-only fields and exact CSS values are normally source-level details.
 
-For backend/API/service/job/integration behavior, include payload fields, authorization, validation, domain policy, transaction/idempotency, persistence, schema, events, integrations, and recovery only to the depth needed to preserve a decision or observable contract.
+For backend/API/service/job/integration context, include payload fields, authorization, validation, domain policy, transaction/idempotency, persistence, schema, events, integrations, or recovery only when they are important before changing the documented area. Their presence in source alone does not require documentation.
 
 ## Conditional Risk Depth
 
-Apply additional detail and the independent risk/contract reviewer when the accepted bundle includes any of these triggers:
+Apply the independent risk/contract reviewer when a selected context candidate or approved implementation-basis change includes one of these triggers:
 
 - authentication, authorization, security, privacy, or sensitive-data handling
 - money, billing, refund, settlement, quota, or entitlement
@@ -79,15 +76,15 @@ Apply additional detail and the independent risk/contract reviewer when the acce
 - irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
 - shared payload, storage, permission, integration, or policy contract used by another domain
 
-Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky contract, adverse branch, and concise verification target only when it affects the accepted implementation, review, or change-impact decision. Derive detailed actor/input/state/failure cases transiently during implementation or review rather than preserving their full cross-product in the atom or routine review report. Add a matrix only when the alternatives form a durable contract that cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
+Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. Source presence alone does not start a risk audit. For a triggered context, record the high-impact owner, contract, or non-obvious constraint that matters to change impact and verify claims actually made. Require an adverse outcome and verification target only for an approved implementation-basis requirement that specifies them. Do not discover or preserve every adverse branch, actor/input/state/failure combination, or attack path. Add a matrix only when the alternatives themselves are durable contract context that prose would make misleading.
 
 For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. Record `confirmation_needed` only when the unavailable or conflicting external guarantee prevents the accepted implementation or review judgment; do not create a Gap merely because the remote implementation is outside the repository.
 
 ## Source Fact Fidelity
 
-The development-quality reviewer compares judgment-bearing docs with the actual reachable source path. Do not infer runtime behavior from a field annotation, method name, type, endpoint name, or service class alone.
+The context-quality reviewer compares claims actually made in managed docs with the relevant reachable source path. It does not audit every related behavior for omission. Do not infer runtime behavior from a field annotation, method name, type, endpoint name, or service class alone.
 
-When validation, refusal, defaulting, fallback, exception, read-only behavior, or storage effects matter, inspect the relevant caller binding, runtime guard, null/blank path, default, transaction mode, persistence call, and exception path. Record only the distinctions that affect a documented decision or contract.
+When a documented claim depends on validation, refusal, defaulting, fallback, exception, read-only behavior, or storage effects, inspect the relevant path far enough to verify that claim. Record only distinctions that are useful context; do not expand the check into a complete behavior inventory.
 
 If source allows a fallback instead of refusing input, preserve it as a normal contract only when the reachable evidence supports that interpretation. Do not describe a path as recovered when source can throw an unhandled runtime exception. A non-blocking anomaly may remain concise `Current Implementation` context; if source conflicts with an approved requirement or a source-established current contract, route the differential finding under `change-judgment-policy.md`. Lack of product-intent proof alone does not create `confirmation_needed`.
 

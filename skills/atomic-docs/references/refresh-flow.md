@@ -18,7 +18,7 @@ A full refresh is a first-class operation when the user explicitly asks for it. 
 For refresh or targeted docs work:
 
 1. Confirm the configured docs root and source root.
-2. Inspect changed or targeted source behavior files. Include DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they define or disambiguate runtime behavior. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files only when they have no runtime or product/operations meaning.
+2. Inspect changed or targeted source areas far enough to identify useful implementation context and verify claims selected for documentation. Include DB and validation schemas, migrations, route configuration, runtime settings, and behavior-describing tests when they clarify an important rule, contract, owner, constraint, or approved requirement. Treat tests as supporting evidence rather than a substitute for reachable production behavior. Exclude generated, build, vendor, formatting, and other auxiliary files when they do not affect selected context.
 3. Inspect existing project, common, and domain context before assigning source behavior to a domain.
 4. Use source-to-atom seed discovery to find likely domain and atom candidates.
 5. Follow criteria, Goal, inventory, writer/reviewer, graph, source-baseline, and change-plan rules from the sibling references below.
@@ -27,7 +27,7 @@ For refresh or targeted docs work:
 
 Select one profile before source discovery and record it in operation state:
 
-- `initial-baseline`: no trusted global baseline exists and the accepted scope is the whole project. Run project-wide ownership/evidence prepass, process every discovered bundle, run the project-wide reviewer, and create baseline metadata only after full PASS.
+- `initial-baseline`: no trusted global baseline exists and the accepted scope is the whole project. Consider every project-native feature area, select durable high-value context bundles, run the ownership/evidence prepass and project-wide reviewer, and create baseline metadata only after every selected bundle PASSes. Do not turn source exploration into a behavior-disposition inventory.
 - `baseline-diff-refresh`: a trusted global baseline exists and the user wants it advanced. Start from `git diff <source_commit>..HEAD`, seed impacted atoms, expand through shared ownership/graph, process affected bundles only, then run the project-wide reviewer before updating the baseline. Record the prior/new commits, changed source surfaces, affected bundles, and rationale for carrying forward each unaffected bundle class.
 - `change-impact-refresh`: inspect a source or requirement change and update affected bundles without claiming a new global baseline. Use diff/seed/graph impact and leave global baseline metadata unchanged.
 - `targeted`: process only the user-accepted domain/feature plus adjacent contracts required for ownership and conflict judgment. Do not widen to project-wide work automatically.
