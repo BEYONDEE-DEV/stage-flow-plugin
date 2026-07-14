@@ -229,7 +229,11 @@ class DocsSkillTests(unittest.TestCase):
         )
 
     def test_aids_are_selective_instead_of_line_level_inventory(self) -> None:
-        text = read(REFS / "atom-format-and-judgment.md")
+        text = refs(
+            "atom-format-and-judgment.md",
+            "change-judgment-policy.md",
+            "source-baseline-and-change-plan.md",
+        )
         assert_all(
             self,
             text,
@@ -239,6 +243,9 @@ class DocsSkillTests(unittest.TestCase):
                 "Plain `Current Implementation` observations",
                 "inventory/evidence rows",
                 "may contain zero AIDs",
+                "does not create an AID merely to make the judgment possible",
+                "exact owning section",
+                "affected behavior",
             ),
         )
 
@@ -397,6 +404,88 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_atoms_keep_verification_targets_not_exhaustive_test_plans(self) -> None:
+        text = read(SKILL) + refs(
+            "atom-format-and-judgment.md",
+            "service-logic-coverage.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "durable verification target",
+                "not an exhaustive test design",
+                "Cartesian products of inputs, states, failures",
+                "do not create another artifact by default",
+                "matrix must itself express a product or contract decision",
+                "derive concrete test combinations",
+            ),
+        )
+
+    def test_ordinary_judgment_section_trace_does_not_weaken_compliance(self) -> None:
+        text = refs(
+            "atom-format-and-judgment.md",
+            "change-judgment-policy.md",
+            "source-baseline-and-change-plan.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "stable `atom_key`, the exact owning section, and the affected behavior",
+                "unambiguous natural-language basis",
+                "Path-only, slug-only, identifier-only",
+                "use `confirmation_needed` or a coverage gap instead of a stronger judgment",
+                "explicit compliance operations continue to require AID-backed rows",
+                "changed in-scope required decisions",
+                "when those AIDs already exist or independently need stable reference",
+                "without creating an AID for the mapping",
+            ),
+        )
+
+    def test_gap_creation_and_merging_preserve_independent_risk(self) -> None:
+        text = read(SKILL) + refs(
+            "atom-format-and-judgment.md",
+            "change-judgment-policy.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "not a gap by itself",
+                "prevents a stronger implementation or review judgment",
+                "one judgment label",
+                "one unresolved decision",
+                "compatible resolution",
+                "different labels",
+                "independently resolvable behavior",
+                "high-risk contracts",
+                "verification outcomes",
+            ),
+        )
+
+    def test_current_implementation_stops_before_source_replacement(self) -> None:
+        text = read(SKILL) + refs(
+            "atom-format-and-judgment.md",
+            "service-logic-coverage.md",
+            "reviewer-perspectives.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "without replacing source inspection",
+                "query predicate",
+                "possible exploit/test scenario",
+                "Record execution order only when",
+                "complete method-call sequence",
+                "substitute for reopening source",
+                "source-level mechanics whose only value is exhaustive reproduction",
+            ),
+        )
+
     def test_explicit_implementation_compliance_reuses_post_write_review(self) -> None:
         text = read(SKILL) + refs("docs-generation-flow.md", "change-judgment-policy.md")
         assert_all(
@@ -459,7 +548,8 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "Apply additional detail and the independent risk/contract reviewer",
-                "Add a matrix only when the alternatives cannot be reviewed reliably in prose",
+                "Add a matrix only when the alternatives form a durable contract",
+                "full cross-product in the atom",
                 "A trigger does not require unrelated detail",
                 "Ordinary CRUD, reversible preference persistence",
                 "authoritative local or user-approved provider evidence",
@@ -617,6 +707,21 @@ class DocsSkillTests(unittest.TestCase):
                 "A short reference plus the minimum local reading context is not duplication",
                 "Require the missing detail in its owning section",
                 "do not request a second full copy in `Current Implementation` or `Gaps`",
+            ),
+        )
+
+    def test_reviewers_fail_over_documentation_costs(self) -> None:
+        text = read(REFS / "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "exhaustive test combinations",
+                "gap economy",
+                "Cartesian test plan",
+                "mechanical AIDs/gaps",
+                "substitute for source inspection",
+                "concrete test cases",
             ),
         )
 
@@ -909,6 +1014,7 @@ class DocsSkillTests(unittest.TestCase):
         text = refs(
             "source-convention-and-domain-policy.md",
             "project-documents-and-inventory.md",
+            "atomic-document-contract.md",
         )
         assert_all(
             self,
@@ -917,6 +1023,9 @@ class DocsSkillTests(unittest.TestCase):
                 "project/source-convention.md",
                 "non-atom document",
                 "runtime-impacting conventions",
+                "natural-language service logic owner",
+                "include its AID when one exists",
+                "Do not create an AID solely for this link",
                 "Non-runtime code style",
                 "must also appear as natural-language behavior",
                 "cannot support `bug_or_regression`",

@@ -41,13 +41,13 @@ Do not use `confirmation_needed` for an answer the user has already resolved. If
 
 ## Evidence Requirements
 
-Every judgment item must name the atom path, stable `atom_key` when available, related AID values, source evidence, judgment label, reason, and the confirmed or inferred basis for the judgment. The basis may be confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, approved required `Planned Changes`, source baseline metadata, or explicit user approval. Refer to the owning AID instead of repeating its complete behavior in the finding.
+Every judgment item must name the atom path, stable `atom_key` when available, source evidence, judgment label, reason, affected behavior, and the confirmed or inferred basis for the judgment. Include related AID values when they exist and are independently referenceable. Otherwise identify the exact owning section and affected behavior instead of creating an AID solely for the judgment. The basis may be confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, approved required `Planned Changes`, source baseline metadata, or explicit user approval. Refer to the owning AID or section instead of repeating its complete behavior in the finding.
 
-Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior` are sufficiently traceable only when they link to the specific AID lines that state the relevant intent, outcome, boundary, rule, current implementation, planned change, or gap. Those AID lines should live under a stable `atom_key`; path-only or slug-only references are insufficient for new atoms. If no AID-backed natural-language service logic exists for the behavior, use `confirmation_needed` or a coverage gap instead of a stronger judgment.
+Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior` must identify the specific natural-language intent, outcome, boundary, rule, current implementation, planned change, or gap that supports them. Use its AID when one already exists or the meaning independently needs one. For an ordinary docs judgment without an AID, the stable `atom_key`, exact owning section, and affected behavior are sufficient only when they identify an unambiguous natural-language basis. Path-only, slug-only, identifier-only, or ambiguous section references are insufficient; use `confirmation_needed` or a coverage gap instead of a stronger judgment. Atomic Impl and explicit compliance operations continue to require AID-backed rows for changed in-scope required decisions.
 
 `matches_confirmed_intent` is an explicit review judgment, not the absence of a `Gaps` item. Do not mark behavior as matching unless the review inspected relevant source evidence and confirmed no higher-priority label applies.
 
-When the source behavior is present in code but absent from natural-language docs, do not classify it as matching. Record a coverage gap or `confirmation_needed` unless an approved boundary makes it `out_of_scope_behavior`, an approved requirement makes it `missing_required_behavior`, or an approved baseline mismatch makes it `bug_or_regression`.
+When the source behavior is present in code but absent from natural-language docs, do not classify it as matching. Record a coverage gap or `confirmation_needed` only when the missing basis matters to the accepted implementation or review judgment, unless an approved boundary makes it `out_of_scope_behavior`, an approved requirement makes it `missing_required_behavior`, or an approved baseline mismatch makes it `bug_or_regression`. Do not create a gap for every untested branch, possible runtime exception, or source observation outside that decision need.
 
 `Planned Changes` must distinguish:
 
@@ -75,7 +75,7 @@ Use natural-language prose, but each judgment-bearing `Gaps` item or review find
 
 - one judgment label from this policy
 - the stable `atom_key` when the affected atom has one
-- related AID values from the atom lines that support or are affected by the finding
+- related AID values when they exist; otherwise the exact owning section and affected behavior
 - source evidence identifiers from the target project
 - the confirmed or inferred basis
 - the affected behavior
@@ -84,3 +84,5 @@ Use natural-language prose, but each judgment-bearing `Gaps` item or review find
 For Korean managed docs, keep the controlled judgment label unchanged but write the visible field labels and explanation prose in Korean. Use labels such as `판정 라벨`, `관련 atom_key`, `관련 AID`, `소스 근거`, `근거`, `영향받는 동작`, `다음 조치`, `조건/분기`, `검증/가드`, `상태 전이`, `저장 효과`, `외부 호출`, and `실패/복구` when the item is structured. Do not write English scaffold labels such as `affected behavior`, `next action`, `basis`, `source evidence`, `judgment label`, `conditions/branches`, `validation/guard`, `state transition`, `persistence side effect`, `external call`, or `error/recovery` as the visible shape of a Korean `Gaps` item or review finding.
 
 Do not collapse bug, missing required behavior, unapproved implementation, out-of-scope behavior, and confirmation-needed uncertainty into a generic gap.
+
+Create a managed `Gaps` item only when the finding prevents a stronger implementation or review judgment. Test absence, a possible runtime exception, or an isolated source observation is supporting evidence, not automatically a separate gap. Combine observations only when they share one judgment label, one unresolved decision, and compatible evidence and resolution. Keep different labels, independently resolvable behavior, high-risk contracts, adverse branches, and verification outcomes separate even when their owner or next action is the same.

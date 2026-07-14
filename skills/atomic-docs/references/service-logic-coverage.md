@@ -17,11 +17,11 @@ For each meaningful behavior aggregate in the accepted scope, document the appli
 - authorization, validation, refusal, defaulting, and consequential branches
 - state transitions, persistence effects, external calls, emitted events, or destructive effects
 - failure, retry, fallback, recovery, and runtime exception behavior when it changes the contract
-- an observable verification condition for changed requirements being used as an implementation basis
+- a concise observable verification target or invariant for changed requirements being used as an implementation basis
 - related domains, shared contracts, graph relationships, and conflicts that can change the decision
 - source identifiers sufficient to find and verify the relevant implementation
 
-Not every item applies to every atom. Omit an item when it has no product, contract, safety, operational, verification, or change-impact meaning. Do not add placeholder matrices or repetitive not-applicable rows merely to satisfy a template.
+Not every item applies to every atom. Omit an item when it has no product, contract, safety, operational, verification, or change-impact meaning. Do not add placeholder matrices or repetitive not-applicable rows merely to satisfy a template. A verification target states what must be observed; it does not enumerate the complete test input matrix or execution procedure.
 
 `Intent` owns only why the atom exists. `Outcomes` owns its concise normal observable result, `Boundaries` owns behavior-local inclusion/exclusion and handoff, and `Rules` owns conditions, invariants, refusals, contracts, and required effects. `Current Implementation` orients a developer to how those decisions are currently realized. Record important entry points, storage or integration ownership, non-obvious constraints, and source locations, then refer to the owning section rather than specifying the same behavior again. Do not narrate every function call, framework callback, DTO copy, component split, query mapping, or branch whose only meaning is already clear from source.
 
@@ -48,11 +48,11 @@ Document until all of these questions can be answered:
 
 Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure. Also stop when a meaning is already complete in its owning section: another section needs a short reference, not a paraphrase.
 
-Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification condition. Review must not fail merely because the reader needs source for internal mechanics.
+Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification target. Review must not fail merely because the reader needs source for internal mechanics or must derive concrete test cases from a clear invariant.
 
 Do not use atom count, file count, line count, or source-surface count as a quality threshold. A short atom can preserve every relevant decision, while a long source narrative can still be shallow.
 
-Use tables or structured lists only when compact prose would obscure independently varying decisions. For example, a matrix may be useful when several fields have different validation outcomes, several states allow different actions, or several failure types have distinct recovery behavior. Do not require field, payload, branch, state, and failure matrices as a fixed set.
+Use tables or structured lists only when compact prose would obscure independently varying durable decisions. For example, a matrix may be useful when several states have different product-authorized actions or several failure types have distinct contractual recovery behavior. The matrix must itself express a product or contract decision; do not use it merely to enumerate a Cartesian test plan. Do not require field, payload, branch, state, and failure matrices as a fixed set.
 
 For frontend/UI behavior, include fields, routes, screen states, access guards, persistence, payload transforms, feedback, and design constraints only when they affect product behavior, verification, or an explicitly requested style. Display-only fields and exact CSS values are normally source-level details.
 
@@ -69,7 +69,7 @@ Apply additional detail and the independent risk/contract reviewer when the acce
 - irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
 - shared payload, storage, permission, integration, or policy contract used by another domain
 
-Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and verification evidence in the applicable owning section. Add a matrix only when the alternatives cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
+Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and concise verification target in the applicable owning section. Derive detailed actor/input/state/failure cases during implementation or review rather than preserving their full cross-product in the atom. Add a matrix only when the alternatives form a durable contract that cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
 
 For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. If the accepted evidence cannot establish a behavior-affecting contract, record `confirmation_needed` instead of allowing reviewer PASS from local assumptions alone.
 
@@ -81,7 +81,7 @@ When validation, refusal, defaulting, fallback, exception, read-only behavior, o
 
 If source allows a fallback instead of refusing input, preserve that observable branch or record uncertainty. Do not describe a path as recovered when source can throw an unhandled runtime exception. When source cannot prove intent, use `confirmation_needed` rather than promoting observed behavior into a confirmed rule.
 
-Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and related stable `atom_key`/AID values when known. Use the related AID or section for the complete behavior and keep the gap's source evidence to the locator and differential fact needed to support the unresolved finding.
+Judgment-bearing `Gaps` and review findings must include source evidence, confirmed or inferred basis, affected behavior, next action, and a stable `atom_key` plus related AIDs when they exist. Use the related AID or exact owning section for the complete behavior and keep the gap's source evidence to the locator and differential fact needed to support the unresolved finding. Missing tests or possible runtime failures become gaps only when their absence prevents the accepted implementation or review judgment.
 
 ## Atomic Docs Goal Boundary
 

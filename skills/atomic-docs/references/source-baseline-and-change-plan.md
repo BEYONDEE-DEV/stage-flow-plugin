@@ -72,13 +72,13 @@ A compact change plan groups by domain and lists only applicable items from the 
 - source convention document creation or update at `project/source-convention.md` when source interpretation conventions are in scope
 - source behavior files inspected
 - operation-local domain and atom candidates, including owned/excluded behavior, adjacent boundary, behavior/decision, source identifiers, candidate owning atom key, split proposal, and coverage gaps
-- decision completeness for the accepted scope, including only applicable frontend/UI or backend/API/service details, observable verification conditions, risk triggers, and unresolved decisions that would force arbitrary product behavior
+- decision completeness for the accepted scope, including only applicable frontend/UI or backend/API/service details, concise observable verification targets, risk triggers, and unresolved decisions that would force arbitrary product behavior
 - applicable review gates: required development-quality reviewer, conditional risk/contract reviewer, and conditional project-wide integration/baseline reviewer
 - AID assignments only for new confirmed important rules, observable/shared contracts, required changes, active judgments/gaps, or decisions with an independent reference need; explicit AID migrations require accepted scope
 - affected atom files
 - affected atom sections
 - judgment labels for review findings, including `matches_confirmed_intent`, `bug_or_regression`, `missing_required_behavior`, `unapproved_implemented_behavior`, `out_of_scope_behavior`, `deferred_decision`, `confirmation_needed`, or `docs_stale`
-- related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings whenever the referenced atom lines are known
+- related AID values for judgment labels, review findings, coverage gaps, and source evidence mappings when those AIDs already exist or independently need stable reference; otherwise record the exact owning section and affected behavior without creating an AID for the mapping
 - new domains, category or domain-path moves, atom splits, atom merges, and split proposals
 - atom identity changes, including `atom_key` preservation for moves/renames/splits/merges, legacy slug-derived fallback migrations, and duplicate `atom_key` conflicts
 - project goal, project glossary, service logic inventory, source convention, common context, or domain context changes

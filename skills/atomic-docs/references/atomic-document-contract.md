@@ -118,7 +118,7 @@ Project document writing rules:
 - `project-goal.md` records the service or product purpose, target users or callers, success criteria, non-goals, confirmed business direction, and source-unverifiable items as `confirmation_needed`. It must not turn config paths, baseline metadata paths, cache paths, reset notes, deletion notes, reviewer logs, or docs-operation status into the service goal.
 - `project-glossary.md` records only ambiguous, shared, ownership-sensitive, or decision-critical terms. Each entry must explain meaning and source of truth, plus ownership, actors, stored/computed distinction, related rules, aliases, forbidden conflations, or uncertainty only when applicable.
 - A service logic inventory is lightweight writer/reviewer input, not a service logic atom. Keep it as operation-local state by default. If `<doc-root>/project/service-logic-inventory.md` is explicitly retained as a final coverage index, each behavior aggregate must record its decision summary, source identifiers, owner or disposition, and only the rules, state/effects, risk, related AID, or judgment fields that apply. Do not duplicate the atom body in the inventory.
-- `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related service logic atom_key and AID, or to a coverage gap when no atom exists yet. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
+- `source-convention.md` is a source interpretation helper. Runtime-impacting conventions must link to a related natural-language service logic owner by `atom_key` and include its AID when one exists, or link to a coverage gap when no atom exists yet. Do not create an AID solely for this link. Non-runtime code style stays in this document and must not be mixed into service logic atoms.
 - `atomization-criteria.md` records durable generation rules, project exceptions, unresolved approval decisions, and approval state. It is not a candidate map, operation ledger, or direct code suitability evidence.
 
 Project document review rules:
@@ -128,7 +128,7 @@ Project document review rules:
 - Fail when `project-goal.md` treats docs configuration, baseline paths, plugin cache paths, reset/delete notes, or operation logs as service/product goals.
 - Fail when a glossary entry is too shallow to resolve the ambiguity, ownership question, or conflict for which it was created.
 - Fail when a retained `service-logic-inventory.md` is only a one-line summary, lacks behavior-level fields needed by writer/reviewer work, or is not synced to real atom_key/AID references; do not write or update baseline metadata while the inventory is in that state.
-- Fail when `source-convention.md` records runtime-impacting behavior without a related atom_key/AID or a coverage gap.
+- Fail when `source-convention.md` records runtime-impacting behavior without a related natural-language `atom_key` owner, its existing AID when applicable, or a coverage gap.
 
 ## Detailed Sibling References
 
