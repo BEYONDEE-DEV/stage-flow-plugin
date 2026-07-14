@@ -10,16 +10,18 @@ The labels in this file are reusable controlled vocabulary. Explanatory prose in
 
 Use this controlled vocabulary when classifying source behavior against atomic docs:
 
-- `matches_confirmed_intent`: observed implementation matches confirmed `Intent`, `Outcomes`, `Boundaries`, `Rules`, accepted criteria, and any approved required change for the documented source baseline
-- `bug_or_regression`: observed implementation conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, `Rules`, acceptance criteria, or previously documented `Current Implementation`
+- `matches_confirmed_intent`: observed implementation matches confirmed desired `Intent`, `Outcomes`, `Boundaries`, `Rules`, accepted criteria, and any approved required change for the documented source basis
+- `bug_or_regression`: observed implementation conflicts with confirmed desired `Intent`, `Outcomes`, `Boundaries`, `Rules`, acceptance criteria, or a reviewed source-established current contract whose applicable source basis has not gone stale
 - `missing_required_behavior`: confirmed required behavior is absent from `Current Implementation`
-- `unapproved_implemented_behavior`: behavior exists in `Current Implementation` but lacks confirmed user intent, approved plan, policy rule, or source boundary support
+- `unapproved_implemented_behavior`: behavior exists despite a specific confirmed governance boundary, approval requirement, or approved plan that required authorization before implementation; general absence of user approval is not enough
 - `out_of_scope_behavior`: behavior is implemented or requested despite a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary
 - `deferred_decision`: the user or approved workflow explicitly chose to decide a specific policy, boundary, condition, API contract, or permission mapping later; this is a recorded deferral, not a request for immediate confirmation
-- `confirmation_needed`: the evidence is inferred, ambiguous, stale, or lacks user/source approval needed for a stronger judgment
+- `confirmation_needed`: reachable evidence is ambiguous or conflicting, a required local/external contract is unavailable, or a specific unresolved user decision prevents a stronger judgment
 - `docs_stale`: the docs baseline does not cover the source commit or source diff needed to make a current judgment
 
 Judgments may only use service logic that is written in the generated docs as natural-language behavior with source evidence. A source identifier, endpoint list, controller list, service class summary, method name, or missing `Gaps` item is not enough to prove that behavior matches the docs.
+
+Ordinary source refresh may document a source-established current contract without creating a judgment item for every observed behavior. Current-contract evidence establishes what the inspected revision does; it does not by itself approve desired product policy or future implementation requirements.
 
 ## Decision Order
 
@@ -27,15 +29,15 @@ Apply the first matching judgment that is supported by evidence:
 
 1. If the docs baseline is older than the source behavior being judged and the diff has not been refreshed, use `docs_stale`.
 2. If the user or approved workflow explicitly chose to decide the relevant policy, boundary, condition, API contract, or permission mapping later, use `deferred_decision`.
-3. If the relevant service logic is absent from natural-language docs, use `confirmation_needed`.
-4. If the relevant `Intent`, `Outcomes`, `Boundaries`, `Rules`, requirement, or source mapping is inferred or ambiguous, use `confirmation_needed`.
+3. If the relevant service logic is absent from natural-language docs and that absence prevents the accepted implementation or review judgment, use `confirmation_needed`.
+4. If reachable evidence conflicts, cannot establish a behavior-affecting local/external contract, or leaves a specific decision ambiguous, use `confirmation_needed`.
 5. If behavior violates a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary, use `out_of_scope_behavior`.
-6. If behavior exists without confirmed user intent, approved plan, policy rule, or source boundary support, use `unapproved_implemented_behavior`.
+6. If behavior violates a specific confirmed approval-before-implementation requirement or approved plan gate, use `unapproved_implemented_behavior`.
 7. If confirmed required behavior is missing from `Current Implementation`, use `missing_required_behavior`.
 8. If observed implementation conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, `Rules`, acceptance criteria, or documented current behavior, use `bug_or_regression`.
 9. If source evidence shows the implementation satisfies the confirmed criteria and no unresolved higher-priority judgment applies, use `matches_confirmed_intent`.
 
-Do not classify behavior as required, out-of-scope, or matching from inferred `Intent`, `Outcomes`, `Boundaries`, or `Rules` alone. Use `confirmation_needed` until the user or an approved workflow confirms the meaning.
+Do not create `confirmation_needed`, `unapproved_implemented_behavior`, or `implemented_pending_confirmation` merely because AI wrote the docs or the user did not approve each source-observed behavior. Source-established `Outcomes`, `Boundaries`, and `Rules` may describe the current contract without becoming confirmed desired behavior. Required, optional, excluded, out-of-scope, and future-change judgments still need the applicable approved requirement, policy, or boundary basis.
 
 Do not use `confirmation_needed` for an answer the user has already resolved. If the user confirms a future implementation or behavior change, record the concrete future behavior as `approved_required_change` or `approved_optional_change`; when current source does not implement that confirmed future behavior, use `missing_required_behavior` for the mismatch. If the user chooses to decide the policy or mapping later, record `deferred_decision` and exclude it from `confirmation_needed` counts.
 
@@ -56,7 +58,7 @@ If observed code conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or
 - `approved_required_change`: confirmed behavior that should be implemented
 - `approved_optional_change`: confirmed optional behavior that may be implemented without being required
 - `tentative_future_change`: unconfirmed or future-facing idea that cannot create `missing_required_behavior`
-- `implemented_pending_confirmation`: observed implementation that may satisfy a plan but still needs user or workflow confirmation before being treated as expected behavior
+- `implemented_pending_confirmation`: observed implementation maps to a specific accepted plan or proposed change that explicitly awaits user or workflow confirmation; do not apply it to ordinary current behavior solely because no user approved the implementation
 - `deferred_decision`: confirmed plan to decide a specific policy, boundary, condition, API contract, or permission mapping later; this must stay separate from `confirmation_needed`
 
 ## Explicit Implementation Compliance

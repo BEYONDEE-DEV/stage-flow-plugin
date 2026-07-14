@@ -182,8 +182,8 @@ class DocsSkillTests(unittest.TestCase):
                 'display_name: "Atomic Docs"',
                 'short_description: "Docs for development decisions and implementation review."',
                 'default_prompt: "Use $atomic-docs',
-                "product intent",
-                "without mirroring the source tree",
+                "current source contracts",
+                "without mirroring or auditing the whole source tree",
             ),
         )
 
@@ -301,7 +301,7 @@ class DocsSkillTests(unittest.TestCase):
                 "glossary meaning is too shallow to resolve",
                 "project/atomization-criteria-atom.md",
                 "reviewer logs, or operation status",
-                "source-unverifiable project intent recorded as `confirmation_needed`",
+                "competing source-unverifiable purpose interpretations",
                 "one-line summary",
                 "Do not create or advance baseline metadata",
             ),
@@ -352,6 +352,9 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "actual downstream reference need",
+                "downstream reference must already exist or be named by the accepted operation",
+                "possible future reuse alone is insufficient",
+                "Do not preallocate one for every `Outcome`, `Boundary`, or `Rule`",
                 "Do not assign an AID merely because a statement is durable",
                 "Plain `Current Implementation` observations",
                 "inventory/evidence rows",
@@ -379,6 +382,52 @@ class DocsSkillTests(unittest.TestCase):
                 "A second specification of their complete conditions",
                 "A complete restatement of the owning rule",
                 "another section needs a short reference, not a paraphrase",
+            ),
+        )
+
+    def test_source_established_current_contract_does_not_need_blanket_confirmation(self) -> None:
+        text = read(SKILL) + refs(
+            "service-logic-coverage.md",
+            "atom-format-and-judgment.md",
+            "change-judgment-policy.md",
+            "language-policy.md",
+            "source-baseline-and-change-plan.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "source-established current contract",
+                "may be documented without separate user approval",
+                "AI authorship alone does not make the meaning inferred",
+                "Reachability or repetition alone does not make behavior a normal contract",
+                "`Outcomes`, `Boundaries`, and `Rules`",
+                "`Current Implementation` `Source Evidence`",
+                "global source baseline or operation-local `source_commit_observed`",
+                "general absence of user approval is not enough",
+                "does not mean product policy approval",
+                "without creating a judgment item for every observed behavior",
+            ),
+        )
+
+    def test_observed_defects_do_not_become_normal_contract_or_audit_output(self) -> None:
+        text = refs(
+            "atom-format-and-judgment.md",
+            "service-logic-coverage.md",
+            "reviewer-perspectives.md",
+            "change-judgment-policy.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "Do not promote an observed anomaly",
+                "non-blocking non-obvious observation in `Current Implementation`",
+                "contradicts an approved requirement or source-established current contract",
+                "observed defect promoted to a normal `Outcome` or required `Rule`",
+                "detailed attack paths, fixture combinations, and non-blocking defect inventories",
+                "require separately accepted scope",
+                "specific confirmed approval-before-implementation requirement",
             ),
         )
 
@@ -666,7 +715,7 @@ class DocsSkillTests(unittest.TestCase):
                 "A trigger does not require unrelated detail",
                 "Ordinary CRUD, reversible preference persistence",
                 "authoritative local or user-approved provider evidence",
-                "record `confirmation_needed`",
+                "Record `confirmation_needed` only when",
             ),
         )
 
@@ -836,6 +885,7 @@ class DocsSkillTests(unittest.TestCase):
                 "gap economy",
                 "Cartesian test plan",
                 "mechanical AIDs/gaps",
+                "AIDs preallocated across every `Outcome`/`Boundary`/`Rule` without actual references",
                 "substitute for source inspection",
                 "concrete test cases",
             ),
@@ -1065,6 +1115,8 @@ class DocsSkillTests(unittest.TestCase):
                 "Never use this operation-local value to advance",
                 "required development-quality review and applicable risk review PASS",
                 "project-wide integration/baseline reviewer PASSes",
+                "managed docs accurately preserve the source-established current contracts",
+                "Baseline PASS does not mean product policy approval",
             ),
         )
         self.assertIn("or partial scope are invalid", validation)

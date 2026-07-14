@@ -1,4 +1,4 @@
 interface:
   display_name: "Atomic Docs"
   short_description: "Docs for development decisions and implementation review."
-  default_prompt: "Use $atomic-docs to preserve product intent, business rules, implementation context, verification conditions, and change impacts without mirroring the source tree."
+  default_prompt: "Use $atomic-docs to preserve current source contracts, approved requirements, and important unresolved decisions for implementation review and change impact without mirroring or auditing the whole source tree."

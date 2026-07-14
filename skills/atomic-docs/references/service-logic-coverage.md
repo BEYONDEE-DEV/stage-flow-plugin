@@ -6,12 +6,22 @@ This reference is the normative owner of decision-complete service logic coverag
 
 ## Development Decision Coverage
 
-Atomic docs are a durable development-decision standard, not a source index or source replacement. They preserve the product, business, contract, and operational decisions that developers must not rediscover from scattered code or invent during implementation.
+Atomic docs are a durable development-decision standard, not a source index, source replacement, or default security audit. They preserve source-established current contracts, approved product or operational requirements, and material unresolved decisions developers must not rediscover from scattered code or invent during implementation.
+
+## Current Contract Evidence
+
+A source-established current contract is an observable result, local boundary, rule, state/effect, or integration behavior supported by a reachable production path and, when available, behavior-relevant tests, schemas, settings, or local API contracts. It may be documented without separate user approval. AI authorship alone does not make the meaning inferred or create a Gap; a method name, field annotation, or test name alone still does not establish runtime behavior.
+
+Reachability or repetition alone does not make behavior a normal contract. An inconsistent branch, violated local invariant, accidental fallback, unsafe bypass, or source quirk without consumer/operational meaning remains implementation context or a differential finding under `atom-format-and-judgment.md`; it must not be normalized merely because the current code executes it.
+
+Trace current contracts through `Current Implementation` source locators and the applicable revision: the project-wide source baseline for complete coverage, or operation-local `source_commit_observed` for targeted/partial work. This establishes what the source currently does. It does not mean product policy approval or make the behavior a future required change.
+
+`Intent` may state the smallest functional purpose supported by entry points, outcomes, ownership, and integration use, but must not present inferred product strategy or necessity as user-approved intent. Create a Gap only when competing purpose interpretations would materially change an outcome, boundary, rule, requirement, or implementation judgment. Section placement and defect routing are owned by `atom-format-and-judgment.md`.
 
 For each meaningful behavior aggregate in the accepted scope, document the applicable items once in the section that owns them:
 
 - why the behavior exists and what outcome it must preserve
-- confirmed rules, invariants, explicit non-goals, and unresolved decisions
+- source-established or approved rules, invariants, explicit non-goals, and unresolved decisions
 - user, caller, API, event, job, or operational entry points that establish the contract
 - inputs and outputs whose values or shape affect observable behavior
 - authorization, validation, refusal, defaulting, and consequential branches
@@ -46,7 +56,7 @@ Document until all of these questions can be answered:
 3. Which rules, states, permissions, contracts, or failure paths may not be chosen arbitrarily?
 4. Which other domain or shared contract could conflict with this decision?
 
-Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure. Also stop when a meaning is already complete in its owning section: another section needs a short reference, not a paraphrase.
+Stop adding detail when every remaining choice is an internal technical choice, such as function decomposition, library selection, framework convention, behavior-neutral DTO copying, or component structure. Also stop when the remaining work is a forensic defect inventory, attack-scenario catalog, or exhaustive failure reproduction outside an explicitly accepted audit scope. When a meaning is already complete in its owning section, another section needs a short reference, not a paraphrase.
 
 Review must FAIL a behavior atom when the accepted change or judgment still forces a developer to invent a business rule, permission, externally visible contract, state transition, failure outcome, or verification target. Review must not fail merely because the reader needs source for internal mechanics or must derive concrete test cases from a clear invariant.
 
@@ -69,9 +79,9 @@ Apply additional detail and the independent risk/contract reviewer when the acce
 - irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
 - shared payload, storage, permission, integration, or policy contract used by another domain
 
-Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky decision, adverse branch, and concise verification target in the applicable owning section. Derive detailed actor/input/state/failure cases during implementation or review rather than preserving their full cross-product in the atom. Add a matrix only when the alternatives form a durable contract that cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
+Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. For a triggered concern, document the specific risky contract, adverse branch, and concise verification target only when it affects the accepted implementation, review, or change-impact decision. Derive detailed actor/input/state/failure cases transiently during implementation or review rather than preserving their full cross-product in the atom or routine review report. Add a matrix only when the alternatives form a durable contract that cannot be reviewed reliably in prose. A trigger does not require unrelated detail elsewhere in the atom or a duplicate copy in `Gaps`.
 
-For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. If the accepted evidence cannot establish a behavior-affecting contract, record `confirmation_needed` instead of allowing reviewer PASS from local assumptions alone.
+For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. Record `confirmation_needed` only when the unavailable or conflicting external guarantee prevents the accepted implementation or review judgment; do not create a Gap merely because the remote implementation is outside the repository.
 
 ## Source Fact Fidelity
 
@@ -79,7 +89,7 @@ The development-quality reviewer compares judgment-bearing docs with the actual 
 
 When validation, refusal, defaulting, fallback, exception, read-only behavior, or storage effects matter, inspect the relevant caller binding, runtime guard, null/blank path, default, transaction mode, persistence call, and exception path. Record only the distinctions that affect a documented decision or contract.
 
-If source allows a fallback instead of refusing input, preserve that observable branch or record uncertainty. Do not describe a path as recovered when source can throw an unhandled runtime exception. When source cannot prove intent, use `confirmation_needed` rather than promoting observed behavior into a confirmed rule.
+If source allows a fallback instead of refusing input, preserve it as a normal contract only when the reachable evidence supports that interpretation. Do not describe a path as recovered when source can throw an unhandled runtime exception. A non-blocking anomaly may remain concise `Current Implementation` context; if source conflicts with an approved requirement or a source-established current contract, route the differential finding under `change-judgment-policy.md`. Lack of product-intent proof alone does not create `confirmation_needed`.
 
 Apply finding fields, label precedence, and AID-or-owning-section evidence from `change-judgment-policy.md`. This source-fidelity contract adds only that evidence must reach the relevant behavior path and that missing tests or possible runtime failures become gaps only when their absence prevents the accepted implementation or review judgment.
 

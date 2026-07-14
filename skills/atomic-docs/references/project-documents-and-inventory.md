@@ -12,7 +12,7 @@ When repeated source interpretation conventions would otherwise leak into servic
 
 Project documents are non-atom documents. Use:
 
-- `project/project-goal.md` for product purpose, users/callers, success criteria, non-goals, and source-unverifiable project intent recorded as `confirmation_needed`
+- `project/project-goal.md` for product purpose, users/callers, success criteria, and non-goals; record `confirmation_needed` only when competing source-unverifiable purpose interpretations block a development judgment
 - `project/project-glossary.md` for ambiguous or shared term meaning, ownership, source of truth, aliases, forbidden conflations, and uncertainty
 - `project/source-convention.md` for source interpretation under `source-convention-and-domain-policy.md`
 - `project/atomization-criteria.md` for durable documentation criteria, project exceptions, and unresolved approval decisions

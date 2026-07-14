@@ -35,7 +35,7 @@ Keep only rules that remain useful across operations:
 - how durable domain ownership differs from a broad category, source folder, screen, task group, or generic catch-all
 - when independent product decisions, ownership, verification, conflict, or change boundaries require separate atoms, and when related behavior stays together
 - decision-depth rules: preserve product, business, contract, operational, verification, dependency, and unresolved decisions without mirroring source mechanics
-- evidence rules: confirmed claims need reachable source or approved requirement evidence; identifiers alone do not prove behavior
+- evidence rules: current-contract claims need reachable source evidence, desired changes need approved requirement evidence, and identifiers alone do not prove behavior; user approval absence alone does not turn a source-established contract into a Gap
 - selective identity rules: use stable `atom_key`; assign AIDs only to durable decisions that need independent reference; use graph relationships only for meaningful impact or ownership traversal
 - shared writer/reviewer acceptance rules and conditional risk triggers in compact form
 - selected documentation language, user-specific prohibitions, project-specific durable exceptions, and decisions that still block approval

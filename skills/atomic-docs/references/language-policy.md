@@ -74,7 +74,7 @@ Controlled judgment labels, fixed headings, schema keys, `atom_key` values, AID 
 - Do not translate or localize AID tokens. Korean docs must preserve `[AID:...]` exactly.
 - If the existing managed docs root mixes languages, prefer the language used by the target domain or atomic document being edited.
 - If a document's language is ambiguous and the choice may affect user review, ask before writing confirmed docs.
-- AI-inferred `Intent`, `Outcomes`, `Boundaries`, or `Rules` must still be marked as inferred in the selected docs language and connected to `Gaps` until confirmed.
+- AI authorship alone does not make source-established `Intent`, `Outcomes`, `Boundaries`, or `Rules` inferred or require a `Gaps` item. Use the selected docs language to distinguish current source contracts, approved desired changes, and genuinely unresolved decisions without adding a translated status scaffold.
 
 ## Change Plan Language
 

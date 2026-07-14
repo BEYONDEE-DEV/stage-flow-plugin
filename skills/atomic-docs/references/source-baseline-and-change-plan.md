@@ -25,7 +25,7 @@ Use this exact baseline shape:
 }
 ```
 
-The baseline records the source commit used for a complete confirmed project-wide docs refresh. Compare `git diff <source_commit>..HEAD` or the equivalent source-root diff to prioritize later changes.
+The baseline records the source commit used for a complete reviewed project-wide docs refresh. It means the managed docs accurately preserve the source-established current contracts and required unresolved decisions at that revision. Baseline PASS does not mean product policy approval, user approval of every current behavior, or approval of a future implementation requirement. Compare `git diff <source_commit>..HEAD` or the equivalent source-root diff to prioritize later changes.
 
 When judging code against docs, first determine whether the relevant source behavior is covered by the stored baseline. If the source behavior is newer than the docs baseline and has not been refreshed, classify the finding as `docs_stale` or include it in the refresh scope before making a stronger judgment.
 
