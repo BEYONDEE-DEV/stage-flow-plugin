@@ -185,8 +185,8 @@ class DocsSkillTests(unittest.TestCase):
                 'display_name: "Atomic Docs"',
                 'short_description: "Source-guided implementation context for development decisions."',
                 'default_prompt: "Use $atomic-docs',
-                "high-value implementation context",
-                "without creating a product-behavior specification",
+                "classify candidates as write, merge, or drop",
+                "without mirroring source mechanics",
             ),
         )
 
@@ -608,7 +608,7 @@ class DocsSkillTests(unittest.TestCase):
                 "whose omission makes the atom's stated scope misleading",
                 "ordinary fields, inputs/outputs, branches, states, failures",
                 "A developer needing source to determine exact product behavior is expected",
-                "Ordinary unselected behavior needs no row or disposition",
+                "Ordinary source behavior that never became a candidate needs no row or disposition",
             ),
         )
 
@@ -758,7 +758,11 @@ class DocsSkillTests(unittest.TestCase):
         )
 
     def test_high_risk_review_checks_selected_context_without_starting_an_audit(self) -> None:
-        text = read(REFS / "service-logic-coverage.md")
+        text = refs(
+            "service-logic-coverage.md",
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+        )
         for category in (
             "authentication, authorization, security, privacy",
             "money, billing, refund, settlement",
@@ -779,6 +783,14 @@ class DocsSkillTests(unittest.TestCase):
                 "Ordinary CRUD, reversible preference persistence",
                 "authoritative local or user-approved provider evidence",
                 "Record `confirmation_needed` only when",
+                "candidate ID, planned `atom_key`, trigger, and selected contract basis",
+                "domain-level risk category",
+                "cannot expand managed-doc scope",
+                "empty trigger list is not self-validating",
+                "rerun both development and applicable risk reviews against the same corrected revision",
+                "never reuse the old FAIL as PASS",
+                "A version-1 operation reruns selection preflight first",
+                "legacy operation uses its recorded unversioned correction/preflight contract instead",
             ),
         )
 
@@ -796,12 +808,38 @@ class DocsSkillTests(unittest.TestCase):
                 "Post-Approval Context Inventory",
                 "After combined approval and Goal handoff",
                 "grouped by durable domain and selected implementation-context candidate",
+                "disposition: write|merge|drop",
+                "candidate_id",
+                "exact approved tentative domain path",
+                "selection_basis",
+                "merge_target_atom_key",
+                "domain context atom and have no separate behavior candidate",
                 "Do not require every inventory row",
                 "Do not create one inventory row per route",
                 "candidate or final owning `atom_key`",
-                "Ordinary unselected behavior needs no row or disposition",
+                "Ordinary source behavior that never became a candidate needs no row or disposition",
                 "must not search for or disposition every source behavior",
                 "delete or ignore the operation-local inventory",
+            ),
+        )
+
+    def test_candidate_admission_drops_source_obvious_and_dormant_detail(self) -> None:
+        text = refs(
+            "service-logic-coverage.md",
+            "project-documents-and-inventory.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "`write`: the candidate has an independent durable purpose",
+                "`merge`: the context is useful but has no independent ownership",
+                "`drop`: reopening source is sufficient",
+                "Dormant or unreachable code is `drop` by default",
+                "constrains a reachable consumer",
+                "approved activation change",
+                "possible future use or destructive method name is not enough",
+                "must not turn an unselected fact into required managed-doc detail",
             ),
         )
 
@@ -841,6 +879,11 @@ class DocsSkillTests(unittest.TestCase):
                 "operation-local `evidence.md`",
                 "pin it to `source_commit_observed`",
                 "reuse it as a source-navigation index",
+                "smallest authoritative source locators",
+                "one concise relevance statement per row",
+                "## <candidate_id>",
+                "pass only active `write` and targeting `merge` sections to the writer",
+                "Do not preserve field lists, parser algorithms, payload mappings",
                 "Start from the operation evidence index",
                 "Independently reopen changed or risk-bearing claims",
                 "Do not reread every cited line mechanically",
@@ -860,7 +903,9 @@ class DocsSkillTests(unittest.TestCase):
                 "record their agent IDs in `work-state.json`",
                 "Reuse them for every sequential selected bundle",
                 "create one risk/contract reviewer and reuse it",
-                "same-role replacement using a compact handoff",
+                "same-role replacement using a role-filtered compact handoff",
+                "replacement writer receives only accepted scope",
+                "omit `drop` records and evidence",
                 "not the writer's private reasoning conversation",
                 "Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
@@ -876,21 +921,34 @@ class DocsSkillTests(unittest.TestCase):
             self.assertIn(role, reviewers)
 
     def test_bundle_preflight_precedes_parallel_semantic_review(self) -> None:
-        text = refs("docs-generation-flow.md", "validation-contract.md")
+        text = refs(
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+            "validation-contract.md",
+        )
         assert_all(
             self,
             text,
             (
                 "After each writer and before semantic review",
+                "--phase selection --request-id <request-id>",
+                "Build the queue only from `write` keys and the targets consumed by `merge`",
+                "repair operation state, inventory, evidence locators, queue, or risk references",
                 "--expect-atom-key <key>",
                 "scopes this preflight to the active bundle",
                 "Unrelated pre-existing structural findings do not block the bundle",
                 "Run unscoped docs validation after the accepted queue finishes",
+                "rerun version-1 selection when candidate, evidence, queue, or risk input changed",
                 "Compare planned selected keys, not raw source or document counts",
-                "If preflight FAILs, return to the writer without spending a semantic review",
+                "send managed Atom content or structure to the writer",
+                "repair operation state, expected keys, paths, inventory, or evidence projection through their owning flow without a writer",
                 "same revision and source basis",
                 "in parallel",
                 "This is not a project-wide semantic review",
+                "do not blanket-rerun the writer",
+                "Rerun the writer only when selected output or documented meaning changes",
+                "project-wide view exposes a local defect",
+                "apply the rerun table below",
             ),
         )
 
@@ -924,6 +982,7 @@ class DocsSkillTests(unittest.TestCase):
                 "Markdown formatting, graph path repair",
                 "structural preflight only",
                 "Source locator/evidence index correction with unchanged documented claim",
+                "version-1 selection preflight or the legacy recorded preflight",
                 "narrowed source-evidence check",
                 "reviews every selected domain bundle for `initial-baseline`",
                 "Targeted structural-only single-domain change",
@@ -941,6 +1000,24 @@ class DocsSkillTests(unittest.TestCase):
                 "A short reference plus the minimum local reading context is not duplication",
                 "Do not FAIL a general context atom merely because an unmentioned refusal",
                 "docs-only implementation is not the review target",
+                "Before failing for an omitted source fact",
+                "If it would be `drop`, omission is correct",
+            ),
+        )
+
+    def test_reviewer_corrections_remove_or_generalize_before_precision(self) -> None:
+        text = read(REFS / "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Each blocking finding records",
+                "Different findings in one report may use different modes",
+                "`remove`: the claim, paragraph, or Atom lacks a durable selection basis",
+                "`generalize`: the underlying context is useful",
+                "`correct_selected_claim`: a retained important claim is false",
+                "Do not choose `correct_selected_claim` for a finding until removal and generalization",
+                "rerun selection preflight",
             ),
         )
 
@@ -1044,6 +1121,7 @@ class DocsSkillTests(unittest.TestCase):
                 "cross-domain ownership",
                 "shared payload/state/storage/permission/integration contracts",
                 "Every newly run domain review uses the operation's `source_commit_observed`",
+                "latest selection preflight matches the final queue",
                 "Only the project-wide form of this reviewer can approve global baseline",
                 "reopen the affected bundle",
             ),
@@ -1397,17 +1475,55 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "<plugin-root>/scripts/validate_atomic_docs.py",
                 "--phase bootstrap",
+                "--phase selection",
+                "--request-id <request-id>",
                 "--phase docs",
                 "--phase baseline",
                 "--expect-atom-key",
                 "valid standard YAML",
                 "validated atom and AID totals",
                 "unrelated pre-existing defects do not block the bundle",
-                "invalid for bootstrap and baseline phases",
+                "valid only for docs",
+                "every candidate has a unique ID",
+                "without duplicate JSON keys",
+                "no tab characters, fenced or indented code (including inside blockquote or list containers), multiline inline code, or raw HTML-like syntax",
+                "every risk trigger resolves its candidate and output/merge target",
+                '"context_selection"',
+                '"candidate_id"',
+                "legacy active request without this version",
+                "continues its existing unversioned state",
+                "scope expansion still follows its normal approval and Goal boundary",
+                "whether a candidate's `write|merge|drop` selection",
                 "Never search for or invoke",
                 "The validator is read-only",
                 "semantic quality remains the responsibility",
             ),
+        )
+
+    def test_selection_contract_is_new_operation_only_and_legacy_work_is_not_migrated(self) -> None:
+        text = read(SKILL) + refs(
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+            "validation-contract.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "selection contract version 1",
+                "legacy active operation without this version",
+                "continues its recorded unversioned flow and in-scope corrections without migration",
+                "do not invoke version-1 validation or add version-1 fields",
+                "legacy operation uses its recorded unversioned correction/preflight contract",
+                "version-1 selection preflight or the legacy recorded preflight",
+            ),
+        )
+
+    def test_normal_operation_links_risk_before_selection_validation(self) -> None:
+        text = read(SKILL)
+        self.assertLess(
+            text.index("link applicable risk triggers"),
+            text.index("then run selection validation"),
         )
 
 

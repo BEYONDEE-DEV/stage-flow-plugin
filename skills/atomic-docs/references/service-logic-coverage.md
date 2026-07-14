@@ -1,5 +1,16 @@
 # Service Logic Coverage
 
+## Contents
+
+- [Responsibility](#responsibility)
+- [Implementation Context Selection](#implementation-context-selection)
+- [Current Contract Evidence](#current-contract-evidence)
+- [Accepted-Scope Exploration](#accepted-scope-exploration)
+- [Proportional Depth](#proportional-depth)
+- [Conditional Risk Depth](#conditional-risk-depth)
+- [Source Fact Fidelity](#source-fact-fidelity)
+- [Atomic Docs Goal Boundary](#atomic-docs-goal-boundary)
+
 ## Responsibility
 
 This reference is the normative owner of implementation-context selection, proportional documentation depth, accepted-scope source exploration, risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing.
@@ -15,6 +26,16 @@ Atomic docs orient development decisions; they are not a source index, product-b
 - an approved requirement or material unresolved decision needs a durable home
 
 Do not select a behavior merely because a route, field, branch, state, exception, test, or source file exists. Exact behavior remains in source unless one of the signals above makes it useful implementation context.
+
+After inspecting the smallest source anchors needed to judge a candidate and before writing an atom, assign one disposition with a concise basis:
+
+- `write`: the candidate has an independent durable purpose, owner, rule, contract, constraint, approved change, or unresolved decision that meets a selection signal
+- `merge`: the context is useful but has no independent ownership or change boundary, so it belongs in an existing `write` candidate
+- `drop`: reopening source is sufficient and the candidate adds no durable decision context
+
+An approved domain may need only its domain context atom and no separate behavior atom. Domain approval, source volume, risk-shaped code, or an available method does not create a minimum Atom count. Dormant or unreachable code is `drop` by default. Retain it only when it constrains a reachable consumer, preserves an active shared/external compatibility contract, is required for operational recovery, or is part of an approved activation change. A possible future use or destructive method name is not enough.
+
+Reapply this admission decision when later source inspection reveals another fact. A reviewer must not turn an unselected fact into required managed-doc detail merely to make source coverage more complete.
 
 ## Current Contract Evidence
 

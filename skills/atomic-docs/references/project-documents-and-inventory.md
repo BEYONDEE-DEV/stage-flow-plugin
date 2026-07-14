@@ -54,10 +54,12 @@ After combined approval and Goal handoff, expand only approved domains into a li
 The minimum context row is:
 
 ```text
-맥락 후보와 선택 이유 | 잠정/확정 owner | 중요한 계약·제약과 참조 도메인 | 소스 근거 | 관련 AID/판정
+맥락 후보 | 선택 판단과 이유 | 잠정/확정 owner | 중요한 계약·제약과 참조 도메인 | 소스 근거 | 관련 AID/판정
 ```
 
-Each selected row identifies its candidate `atom_key` or split proposal in the owner field. Add short notes only for important rules, state/effects, contracts, or failures the writer needs to understand. The atom is the durable explanation; the inventory is selection and routing state, not behavior closure state.
+In `work-state.json`, each candidate records a unique lower-kebab-case `candidate_id`, an exact approved tentative domain path in `domain`, `disposition: write|merge|drop`, and a non-empty `selection_basis`. A `write` candidate records its planned `candidate_atom_keys`; a `merge` candidate records `merge_target_atom_key`; a `drop` candidate creates no atom key. The visible inventory explains these choices in user language. An approved domain may retain only its domain context atom and have no separate behavior candidate. Use the complete machine-readable shape from `validation-contract.md` rather than inventing fields.
+
+Add short notes only for important rules, state/effects, contracts, or failures needed to make the selection decision. The atom is the durable explanation; the inventory is selection and routing state, not behavior closure state. Keep `drop` rows until the operation closes so later source findings do not silently recreate them.
 
 One context candidate may cite several source surfaces. Do not create one inventory row per route, controller, service, repository, component, schema, test, setting, branch, or ordinary behavior.
 
@@ -73,9 +75,11 @@ For multi-domain or `initial-baseline` work, run one prepass over selected share
 
 Do not build a complete semantic graph or freeze every aggregate owner before writing. Uncertain shared ownership remains an explicit blocker; uncertain local ownership may be resolved in its bundle.
 
-Create one operation-local `evidence.md` beside request state, pin it to `source_commit_observed`, and reuse it as a source-navigation index. For each selected context candidate, record the smallest useful source anchors and only applicable storage, transaction, integration, schema, setting, and test locations. Reviewers reopen changed or risk-bearing claims, sample unchanged high-consequence claims, and update the index when evidence changes; they do not rediscover every entry point.
+Create one operation-local `evidence.md` beside request state, pin it to `source_commit_observed`, and reuse it as a source-navigation index. Give every candidate one `## <candidate_id>` section. Use constrained plain Markdown: tab characters, fenced or indented code, multiline inline code, and raw HTML-like syntax are not allowed; ordinary inline code must close on the same line. Use the smallest authoritative source locators and one concise relevance statement per row, following the evidence format in `validation-contract.md`. Include `drop` candidates so their exclusion remains auditable until operation close, but pass only active `write` and targeting `merge` sections to the writer. Add storage, transaction, integration, schema, setting, and test locations only when they help judge a selected contract or owner. Do not preserve field lists, parser algorithms, payload mappings, branch sequences, stale-response reproductions, or defect narratives merely because they were inspected. Reviewers reopen source for exact mechanics when a retained claim needs verification.
 
-Every context candidate accepted into the write queue must resolve to an owner, an explicit unresolved decision, or removal from the queue with a selection reason before review PASS. Ordinary unselected behavior needs no row or disposition. If a selected high-impact owner remains unclear and that uncertainty would mislead the atom's stated scope, record a gap with source evidence and `confirmation_needed`.
+After these anchors are known, finalize `write|merge|drop`, update the planned Atom keys and queue, and run the selection preflight from `validation-contract.md` before the first writer. A newly discovered candidate repeats this small admission step; it does not expand `evidence.md` into behavior closure.
+
+Every `write` or `merge` candidate must resolve to an owner or an explicit unresolved decision before review PASS. Every `drop` candidate stays outside the write queue with its selection basis. Ordinary source behavior that never became a candidate needs no row or disposition. If a selected high-impact owner remains unclear and that uncertainty would mislead the atom's stated scope, record a gap with source evidence and `confirmation_needed`.
 
 The required context-quality reviewer checks the selected queue and may identify a missing shared/external owner or non-obvious constraint only when its omission would make an atom's stated scope misleading. It must not search for or disposition every source behavior.
 

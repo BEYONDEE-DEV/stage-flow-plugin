@@ -54,7 +54,10 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         )
 
     def run_validator(
-        self, phase: str, *expected_atom_keys: str
+        self,
+        phase: str,
+        *expected_atom_keys: str,
+        request_id: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -66,6 +69,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         ]
         for atom_key in expected_atom_keys:
             command.extend(["--expect-atom-key", atom_key])
+        if request_id is not None:
+            command.extend(["--request-id", request_id])
         return subprocess.run(
             command,
             check=False,
@@ -128,10 +133,849 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def write_selection_state(
+        self,
+        candidates: list[dict[str, object]],
+        *,
+        bundle_keys: list[str],
+        risk_triggers: list[dict[str, object]] | None = None,
+        request_id: str = "20260714-120000-selection-test",
+        accepted_scope: list[str] | None = None,
+        bundle_domain: str = "domain",
+        selection_version: str | None = "1",
+        source_commit: str | None = None,
+    ) -> str:
+        request_root = self.root / ".stageflow" / "atomic-docs" / "requests" / request_id
+        request_root.mkdir(parents=True)
+        (request_root / "inventory.md").write_text("# 후보\n", encoding="utf-8")
+        observed = source_commit or self.commit
+        evidence = ["# 근거 색인", "", f"source_commit_observed: `{observed}`"]
+        for candidate in candidates:
+            candidate_id = candidate.get("candidate_id")
+            if isinstance(candidate_id, str):
+                evidence.extend(
+                    ["", f"## {candidate_id}", "", "- `source.txt:1` 후보 판단 근거"]
+                )
+        (request_root / "evidence.md").write_text(
+            "\n".join(evidence) + "\n", encoding="utf-8"
+        )
+        context_selection: dict[str, object] = {"candidates": candidates}
+        if selection_version is not None:
+            context_selection["version"] = selection_version
+        (request_root / "work-state.json").write_text(
+            json.dumps(
+                {
+                    "accepted_scope": ["domain"] if accepted_scope is None else accepted_scope,
+                    "source_commit_observed": observed,
+                    "context_selection": context_selection,
+                    "bundle_queue": [
+                        {"domain": bundle_domain, "expected_atom_keys": bundle_keys}
+                    ],
+                    "risk_triggers": risk_triggers or [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return request_id
+
     def test_bootstrap_passes_without_atoms_or_baseline(self) -> None:
         result = self.run_validator("bootstrap")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("PASS bootstrap", result.stdout)
+
+    def test_selection_accepts_write_merge_drop_and_candidate_linked_risk(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "공유 소유권을 소스 한 곳에서 찾기 어렵다.",
+                    "candidate_atom_keys": ["domain-context"],
+                },
+                {
+                    "candidate_id": "durable-contract",
+                    "domain": "domain",
+                    "candidate": "지속적인 계약",
+                    "disposition": "write",
+                    "selection_basis": "다른 도메인이 사용하는 계약이다.",
+                    "candidate_atom_keys": ["durable-contract"],
+                },
+                {
+                    "candidate_id": "supporting-context",
+                    "domain": "domain",
+                    "candidate": "중복된 보조 흐름",
+                    "disposition": "merge",
+                    "selection_basis": "독립 소유권 없이 기존 계약의 읽기 맥락만 보완한다.",
+                    "merge_target_atom_key": "durable-contract",
+                },
+                {
+                    "candidate_id": "dormant-mutation",
+                    "domain": "domain",
+                    "candidate": "호출되지 않는 mutation",
+                    "disposition": "drop",
+                    "selection_basis": "현재 consumer와 승인된 활성화 계획이 없다.",
+                },
+            ],
+            bundle_keys=["domain-context", "durable-contract"],
+            risk_triggers=[
+                {
+                    "candidate_id": "durable-contract",
+                    "atom_key": "durable-contract",
+                    "triggers": ["shared policy contract"],
+                    "basis": "선택된 계약을 다른 도메인이 소비한다.",
+                },
+                {
+                    "candidate_id": "supporting-context",
+                    "atom_key": "durable-contract",
+                    "triggers": ["money contract"],
+                    "basis": "합쳐지는 결제 맥락이 같은 계약에 위험 검토를 요구한다.",
+                }
+            ],
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("PASS selection", result.stdout)
+
+    def test_selection_rejects_blank_basis_and_unknown_merge_target(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": " ",
+                    "candidate_atom_keys": ["domain-context"],
+                },
+                {
+                    "candidate_id": "merge-context",
+                    "domain": "domain",
+                    "candidate": "합칠 후보",
+                    "disposition": "merge",
+                    "selection_basis": "기존 문맥에 포함한다.",
+                    "merge_target_atom_key": "missing-owner",
+                },
+            ],
+            bundle_keys=["domain-context"],
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must include non-empty `selection_basis`", result.stdout)
+        self.assertIn("merge target `missing-owner` is not a write candidate atom", result.stdout)
+
+    def test_selection_rejects_drop_output_and_domain_level_risk_reference(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                },
+                {
+                    "candidate_id": "dropped-detail",
+                    "domain": "domain",
+                    "candidate": "제외할 상세",
+                    "disposition": "drop",
+                    "selection_basis": "소스에서 바로 확인되는 내부 동작이다.",
+                    "candidate_atom_keys": ["dropped-detail"],
+                },
+            ],
+            bundle_keys=["domain-context", "dropped-detail"],
+            risk_triggers=[
+                {
+                    "candidate_id": "dropped-detail",
+                    "atom_key": "dropped-detail",
+                    "triggers": ["destructive method"],
+                    "basis": "코드에 위험한 이름이 있다.",
+                }
+            ],
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("with disposition `drop` must not create atom keys", result.stdout)
+        self.assertIn("must not reference dropped candidate `dropped-detail`", result.stdout)
+        self.assertIn("bundle queue atom key `dropped-detail` has no write candidate", result.stdout)
+
+    def test_selection_rejects_empty_scope_and_wrong_bundle_domain(self) -> None:
+        empty_scope = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            accepted_scope=[],
+            request_id="20260714-120001-empty-scope",
+        )
+        result = self.run_validator("selection", request_id=empty_scope)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must contain at least one approved domain path", result.stdout)
+        self.assertIn("domain `domain` is outside `accepted_scope`", result.stdout)
+
+        wrong_domain = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            bundle_domain="other-domain",
+            request_id="20260714-120002-wrong-domain",
+        )
+        result = self.run_validator("selection", request_id=wrong_domain)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("domain `other-domain` is outside `accepted_scope`", result.stdout)
+        self.assertIn("belongs to domain `domain`, not `other-domain`", result.stdout)
+
+    def test_selection_requires_version_revision_candidate_id_and_evidence_locator(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            selection_version=None,
+            source_commit="0" * 40,
+            request_id="20260714-120003-bad-evidence",
+        )
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("`context_selection.version` must be `1`", result.stdout)
+        self.assertIn("source commit `0000000000000000000000000000000000000000` is not reachable", result.stdout)
+        self.assertIn("must include lower-kebab-case `candidate_id`", result.stdout)
+
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120004-empty-evidence",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            f"# 근거 색인\n\nsource_commit_observed: `{self.commit}`\n\n## domain-context\n",
+            encoding="utf-8",
+        )
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("needs a source locator and concise relevance", result.stdout)
+
+    def test_selection_rejects_evidence_header_that_declares_another_revision(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120005-contradictory-revision",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "",
+                    f"source_commit_observed: `{'0' * 40}`",
+                    "",
+                    "## domain-context",
+                    "",
+                    f"- `source.txt:1` 실제 상태 hash는 {self.commit}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            f"evidence source commit `{'0' * 40}` does not match work-state `{self.commit}`",
+            result.stdout,
+        )
+
+    def test_selection_rejects_multiline_evidence_revision_declaration(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120015-multiline-revision",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "source_commit_observed:",
+                    "",
+                    f"`{self.commit}`",
+                    "## domain-context",
+                    "- `source.txt:1` 실제 표시되는 근거",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must declare exactly one `source_commit_observed` line",
+            result.stdout,
+        )
+
+    def test_selection_rejects_duplicate_json_keys_in_operation_state(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120006-duplicate-json-key",
+        )
+        state_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "work-state.json"
+        )
+        state_text = state_path.read_text(encoding="utf-8")
+        state_path.write_text(
+            state_text.replace(
+                '{"accepted_scope": ["domain"]',
+                '{"accepted_scope": [], "accepted_scope": ["domain"]',
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("duplicate JSON key 'accepted_scope'", result.stdout)
+
+    def test_selection_rejects_fenced_evidence_shape(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120007-fenced-evidence",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "",
+                    "```bad`info",
+                    f"source_commit_observed: `{self.commit}`",
+                    "",
+                    "## domain-context",
+                    "- `source.txt:1` 코드 예시 안의 가짜 근거",
+                    "```",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("evidence index must not contain fenced code", result.stdout)
+
+    def test_selection_ignores_evidence_shape_inside_hidden_html(self) -> None:
+        wrappers = {
+            "comment": (["<!--"], ["-->"]),
+            "pre": (["<pre>"], ["</pre>"]),
+            "multiline-pre": (["<pre", 'class="hidden">'], ["</pre>"]),
+            "multiline-pre-quoted-close": (
+                ["<pre", 'data="</pre>">'],
+                ["</pre>"],
+            ),
+            "active-pre-nested-attribute": (
+                ["<pre>", '<span data="</pre>">'],
+                ["</span>", "</pre>"],
+            ),
+            "active-pre-comment": (
+                ["<pre>", "<!-- </pre> -->"],
+                ["</pre>"],
+            ),
+            "closed-root-trailing-hidden-root": (
+                ["<pre></pre><div hidden>"],
+                ["</div>"],
+            ),
+            "void-root-trailing-hidden-root": (
+                ["<hr><div hidden>"],
+                ["</div>"],
+            ),
+            "comment-trailing-hidden-root": (
+                ["<!-- closed --><div hidden>"],
+                ["</div>"],
+            ),
+            "processing-instruction-trailing-hidden-root": (
+                ["<?closed?><div hidden>"],
+                ["</div>"],
+            ),
+            "multiline-void-quoted-delimiter": (
+                ["<img", 'alt=">"'],
+                [">"],
+            ),
+            "processing-instruction": (["<?hidden"], ["?>"]),
+            "processing-instruction-with-fake-close": (
+                ["<div>", '<?pi data="> </div>"?>'],
+                ["</div>"],
+            ),
+            "cdata": (["<![CDATA["], ["]]>"]),
+            "self-closing-nonvoid": (["<div/>"], []),
+            "slash-newline-tag": (["<div/", ">"], []),
+            "slash-tab-tag": (["<img/", "\talt=x>"], []),
+            "namespaced-tag": (["<svg:path>"], ["</svg:path>"]),
+            "underscore-tag": (["<x_widget>"], ["</x_widget>"]),
+            "generic-blank-boundary": (["<section>", ""], ["</section>"]),
+            "escaped-backticks": ([r"\`<div hidden>\`"], []),
+        }
+        for suffix, (opening_lines, closing_lines) in wrappers.items():
+            with self.subTest(suffix=suffix):
+                request_id = self.write_selection_state(
+                    [
+                        {
+                            "candidate_id": "domain-context",
+                            "domain": "domain",
+                            "candidate": "도메인 맥락",
+                            "disposition": "write",
+                            "selection_basis": "승인된 경계를 설명한다.",
+                            "candidate_atom_keys": ["domain-context"],
+                        }
+                    ],
+                    bundle_keys=["domain-context"],
+                    request_id=f"20260714-120008-hidden-{suffix}",
+                )
+                evidence_path = (
+                    self.root
+                    / ".stageflow"
+                    / "atomic-docs"
+                    / "requests"
+                    / request_id
+                    / "evidence.md"
+                )
+                evidence_path.write_text(
+                    "\n".join(
+                        [
+                            "# 근거 색인",
+                            "",
+                            *opening_lines,
+                            f"source_commit_observed: `{self.commit}`",
+                            "",
+                            "## domain-context",
+                            "- `source.txt:1` 숨겨진 HTML 안의 가짜 근거",
+                            *closing_lines,
+                            "",
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                result = self.run_validator("selection", request_id=request_id)
+                self.assertEqual(1, result.returncode)
+                self.assertIn(
+                    "must not contain raw HTML-like syntax",
+                    result.stdout,
+                )
+
+    def test_selection_rejects_raw_html_before_visible_evidence(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120009-void-html",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "",
+                    "<img",
+                    'alt="표시용 구분선">',
+                    f"source_commit_observed: `{self.commit}`",
+                    "",
+                    "## domain-context",
+                    "- `source.txt:1` 실제 표시되는 근거",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must not contain raw HTML-like syntax",
+            result.stdout,
+        )
+
+    def test_selection_rejects_nested_and_mixed_indented_evidence(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120010-indented-html",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "",
+                    ">     exact payload/parser dump",
+                    "-     exact nested-list dump",
+                    "   \texact serializer detail",
+                    f"source_commit_observed: `{self.commit}`",
+                    "",
+                    "## domain-context",
+                    "- `source.txt:1` 실제 표시되는 근거",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("evidence index must not contain indented code", result.stdout)
+
+    def test_selection_rejects_tab_padded_locator(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120014-tab-locator",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    f"source_commit_observed: `{self.commit}`",
+                    "## domain-context",
+                    "-\t`source.txt:1` tab으로 구분한 locator",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("evidence index must not contain tab characters", result.stdout)
+        self.assertIn(
+            "evidence section `## domain-context` needs a source locator",
+            result.stdout,
+        )
+
+    def test_selection_rejects_html_text_inside_inline_code(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120011-inline-html",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "",
+                    "`<div hidden>`은 코드 예시일 뿐이다.",
+                    f"source_commit_observed: `{self.commit}`",
+                    "",
+                    "## domain-context",
+                    "- `source.txt:1` 실제 표시되는 근거",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must not contain raw HTML-like syntax", result.stdout)
+
+    def test_selection_rejects_multiline_inline_code_evidence_shape(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120012-multiline-inline",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "prefix ``code",
+                    f"source_commit_observed: `{self.commit}`",
+                    "## domain-context",
+                    "- `source.txt:1` 코드 span 안의 가짜 근거",
+                    "end`` suffix",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "evidence inline code must open and close on the same line",
+            result.stdout,
+        )
+
+    def test_selection_handles_backslash_inside_line_local_code_span(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "승인된 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260714-120013-backslash-code",
+        )
+        evidence_path = (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "evidence.md"
+        )
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "코드 표기: `path\\`",
+                    f"source_commit_observed: `{self.commit}`",
+                    "## domain-context",
+                    "- `source.txt:1` 실제 표시되는 근거",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        evidence_path.write_text(
+            "\n".join(
+                [
+                    "# 근거 색인",
+                    "prefix `first\\` tail`",
+                    f"source_commit_observed: `{self.commit}`",
+                    "## domain-context",
+                    "- `source.txt:1` 다음 줄까지 이어지는 가짜 code span",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "evidence inline code must open and close on the same line",
+            result.stdout,
+        )
+
+    def test_selection_requires_request_id_and_keeps_existing_phases_compatible(self) -> None:
+        selection = self.run_validator("selection")
+        self.assertEqual(1, selection.returncode)
+        self.assertIn("requires `--request-id`", selection.stdout)
+
+        bootstrap = self.run_validator("bootstrap")
+        self.assertEqual(0, bootstrap.returncode, bootstrap.stdout + bootstrap.stderr)
+
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+        )
+        wrong_phase = self.run_validator("bootstrap", request_id=request_id)
+        self.assertEqual(1, wrong_phase.returncode)
+        self.assertIn("`--request-id` requires `--phase selection`", wrong_phase.stdout)
 
     def test_docs_and_project_wide_baseline_pass(self) -> None:
         self.write_atom("domain/example-atom.md", "example")

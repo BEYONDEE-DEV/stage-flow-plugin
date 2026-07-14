@@ -39,13 +39,15 @@ Keep each state file's ownership narrow:
 - `index.json`: request lookup only
 - `sessions/<session-id>/current.json`: the active request pointer only
 - `requests/<request-id>/state.json`: request lifecycle and session/Goal links only; the Goal link stays empty before combined approval and Goal success
-- `requests/<request-id>/work-state.json`: the only owner of operation profile, bootstrap discovery scope, domain candidate status, accepted scope, `source_commit_observed`, context selection and ownership prepass, bundle queue, active attempt, persistent agent IDs, risk triggers, changed artifacts, reviewer verdicts, finding fingerprints, temporary evidence paths, integration/baseline state, and carry-forward basis
+- `requests/<request-id>/work-state.json`: the only owner of operation profile, bootstrap discovery scope, domain candidate status, accepted scope, `source_commit_observed`, selection contract version, context candidate identity/disposition/basis, ownership prepass, bundle queue, active attempt, persistent agent IDs, candidate-linked risk triggers, changed artifacts, reviewer verdicts and per-finding correction modes, finding fingerprints, temporary evidence paths, integration/baseline state, and carry-forward basis
 
 Do not duplicate queue position, source basis, agent identity, or reviewer state across these files. This state is not a Stageflow request, managed docs output, or direct implementation evidence.
 
 Before combined approval, keep accepted scope and execution profile empty and use `inventory.md` only for the domain proposal contract in `project-documents-and-inventory.md`; do not create queues, detailed evidence, or Atom candidates. `work-state.json` is the authoritative owner of domain candidate status; the inventory status column only mirrors it for user review. On approval, set only user-selected valid tentative domain paths to `approved` and accepted scope. Keep unselected and `needs_confirmation` domains outside that scope. Select `initial-baseline` only when baseline creation was included in the approved action and every required project domain is approved; partial approval selects `targeted` and cannot advance the global baseline.
 
 After Goal success, expand the same `inventory.md` for approved-domain context candidates and create `evidence.md` pinned to `source_commit_observed`. Temporary evidence, compact domain review files, and `post-write-review.md` may then live beside request state. Delete or ignore temporary inventory/evidence after completion unless the accepted scope explicitly retains a synced project context index.
+
+A newly created operation uses `context_selection.version: "1"` and the state/evidence shape in `validation-contract.md`. A legacy active request without that version continues its existing unversioned state, queue construction, and in-scope correction/review rules without adding version-1 fields or invoking selection validation. It may correct its queue or risk routing when its prior flow allows that inside the approved Goal; it simply cannot claim version-1 structural guarantees. Scope expansion still follows the normal user-approval and Goal-boundary rules.
 
 Atomic Docs request state remains owned by Atomic Docs even when a caller uses Stageflow, Simple Workflow, or another workflow. A caller session may link to the request but must not duplicate or replace its discovery scope, domain status, accepted scope, queue, or Goal link.
 
@@ -67,7 +69,15 @@ Split multi-domain work into a sequential queue of durable domains or cohesive a
 
 For multi-domain or `initial-baseline` work, run the lightweight ownership/evidence prepass from `project-documents-and-inventory.md`. Confirm shared/high-fan-out owners first, then order their bundles before direct dependents. A targeted operation performs only local ownership and adjacent-contract checks. Do not require every local owner to be final before the first writer.
 
-Before writing each selected bundle, classify and record the applicable risk triggers from `service-logic-coverage.md`. Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself when no selected context or approved change relies on it. Do not invent a risk trigger merely to add review, and do not omit one from selected high-impact context to save time.
+After the smallest evidence anchors are recorded, apply `service-logic-coverage.md` to every candidate and persist a unique operation-local `candidate_id`, its exact approved domain path, `write|merge|drop`, and its selection basis. Build the queue only from `write` keys and the targets consumed by `merge`; each queue item's domain must own its expected keys, and a `drop` candidate creates no expected Atom key. Link applicable risk triggers to the candidate ID, planned key, and selected contract, then run the bundled selection preflight before creating the writer:
+
+```text
+python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase selection --request-id <request-id>
+```
+
+If selection preflight fails, repair operation state, inventory, evidence locators, queue, or risk references before writing managed docs. It does not judge whether the natural-language selection basis is persuasive.
+
+Before writing each selected bundle, recheck the recorded risk triggers when its source or selection basis changed. Each trigger names the `candidate_id`, planned `atom_key`, triggers, and selected contract basis; several candidate contracts may route to the same Atom key. Domain-level trigger lists are insufficient. Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself when no selected context or approved change relies on it. Do not invent a risk trigger merely to add review, and do not omit one from selected high-impact context to save time.
 
 Record a compact domain-grouped write plan before the first writer. Report domain count, bundle count, risk-bundle count, shared-owner count, and expected final-review type in a short non-blocking user update. Do not invent an ETA. When every path and action stays inside accepted docs scope and approved boundaries, prior scope approval authorizes the plan.
 
@@ -75,9 +85,9 @@ Before Goal creation, an affected boundary review and user approval may replace 
 
 Ask again for expanded source/docs scope, an ambiguous or moved boundary requiring user judgment, deletion, migration, or another protected action.
 
-Create one writer and one independent development-quality reviewer for the operation and record their agent IDs in `work-state.json`. Reuse them for every sequential selected bundle. The writer uses the shared evidence index, reopens source when needed, and produces or revises selected inventory rows, atom files, selective AIDs, meaningful graph candidates, and project-document impacts. The reviewer receives managed docs, source/evidence, criteria, and operation state, but not the writer's private reasoning conversation.
+Create one writer and one independent development-quality reviewer for the operation and record their agent IDs in `work-state.json`. Reuse them for every sequential selected bundle. The writer receives only active-bundle `write` candidates, merge candidates targeting them, and those candidates' evidence sections; never pass `drop` evidence as writer context. It reopens source when needed and produces or revises selected inventory rows, atom files, selective AIDs, meaningful graph candidates, and project-document impacts. The reviewer receives managed docs, source/evidence, criteria, and operation state, but not the writer's private reasoning conversation.
 
-When the first risk trigger appears, create one risk/contract reviewer and reuse it for later triggered bundles. If a persistent agent is unavailable or its context can no longer support the queue, create one same-role replacement using a compact handoff containing `work-state.json`, evidence index, active bundle, and last verdict. Do not spawn a fresh writer/reviewer pair merely because the queue advanced.
+When the first risk trigger appears, create one risk/contract reviewer and reuse it for later triggered bundles. If a persistent agent is unavailable or its context can no longer support the queue, create one same-role replacement using a role-filtered compact handoff. A replacement writer receives only accepted scope, queue position, active-bundle `write`/targeting `merge` records, their evidence sections, and the last writer result; omit `drop` records and evidence. Reviewer replacements may receive full operation state, evidence, active bundle, and last verdict. Do not spawn a fresh writer/reviewer pair merely because the queue advanced.
 
 ## Bundle Preflight And Review
 
@@ -89,17 +99,17 @@ python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root
 
 Also check the selected queue's owner references, source basis, and planned atom keys against actual atom keys. Compare planned selected keys, not raw source or document counts. Do not add an active/retired AID lifecycle merely for preflight; report total discovered AIDs and deterministic duplicate/shape failures.
 
-If preflight FAILs, return to the writer without spending a semantic review. After PASS, route semantic, structural-only, and source-locator-only changes through the authoritative change-type table in `reviewer-perspectives.md`; do not maintain a second routing table here.
+If preflight FAILs, correct the finding before spending a semantic review: send managed Atom content or structure to the writer, but repair operation state, expected keys, paths, inventory, or evidence projection through their owning flow without a writer. Rerun preflight after the correction. After PASS, route semantic, structural-only, and source-locator-only changes through the authoritative change-type table in `reviewer-perspectives.md`; do not maintain a second routing table here.
 
 Record one review input revision. When development and risk reviews both apply, run the persistent reviewers in parallel against that same revision and source basis. An `initial-baseline` still requires development review for every selected domain bundle, not every behavior found in source.
 
-Repeated `--expect-atom-key` scopes this preflight to the active bundle while still checking its AIDs and graph targets against the whole docs set. Unrelated pre-existing structural findings do not block the bundle. Run unscoped docs validation after the accepted queue finishes and before any baseline validation.
+Repeated `--expect-atom-key` scopes this preflight to the active bundle while still checking its AIDs and graph targets against the whole docs set. Unrelated pre-existing structural findings do not block the bundle. Before unscoped docs or baseline validation, rerun version-1 selection when candidate, evidence, queue, or risk input changed since its last PASS; a legacy operation uses its recorded preflight. Run unscoped docs validation after the accepted queue finishes.
 
 After a shared-owner bundle or cross-domain ownership/graph change, run lightweight integration lint for duplicate owners, unresolved shared contracts, expected atom keys, graph targets, and source-basis consistency. This is not a project-wide semantic review.
 
 The reviewer contracts and change-type rerun routing are defined in `reviewer-perspectives.md`. Do not start the next bundle until every reviewer applicable to the active bundle PASSes or a user decision is required.
 
-If later work changes an earlier bundle's boundary, ownership, graph, shared contract, source evidence, risk classification, or decision basis, reopen that bundle and rerun its writer and affected reviewers. Rerun dependent later bundles only when their PASS basis changed.
+If later work changes an earlier bundle's selection or review basis, reopen that bundle and route the writer and reviewers through the authoritative change-type table in `reviewer-perspectives.md`; do not blanket-rerun the writer. A version-1 selection-state or evidence-index change reruns selection preflight, while a legacy operation uses its recorded unversioned correction/preflight contract. Rerun the writer only when selected output or documented meaning changes, and rerun dependent later bundles only when their PASS basis changed.
 
 After a shared-owner bundle PASSes, record its reviewed revision as the owner basis. A dependent writer references that basis and must not redefine the owner or shared contract silently. When source evidence contradicts it, pause the dependent bundle, reopen the owner bundle, and then reopen only dependents whose recorded basis changed.
 

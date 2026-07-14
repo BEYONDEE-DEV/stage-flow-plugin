@@ -1,5 +1,15 @@
 # Reviewer Perspectives
 
+## Contents
+
+- [Responsibility](#responsibility)
+- [Findings-Only Report Contract](#findings-only-report-contract)
+- [Required Domain Development-Quality Reviewer](#required-domain-development-quality-reviewer)
+- [Conditional Risk / Contract Reviewer](#conditional-risk--contract-reviewer)
+- [Conditional Integration / Baseline Reviewer](#conditional-integration--baseline-reviewer)
+- [Reviewer Selection Examples](#reviewer-selection-examples)
+- [Rerun Policy](#rerun-policy)
+
 ## Responsibility
 
 This reference is the normative owner of semantic reviewer selection, report/verdict requirements, change-type routing, and rerun scope for the required domain development-quality reviewer, conditional risk/contract reviewer, and conditional affected-closure integration or project-wide baseline reviewer. `docs-generation-flow.md` owns when the selected roles are invoked and persisted.
@@ -14,7 +24,13 @@ Every PASS report contains only these fields. For Korean operation reports, use 
 
 `source/revision` is the inspected commit and bundle attempt, `verdict` is `PASS` or `provisional`, representative evidence is the smallest sample supporting the verdict, and rerun need is normally `없음`. Use equivalent user-language labels for another selected docs language.
 
-A FAIL report adds only blocking findings, affected `atom_key`/AID when known, required docs/evidence correction, and the reviewer roles that must rerun. Do not repeat unchanged risk triggers, principle-file lists, source indexes, atom content, or a decision matrix in every PASS report. Keep applicable triggers and agent/reviewer state in `work-state.json`.
+A FAIL report adds only blocking findings. Each blocking finding records the affected `atom_key`/AID when known, one `correction_mode`, required docs/evidence correction, and the reviewer roles that must rerun. Different findings in one report may use different modes; use the first applicable mode for each finding:
+
+- `remove`: the claim, paragraph, or Atom lacks a durable selection basis
+- `generalize`: the underlying context is useful but source mechanics should become concise owner, contract, rule, or constraint context
+- `correct_selected_claim`: a retained important claim is false, unsupported, or materially incomplete
+
+Do not choose `correct_selected_claim` for a finding until removal and generalization have been considered for that finding. Do not repeat unchanged risk triggers, principle-file lists, source indexes, atom content, or a decision matrix in every PASS report. Keep applicable triggers and agent/reviewer state in `work-state.json`.
 
 A reviewer must not issue PASS when an applicable principle file was not read. The main agent aggregates reports but cannot replace a required independent reviewer or issue that reviewer's PASS itself.
 
@@ -34,14 +50,18 @@ Read only the additional principle files implicated by the bundle: `atomic-docum
 Check all of the following in one coherent pass:
 
 - domain and context hygiene: no broad catch-all, context pollution, unsupported naming, vague split, or duplicated ownership
+- candidate admission: every written Atom traces to a `write` candidate or merge target with a durable selection basis, while `drop` and ordinary unselected source behavior remain outside managed docs
+- risk classification completeness: apply the trigger contract to every selected `write` or `merge` candidate and verify candidate-linked routes before deciding whether a risk reviewer exists; an empty trigger list is not self-validating
 - context usefulness: the atom explains why the area exists, where to inspect it, and the important owner, rule, shared/external contract, non-obvious constraint, dependency, or unresolved decision when applicable to its stated scope
 - current-context basis: source-established `Outcomes`, `Boundaries`, `Rules`, and `Current Implementation` claims are supported by reachable behavior and the applicable global baseline or operation-local `source_commit_observed` without a blanket inference Gap
 - section ownership: one meaning has one complete owner; other sections use a short AID/heading reference, behavior-local boundaries do not repeat domain context, graph reasons do not restate natural-language contracts, and `Gaps`/source evidence do not duplicate the owning narrative
 - proportional depth: general docs stop at useful implementation context and do not become a product-behavior specification, copy source mechanics, specify every behavior, expand exhaustive test combinations, or create matrices/field lists unless the structure itself preserves important contract context
 - source fact fidelity: judgment-bearing claims match the actual reachable source behavior and stronger intent is not inferred from identifiers alone
-- selected-scope trace: every context candidate accepted into the write queue has an atom or explicit unresolved/removal result, without requiring unselected source behavior to have a row or disposition
+- selected-scope trace: every `write` candidate and merge target has its planned Atom result, every `drop` candidate has none, and unselected source behavior needs no row or disposition
 - judgment and identity integrity: source-established, confirmed, and genuinely unresolved bases, labels, selective AIDs, graph relationships, and operation reporting are consistent; ordinary judgments without AIDs identify the `atom_key`, exact owning section, and affected behavior
 - gap economy: test absence, possible runtime exceptions, and isolated observations are not fragmented into managed gaps unless they block a stronger judgment; merged findings share one label, one unresolved decision, and compatible resolution without hiding independent high-risk concerns
+
+Before failing for an omitted source fact, apply candidate admission to that fact. If it would be `drop`, omission is correct. If it belongs in an existing meaning without an independent boundary, use `generalize` or merge it instead of demanding branch-level detail. Only a fact that changes a retained claim, important owner, durable contract, or accepted implementation basis may require `correct_selected_claim`.
 
 FAIL when a documented claim contradicts source, lacks enough evidence to be trusted, hides a known shared/external contract, owner, or non-obvious constraint whose omission makes the atom's stated scope misleading, or conceals an important contract conflict. Also FAIL substantive repetition across sections, a blanket inference Gap, an observed defect promoted to a normal `Outcome` or required `Rule`, mechanical AID allocation, a forensic defect/attack inventory outside accepted scope, a Cartesian test plan, or `Current Implementation` written as a source substitute. A short reference plus the minimum local reading context is not duplication. Do not FAIL because general docs omit ordinary fields, inputs/outputs, branches, states, failures, exact verification results, concrete test cases, framework mechanics, CSS, or behavior-neutral mappings. A developer needing source to determine exact product behavior is expected; docs-only implementation is not the review target.
 
@@ -57,7 +77,7 @@ The answer sheet may summarize several related AIDs in one row when they form on
 
 ## Conditional Risk / Contract Reviewer
 
-Run one additional independent reviewer only when `service-logic-coverage.md` identifies at least one risk trigger in selected context or an approved implementation-basis change. Code containing a possible risk surface is not by itself a request for a retained risk audit. Record the trigger in operation state before review and reuse the same risk reviewer across triggered bundles.
+Run one additional independent reviewer when operation state records at least one `service-logic-coverage.md` risk trigger tied to a selected candidate/Atom contract or an approved implementation-basis change. The development-quality reviewer independently checks trigger completeness. If it FAILs on a missing candidate-linked trigger, correct state and rerun both development and applicable risk reviews against the same corrected revision; never reuse the old FAIL as PASS. A version-1 operation reruns selection preflight first; a legacy operation uses its recorded unversioned correction/preflight contract instead. Code containing a possible risk surface and a domain-level risk category are not by themselves requests for a retained risk audit. Record the candidate ID, planned `atom_key`, trigger, and selected contract basis in operation state before review and reuse the same risk reviewer across triggered bundles. Several candidate contracts may reference the same Atom key and remain separate trigger entries.
 
 When both domain and risk reviews apply, they may run in parallel only against the same recorded review input revision and source basis. If either review causes a writer change, use the rerun routing below to decide which prior PASS remains valid.
 
@@ -74,7 +94,7 @@ FAIL when a documented high-risk contract is contradicted or overclaimed, when i
 
 Do not repeat the complete domain review. A risk reviewer PASS is additional evidence and cannot replace the required development-quality reviewer PASS. Persist a decision comparison table only when the risky alternatives cannot be judged reliably from concise findings.
 
-Do not turn incidental risk discovery into a retained audit backlog. A routine FAIL report keeps only concise blocking findings under the findings-only contract; detailed attack paths, fixture combinations, and non-blocking defect inventories are not persisted in managed docs or routine review artifacts. A materially serious incidental issue may be summarized to the user, but a complete security or defect audit and retained report require separately accepted scope.
+Do not turn incidental risk discovery into a retained audit backlog. Reapply candidate admission before asking the writer to retain a newly discovered adverse path; the risk reviewer cannot expand managed-doc scope merely because a source surface is dangerous. A routine FAIL report keeps only concise blocking findings under the findings-only contract; detailed attack paths, fixture combinations, and non-blocking defect inventories are not persisted in managed docs or routine review artifacts. A materially serious incidental issue may be summarized to the user, but a complete security or defect audit and retained report require separately accepted scope.
 
 ## Conditional Integration / Baseline Reviewer
 
@@ -95,11 +115,11 @@ Read `source-baseline-and-change-plan.md` for a baseline profile and `service-lo
 
 Check cross-domain ownership, duplicate responsibility, glossary source of truth, graph consistency, shared payload/state/storage/permission/integration contracts, changed evidence after domain PASS, accepted-scope reporting, and baseline eligibility when applicable. Every newly run domain review uses the operation's `source_commit_observed`; if relevant source changed after review, reopen affected bundles before PASS.
 
-For `initial-baseline`, verify every project-native feature area was considered for context selection, obvious high-impact shared/external owners were documented or excluded with a reason, every selected domain and risk review PASSed at the same source commit, and structural baseline validation PASSed. Do not require every product behavior or aggregate to have a disposition.
+For `initial-baseline`, verify the latest selection preflight matches the final queue and candidate-linked risk references, every project-native feature area was considered for context selection, obvious high-impact shared/external owners were documented or excluded with a reason, every selected domain and risk review PASSed at the same source commit, and structural baseline validation PASSed. Do not require every product behavior or aggregate to have a disposition.
 
 For `baseline-diff-refresh`, verify the complete old-to-new diff and ownership/graph/criteria impact expansion, impacted bundle reviews at the new commit, and the recorded rationale for carrying each unaffected bundle class from the trusted prior baseline. Do not claim carried reviews ran at the new commit.
 
-Do not repeat unchanged domain detail. If the project-wide view exposes a local defect, reopen the affected bundle, rerun its writer and affected reviewers, then rerun this reviewer.
+Do not repeat unchanged domain detail. If the project-wide view exposes a local defect, reopen the affected bundle and apply the rerun table below. Rerun its writer only when selected output or documented meaning changes, rerun the affected reviewers, and then rerun this reviewer.
 
 Use a cross-domain decision table only when ownership, contracts, or baseline carry-forward alternatives cannot be judged reliably in concise findings. The ordinary PASS report remains findings-only.
 
@@ -121,14 +141,16 @@ Only the project-wide form of this reviewer can approve global baseline creation
 | Change after review | Required rerun |
 | --- | --- |
 | Markdown formatting, graph path repair, expected-key correction, or inventory count with unchanged selection/owner | structural preflight only |
-| Source locator/evidence index correction with unchanged documented claim | narrowed source-evidence check by the development reviewer |
+| Source locator/evidence index correction with unchanged documented claim | version-1 selection preflight or the legacy recorded preflight, then narrowed source-evidence check by the development reviewer |
 | Intent, important context, rule/contract, ownership, approved verification condition, or judgment label | development-quality reviewer for affected bundle(s) |
-| Risk trigger, adverse branch, permission, destructive effect, transaction/idempotency, recovery, sensitive data, or external contract | risk/contract reviewer; also development reviewer when the documented decision changed |
+| Risk-trigger addition/removal or candidate/Atom route | version-1 selection preflight or the legacy recorded preflight, then development-quality and applicable risk/contract reviewers on the corrected revision |
+| Adverse branch, permission, destructive effect, transaction/idempotency, recovery, sensitive data, or external contract | risk/contract reviewer; also development reviewer when the documented decision changed |
 | Atom boundary, owner, edge type/target, shared contract meaning, or glossary source of truth | development reviewer for affected bundles plus affected-closure integration reviewer when its prior basis changed |
 
 Graph `reason` wording or inventory count alone does not trigger semantic review when relationship meaning and ownership are unchanged. If either changes meaning, route it as a shared-contract/ownership change.
 
 - After a FAIL, revise the affected bundle and run only the checks selected above.
+- For version-1 operations, when `remove` or `merge` changes candidate disposition, expected Atom keys, or risk references, rerun selection preflight before the writer or semantic rerun. Legacy operations use their recorded unversioned correction/preflight contract.
 - Do not rerun unaffected PASS results or a complete domain review for evidence-only correction.
 - Do not start the next sequential bundle until every reviewer applicable to the active bundle PASSes or a user decision is required.
 - Reviewer FAIL is not completion and is not a Goal blocker when it can be corrected inside accepted scope.

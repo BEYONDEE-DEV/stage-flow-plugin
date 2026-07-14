@@ -1,4 +1,4 @@
 interface:
   display_name: "Atomic Docs"
   short_description: "Source-guided implementation context for development decisions."
-  default_prompt: "Use $atomic-docs to preserve high-value implementation context, approved requirements, and important unresolved decisions for source navigation and change impact without creating a product-behavior specification or mirroring the source tree."
+  default_prompt: "Use $atomic-docs to select durable implementation context before writing: classify candidates as write, merge, or drop, keep evidence locator-focused, and preserve only high-value owners, rules, contracts, constraints, approved changes, and unresolved decisions without mirroring source mechanics."
