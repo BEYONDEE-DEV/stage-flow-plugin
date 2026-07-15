@@ -47,6 +47,17 @@ AID_RE = re.compile(
 )
 COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+SEMANTIC_REVIEW_ROLES = {"development", "risk", "integration", "baseline"}
+SEMANTIC_REVIEW_STATUSES = {"current", "stale", "superseded"}
+SEMANTIC_INVALIDATION_TRIGGERS = {
+    "candidate-disposition",
+    "atom-merge",
+    "ownership",
+    "glossary-source",
+    "shared-decision-owner",
+    "graph-relationship",
+    "documented-meaning",
+}
 EVIDENCE_COMMIT_RE = re.compile(
     r"^source_commit_observed:[ ]*`([0-9a-fA-F]{40}|[0-9a-fA-F]{64})`[ ]*$",
     re.MULTILINE,
@@ -130,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--request-id",
-        help="Atomic Docs request id; required only for selection validation",
+        help="Atomic Docs request id; required for selection and optional for final docs/baseline closure",
     )
     parser.add_argument(
         "--require-actions-final",
@@ -144,8 +155,8 @@ def main(argv: list[str] | None = None) -> int:
         errors.append("`--expect-atom-key` requires `--phase docs`")
     if args.phase == "selection" and not args.request_id:
         errors.append("`--phase selection` requires `--request-id`")
-    if args.request_id and args.phase != "selection":
-        errors.append("`--request-id` requires `--phase selection`")
+    if args.request_id and args.phase not in {"selection", "docs", "baseline"}:
+        errors.append("`--request-id` requires `--phase selection`, `docs`, or `baseline`")
     if args.require_actions_final and args.phase != "selection":
         errors.append("`--require-actions-final` requires `--phase selection`")
     config = load_config(Path(args.root).resolve(), errors)
@@ -163,6 +174,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.phase in {"docs", "baseline"}:
             scope_keys = args.expect_atom_key if args.phase == "docs" else []
             atoms, aid_count = validate_docs(config, errors, scope_keys)
+            if args.request_id:
+                validate_request_semantic_review_closure(
+                    config,
+                    args.request_id,
+                    errors,
+                    require_final=args.phase == "baseline" or not args.expect_atom_key,
+                    required_final_role="baseline" if args.phase == "baseline" else None,
+                )
         if args.phase == "baseline":
             validate_baseline(config, errors)
 
@@ -234,18 +253,8 @@ def validate_selection(
     *,
     require_actions_final: bool,
 ) -> None:
-    if not request_id.strip() or Path(request_id).name != request_id or request_id in {".", ".."}:
-        errors.append("atomic docs `request_id` must be one safe path segment")
-        return
-
-    request_root = (
-        config.project_root / ".stageflow" / "atomic-docs" / "requests" / request_id
-    ).resolve()
-    requests_root = (
-        config.project_root / ".stageflow" / "atomic-docs" / "requests"
-    ).resolve()
-    if not inside(requests_root, request_root):
-        errors.append("atomic docs `request_id` must stay inside the requests root")
+    request_root = atomic_docs_request_root(config, request_id, errors)
+    if request_root is None:
         return
 
     inventory_path = request_root / "inventory.md"
@@ -264,6 +273,10 @@ def validate_selection(
     state = read_json(state_path, rel(config.project_root, state_path), errors)
     if state is None:
         return
+
+    validate_semantic_review_closure(
+        state, errors, require_final=require_actions_final, required_final_role=None
+    )
 
     accepted_scope = string_list(
         state.get("accepted_scope"), "work-state `accepted_scope`", errors
@@ -293,8 +306,8 @@ def validate_selection(
     if not isinstance(context_selection, dict):
         errors.append("work-state must contain a `context_selection` object")
         return
-    if context_selection.get("version") != "1":
-        errors.append("work-state `context_selection.version` must be `1`")
+    if context_selection.get("version") not in {"1", "2"}:
+        errors.append("work-state `context_selection.version` must be `1` or `2`")
     raw_candidates = context_selection.get("candidates")
     if not isinstance(raw_candidates, list):
         errors.append("work-state `context_selection.candidates` must be a list")
@@ -400,6 +413,569 @@ def validate_selection(
         require_actions_final,
         errors,
     )
+
+
+def atomic_docs_request_root(
+    config: Config, request_id: str, errors: list[str]
+) -> Path | None:
+    if (
+        not request_id.strip()
+        or Path(request_id).name != request_id
+        or request_id in {".", ".."}
+    ):
+        errors.append("atomic docs `request_id` must be one safe path segment")
+        return None
+    requests_root = (
+        config.project_root / ".stageflow" / "atomic-docs" / "requests"
+    ).resolve()
+    request_root = (requests_root / request_id).resolve()
+    if not inside(requests_root, request_root):
+        errors.append("atomic docs `request_id` must stay inside the requests root")
+        return None
+    return request_root
+
+
+def validate_request_semantic_review_closure(
+    config: Config,
+    request_id: str,
+    errors: list[str],
+    *,
+    require_final: bool,
+    required_final_role: str | None,
+) -> None:
+    request_root = atomic_docs_request_root(config, request_id, errors)
+    if request_root is None:
+        return
+    state_path = request_root / "work-state.json"
+    state = read_json(state_path, rel(config.project_root, state_path), errors)
+    if state is None:
+        return
+    validate_semantic_review_closure(
+        state,
+        errors,
+        require_final=require_final,
+        required_final_role=required_final_role,
+    )
+
+
+def validate_semantic_review_closure(
+    state: dict[str, Any],
+    errors: list[str],
+    *,
+    require_final: bool,
+    required_final_role: str | None,
+) -> None:
+    selection = state.get("context_selection")
+    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    if "semantic_review_closure" not in state:
+        if selection_version == "2":
+            errors.append(
+                "work-state with `context_selection.version` `2` must contain "
+                "`semantic_review_closure`"
+            )
+        return
+    closure = state["semantic_review_closure"]
+    if not isinstance(closure, dict):
+        errors.append("work-state `semantic_review_closure` must be an object")
+        return
+    if selection_version != "2":
+        errors.append(
+            "work-state `semantic_review_closure` requires `context_selection.version` `2`"
+        )
+    validate_object_keys(
+        closure,
+        {"version", "basis_revision", "review_passes", "invalidations", "final_gate"},
+        {"version", "basis_revision", "review_passes", "invalidations", "final_gate"},
+        "semantic review closure",
+        errors,
+    )
+    if closure.get("version") != "1":
+        errors.append("semantic review closure `version` must be `1`")
+    basis_revision = positive_integer(
+        closure.get("basis_revision"),
+        "semantic review closure `basis_revision`",
+        errors,
+    )
+    accepted_domains = semantic_accepted_domains(state, errors)
+
+    review_passes = closure.get("review_passes")
+    if not isinstance(review_passes, list):
+        errors.append("semantic review closure `review_passes` must be a list")
+        review_passes = []
+    passes_by_id: dict[str, dict[str, Any]] = {}
+    current_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, review in enumerate(review_passes, start=1):
+        label = f"semantic review pass {index}"
+        if not isinstance(review, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(
+            review,
+            {
+                "review_id",
+                "reviewer_role",
+                "scope",
+                "basis_revision",
+                "verdict",
+                "status",
+            },
+            {
+                "review_id",
+                "reviewer_role",
+                "scope",
+                "basis_revision",
+                "verdict",
+                "status",
+            },
+            label,
+            errors,
+        )
+        review_id = lower_kebab_value(
+            review.get("review_id"), f"{label} `review_id`", errors
+        )
+        if review_id is not None:
+            if review_id in passes_by_id:
+                errors.append(f"semantic review id `{review_id}` appears more than once")
+            else:
+                passes_by_id[review_id] = review
+        role = review.get("reviewer_role")
+        if role not in SEMANTIC_REVIEW_ROLES:
+            errors.append(
+                f"{label} `reviewer_role` must be development, risk, integration, or baseline"
+            )
+            role = None
+        scope = single_line_string(review.get("scope"), f"{label} `scope`", errors)
+        validate_semantic_review_scope(role, scope, accepted_domains, label, errors)
+        revision = positive_integer(
+            review.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if revision is not None and basis_revision is not None and revision > basis_revision:
+            errors.append(f"{label} basis revision exceeds the current semantic basis")
+        if review.get("verdict") != "PASS":
+            errors.append(f"{label} `verdict` must be exact `PASS`")
+        status = review.get("status")
+        if status not in SEMANTIC_REVIEW_STATUSES:
+            errors.append(f"{label} `status` must be current, stale, or superseded")
+        if status == "current" and role is not None and scope is not None:
+            pair = (role, scope)
+            if pair in current_by_pair:
+                errors.append(
+                    f"semantic review role/scope `{role}`/`{scope}` has more than one current PASS"
+                )
+            else:
+                current_by_pair[pair] = review
+
+    invalidations = closure.get("invalidations")
+    if not isinstance(invalidations, list):
+        errors.append("semantic review closure `invalidations` must be a list")
+        invalidations = []
+    invalidation_ids: set[str] = set()
+    referenced_prior_passes: dict[str, str] = {}
+    parsed_invalidations: list[dict[str, Any]] = []
+    for index, invalidation in enumerate(invalidations, start=1):
+        label = f"semantic invalidation {index}"
+        if not isinstance(invalidation, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        status = invalidation.get("status")
+        required_fields = {
+            "invalidation_id",
+            "trigger",
+            "cause",
+            "opened_revision",
+            "affected_artifacts",
+            "affected_bundles",
+            "stale_review_ids",
+            "required_reviews",
+            "status",
+        }
+        if status == "resolved":
+            required_fields.add("resolved_revision")
+        validate_object_keys(
+            invalidation,
+            required_fields | {"resolved_revision"},
+            required_fields,
+            label,
+            errors,
+        )
+        invalidation_id = lower_kebab_value(
+            invalidation.get("invalidation_id"),
+            f"{label} `invalidation_id`",
+            errors,
+        )
+        if invalidation_id is not None:
+            if invalidation_id in invalidation_ids:
+                errors.append(
+                    f"semantic invalidation id `{invalidation_id}` appears more than once"
+                )
+            invalidation_ids.add(invalidation_id)
+        if invalidation.get("trigger") not in SEMANTIC_INVALIDATION_TRIGGERS:
+            errors.append(f"{label} has unsupported semantic invalidation trigger")
+        single_line_string(invalidation.get("cause"), f"{label} `cause`", errors)
+        opened_revision = positive_integer(
+            invalidation.get("opened_revision"),
+            f"{label} `opened_revision`",
+            errors,
+        )
+        if (
+            opened_revision is not None
+            and basis_revision is not None
+            and opened_revision > basis_revision
+        ):
+            errors.append(f"{label} opened revision exceeds the current semantic basis")
+
+        validate_semantic_affected_artifacts(
+            invalidation.get("affected_artifacts"), label, errors
+        )
+        affected_bundles = string_list(
+            invalidation.get("affected_bundles"),
+            f"{label} `affected_bundles`",
+            errors,
+        )
+        if not affected_bundles:
+            errors.append(f"{label} must affect at least one bundle")
+        if len(affected_bundles) != len(set(affected_bundles)):
+            errors.append(f"{label} repeats an affected bundle")
+        for bundle in affected_bundles:
+            if bundle not in accepted_domains:
+                errors.append(
+                    f"{label} affected bundle `{bundle}` is outside `accepted_scope`"
+                )
+
+        stale_review_ids = string_list(
+            invalidation.get("stale_review_ids"),
+            f"{label} `stale_review_ids`",
+            errors,
+        )
+        if not stale_review_ids:
+            errors.append(f"{label} must name at least one prior PASS made stale")
+        if len(stale_review_ids) != len(set(stale_review_ids)):
+            errors.append(f"{label} repeats a stale review id")
+        for review_id in stale_review_ids:
+            previous = referenced_prior_passes.get(review_id)
+            if previous is not None:
+                errors.append(
+                    f"semantic review id `{review_id}` is stale in more than one invalidation"
+                )
+            elif invalidation_id is not None:
+                referenced_prior_passes[review_id] = invalidation_id
+
+        required_reviews = invalidation.get("required_reviews")
+        if not isinstance(required_reviews, list):
+            errors.append(f"{label} `required_reviews` must be a list")
+            required_reviews = []
+        required_pairs: set[tuple[str, str]] = set()
+        for review_index, required_review in enumerate(required_reviews, start=1):
+            review_label = f"{label} required review {review_index}"
+            if not isinstance(required_review, dict):
+                errors.append(f"{review_label} must be an object")
+                continue
+            validate_object_keys(
+                required_review,
+                {"reviewer_role", "scope"},
+                {"reviewer_role", "scope"},
+                review_label,
+                errors,
+            )
+            role = required_review.get("reviewer_role")
+            if role not in SEMANTIC_REVIEW_ROLES:
+                errors.append(f"{review_label} has unsupported reviewer role")
+                continue
+            scope = single_line_string(
+                required_review.get("scope"), f"{review_label} `scope`", errors
+            )
+            if scope is None:
+                continue
+            validate_semantic_review_scope(
+                role, scope, accepted_domains, review_label, errors
+            )
+            if role in {"development", "risk"} and scope not in affected_bundles:
+                errors.append(
+                    f"{review_label} scope `{scope}` is not an affected bundle"
+                )
+            pair = (role, scope)
+            if pair in required_pairs:
+                errors.append(
+                    f"{label} repeats required review `{role}`/`{scope}`"
+                )
+            required_pairs.add(pair)
+        if not required_pairs:
+            errors.append(f"{label} must require at least one semantic review")
+
+        if status not in {"open", "resolved"}:
+            errors.append(f"{label} `status` must be `open` or `resolved`")
+        resolved_revision = None
+        if status == "open" and "resolved_revision" in invalidation:
+            errors.append(f"{label} with status `open` must not set `resolved_revision`")
+        if status == "resolved":
+            resolved_revision = positive_integer(
+                invalidation.get("resolved_revision"),
+                f"{label} `resolved_revision`",
+                errors,
+            )
+            if (
+                resolved_revision is not None
+                and opened_revision is not None
+                and resolved_revision < opened_revision
+            ):
+                errors.append(f"{label} resolved revision precedes its opened revision")
+            if (
+                resolved_revision is not None
+                and basis_revision is not None
+                and resolved_revision > basis_revision
+            ):
+                errors.append(f"{label} resolved revision exceeds the current semantic basis")
+        parsed_invalidations.append(
+            {
+                "label": label,
+                "status": status,
+                "opened_revision": opened_revision,
+                "resolved_revision": resolved_revision,
+                "stale_review_ids": stale_review_ids,
+                "required_pairs": required_pairs,
+            }
+        )
+
+    open_prior_ids: set[str] = set()
+    resolved_prior_ids: set[str] = set()
+    for invalidation in parsed_invalidations:
+        expected_status = "stale" if invalidation["status"] == "open" else "superseded"
+        target_set = open_prior_ids if invalidation["status"] == "open" else resolved_prior_ids
+        for review_id in invalidation["stale_review_ids"]:
+            target_set.add(review_id)
+            review = passes_by_id.get(review_id)
+            if review is None:
+                errors.append(
+                    f"{invalidation['label']} references unknown semantic review id `{review_id}`"
+                )
+                continue
+            if review.get("status") != expected_status:
+                errors.append(
+                    f"{invalidation['label']} prior PASS `{review_id}` must be `{expected_status}`"
+                )
+            review_revision = review.get("basis_revision")
+            opened_revision = invalidation["opened_revision"]
+            if (
+                type(review_revision) is int
+                and opened_revision is not None
+                and review_revision >= opened_revision
+            ):
+                errors.append(
+                    f"{invalidation['label']} prior PASS `{review_id}` must predate its opened revision"
+                )
+        resolved_revision = invalidation["resolved_revision"]
+        if invalidation["status"] == "resolved" and resolved_revision is not None:
+            for pair in invalidation["required_pairs"]:
+                review = current_by_pair.get(pair)
+                if review is None or review.get("basis_revision", 0) < resolved_revision:
+                    errors.append(
+                        f"{invalidation['label']} is missing current PASS for "
+                        f"`{pair[0]}`/`{pair[1]}` at its resolved basis"
+                    )
+
+    for review_id, review in passes_by_id.items():
+        if review.get("status") == "stale" and review_id not in open_prior_ids:
+            errors.append(f"stale semantic review `{review_id}` has no open invalidation")
+        if review.get("status") == "superseded" and review_id not in resolved_prior_ids:
+            errors.append(
+                f"superseded semantic review `{review_id}` has no resolved invalidation"
+            )
+
+    final_gate = closure.get("final_gate")
+    if not isinstance(final_gate, dict):
+        errors.append("semantic review closure `final_gate` must be an object")
+        final_gate = {}
+    else:
+        validate_object_keys(
+            final_gate,
+            {"required", "review_id", "review_history"},
+            {"required", "review_history"},
+            "semantic review final gate",
+            errors,
+        )
+    final_required = final_gate.get("required")
+    if type(final_required) is not bool:
+        errors.append("semantic review final gate `required` must be boolean")
+        final_required = False
+    final_review_id = nonempty_string(final_gate.get("review_id"))
+    if "review_id" in final_gate and final_review_id is None:
+        errors.append("semantic review final gate `review_id` must be non-empty")
+    if not final_required and "review_id" in final_gate:
+        errors.append("semantic review final gate must omit `review_id` when not required")
+    final_history = string_list(
+        final_gate.get("review_history"),
+        "semantic review final gate `review_history`",
+        errors,
+    )
+    if len(final_history) != len(set(final_history)):
+        errors.append("semantic review final gate repeats a review history id")
+    history_revisions: list[int] = []
+    for review_id in final_history:
+        review = passes_by_id.get(review_id)
+        if review is None:
+            errors.append(
+                f"semantic review final gate history references unknown review `{review_id}`"
+            )
+            continue
+        if review.get("reviewer_role") not in {"integration", "baseline"}:
+            errors.append(
+                f"semantic review final gate history `{review_id}` must reference "
+                "an integration/baseline PASS"
+            )
+        revision = review.get("basis_revision")
+        if type(revision) is int:
+            history_revisions.append(revision)
+    if history_revisions != sorted(history_revisions):
+        errors.append("semantic review final gate history must follow basis revision order")
+    if not final_required and final_history:
+        errors.append("semantic review final gate history must be empty when not required")
+    if final_review_id is not None and (
+        not final_history or final_history[-1] != final_review_id
+    ):
+        errors.append(
+            "semantic review final gate `review_id` must equal the latest review history id"
+        )
+    if final_review_id is not None:
+        review = passes_by_id.get(final_review_id)
+        if review is None:
+            errors.append(
+                f"semantic review final gate references unknown review `{final_review_id}`"
+            )
+        elif (
+            review.get("status") != "current"
+            or review.get("reviewer_role") not in {"integration", "baseline"}
+            or review.get("basis_revision") != basis_revision
+        ):
+            errors.append(
+                "semantic review final gate must reference a current integration/baseline PASS "
+                "at the latest basis revision"
+            )
+    elif final_history:
+        latest_review = passes_by_id.get(final_history[-1])
+        if latest_review is not None and latest_review.get("status") == "current":
+            errors.append(
+                "semantic review final gate must point to its latest current history PASS"
+            )
+
+    if require_final:
+        for invalidation in parsed_invalidations:
+            if invalidation["status"] == "open":
+                errors.append(f"{invalidation['label']} is still open at final validation")
+        for review_id, review in passes_by_id.items():
+            if review.get("status") == "stale":
+                errors.append(f"semantic review `{review_id}` is still stale at final validation")
+        if final_required and final_review_id is None:
+            errors.append("semantic review final gate requires a recorded final PASS")
+        if required_final_role is not None:
+            if final_required is not True:
+                errors.append(
+                    f"semantic review final gate must be required for `{required_final_role}` validation"
+                )
+            if final_review_id is not None:
+                review = passes_by_id.get(final_review_id)
+                if (
+                    review is None
+                    or review.get("reviewer_role") != required_final_role
+                    or review.get("scope") != "project-wide"
+                ):
+                    errors.append(
+                        f"semantic review final gate must reference a current "
+                        f"`{required_final_role}`/`project-wide` PASS"
+                    )
+
+
+def semantic_accepted_domains(
+    state: dict[str, Any], errors: list[str]
+) -> set[str]:
+    raw_scope = state.get("accepted_scope")
+    if not isinstance(raw_scope, list):
+        errors.append(
+            "semantic review closure requires work-state `accepted_scope` as a list"
+        )
+        return set()
+    domains: set[str] = set()
+    for index, value in enumerate(raw_scope, start=1):
+        domain = single_line_string(
+            value, f"semantic review accepted scope item {index}", errors
+        )
+        if domain is not None:
+            domains.add(domain)
+    return domains
+
+
+def validate_semantic_review_scope(
+    role: Any,
+    scope: str | None,
+    accepted_domains: set[str],
+    label: str,
+    errors: list[str],
+) -> None:
+    if scope is None or role not in SEMANTIC_REVIEW_ROLES:
+        return
+    if role in {"development", "risk"} and scope not in accepted_domains:
+        errors.append(f"{label} scope `{scope}` is outside `accepted_scope`")
+    if role == "integration" and scope not in {"affected-closure", "project-wide"}:
+        errors.append(
+            f"{label} integration scope must be `affected-closure` or `project-wide`"
+        )
+    if role == "baseline" and scope != "project-wide":
+        errors.append(f"{label} baseline scope must be `project-wide`")
+
+
+def validate_semantic_affected_artifacts(
+    value: Any, label: str, errors: list[str]
+) -> None:
+    if not isinstance(value, list):
+        errors.append(f"{label} `affected_artifacts` must be a list")
+        return
+    if not value:
+        errors.append(f"{label} must affect at least one artifact")
+    identities: set[tuple[str, str]] = set()
+    for index, artifact in enumerate(value, start=1):
+        artifact_label = f"{label} affected artifact {index}"
+        if not isinstance(artifact, dict):
+            errors.append(f"{artifact_label} must be an object")
+            continue
+        validate_object_keys(
+            artifact,
+            {"location", "path"},
+            {"location", "path"},
+            artifact_label,
+            errors,
+        )
+        location = artifact.get("location")
+        if location not in {"managed-docs", "request"}:
+            errors.append(f"{artifact_label} has unsupported location")
+            continue
+        path_text = single_line_string(
+            artifact.get("path"), f"{artifact_label} `path`", errors
+        )
+        path = safe_relative(path_text) if path_text is not None else None
+        if path is None or path == Path("."):
+            errors.append(f"{artifact_label} path must be a safe relative path")
+            continue
+        normalized = path.as_posix()
+        if location == "request" and normalized == "work-state.json":
+            errors.append(f"{artifact_label} must not reference work-state.json itself")
+        identity = (location, normalized)
+        if identity in identities:
+            errors.append(f"{label} repeats affected artifact `{location}:{normalized}`")
+        identities.add(identity)
+
+
+def positive_integer(value: Any, label: str, errors: list[str]) -> int | None:
+    if type(value) is not int or value < 1:
+        errors.append(f"{label} must be a positive integer")
+        return None
+    return value
+
+
+def single_line_string(value: Any, label: str, errors: list[str]) -> str | None:
+    text = nonempty_string(value)
+    if text is None or "\n" in text or "\r" in text:
+        errors.append(f"{label} must be a non-empty single-line string")
+        return None
+    return text
 
 
 def validate_selection_queue(
@@ -1475,6 +2051,7 @@ def validate_created_state_snapshot(
         active_created_path=identity["path"],
         active_candidate_id=identity["candidate_id"],
         active_atom_key=identity["atom_key"],
+        active_semantic_paths={identity["path"]},
     )
     artifacts = snapshot.get("operation_created_artifacts")
     match = None
@@ -1543,6 +2120,7 @@ def validate_action_state_snapshot(
         label,
         errors,
         active_action_id=action_id,
+        active_semantic_paths=action_manifest_paths(manifest),
     )
     actions = snapshot.get("approved_existing_actions")
     action = None
@@ -1675,6 +2253,7 @@ def validate_state_snapshot_completeness(
     active_candidate_id: str | None = None,
     active_atom_key: str | None = None,
     active_action_id: str | None = None,
+    active_semantic_paths: set[str] | None = None,
 ) -> None:
     required = {
         "accepted_scope",
@@ -1702,6 +2281,7 @@ def validate_state_snapshot_completeness(
         "operation_created_artifacts",
         "approved_existing_actions",
         "action_execution",
+        "semantic_review_closure",
     }
     for field in sorted((set(snapshot) | set(current_state)) - active_state_owners):
         if (
@@ -1788,6 +2368,29 @@ def validate_state_snapshot_completeness(
         )
     current_selection = current_state.get("context_selection")
     snapshot_selection = snapshot.get("context_selection")
+    current_selection_version = (
+        current_selection.get("version")
+        if isinstance(current_selection, dict)
+        else None
+    )
+    snapshot_selection_version = (
+        snapshot_selection.get("version")
+        if isinstance(snapshot_selection, dict)
+        else None
+    )
+    if snapshot_selection_version != current_selection_version:
+        errors.append(
+            f"{label} operation-state rollback changes context selection version"
+        )
+    current_closure = current_state.get("semantic_review_closure")
+    snapshot_closure = snapshot.get("semantic_review_closure")
+    if isinstance(current_closure, dict) and isinstance(snapshot_closure, dict):
+        validate_semantic_closure_progression(
+            snapshot_closure,
+            current_closure,
+            label,
+            errors,
+        )
     current_candidates = (
         current_selection.get("candidates")
         if isinstance(current_selection, dict)
@@ -1846,7 +2449,398 @@ def validate_state_snapshot_completeness(
         errors.append(
             f"{label} operation-state rollback changes unrelated risk routing"
         )
+    validate_snapshot_semantic_mutation_guard(
+        snapshot,
+        current_state,
+        active_semantic_paths or set(),
+        label,
+        errors,
+    )
     validate_snapshot_selection_routing(snapshot, label, errors)
+
+
+def action_manifest_paths(manifest: dict[str, Any]) -> set[str]:
+    paths: set[str] = set()
+    for field in ("source", "target"):
+        member = manifest.get(field)
+        if isinstance(member, dict) and isinstance(member.get("path"), str):
+            paths.add(member["path"])
+    owners = manifest.get("reference_owners")
+    if isinstance(owners, list):
+        for owner in owners:
+            if isinstance(owner, dict) and isinstance(owner.get("path"), str):
+                paths.add(owner["path"])
+    return paths
+
+
+def validate_semantic_closure_progression(
+    snapshot: dict[str, Any],
+    current: dict[str, Any],
+    label: str,
+    errors: list[str],
+) -> None:
+    if snapshot.get("version") != current.get("version"):
+        errors.append(
+            f"{label} operation-state rollback changes semantic review closure version"
+        )
+    snapshot_basis = snapshot.get("basis_revision")
+    current_basis = current.get("basis_revision")
+    if (
+        type(snapshot_basis) is int
+        and type(current_basis) is int
+        and snapshot_basis > current_basis
+    ):
+        errors.append(
+            f"{label} operation-state rollback semantic basis exceeds current revision"
+        )
+
+    snapshot_reviews = semantic_objects_by_id(snapshot.get("review_passes"), "review_id")
+    current_reviews = semantic_objects_by_id(current.get("review_passes"), "review_id")
+    status_transitions = {
+        "current": {"current", "stale", "superseded"},
+        "stale": {"stale", "superseded"},
+        "superseded": {"superseded"},
+    }
+    for review_id, prior in snapshot_reviews.items():
+        review = current_reviews.get(review_id)
+        if review is None:
+            errors.append(
+                f"{label} operation-state rollback semantic history drops review PASS "
+                f"`{review_id}`"
+            )
+            continue
+        for field in ("reviewer_role", "scope", "basis_revision", "verdict"):
+            if review.get(field) != prior.get(field):
+                errors.append(
+                    f"{label} operation-state rollback rewrites semantic review "
+                    f"`{review_id}` field `{field}`"
+                )
+        prior_status = prior.get("status")
+        if review.get("status") not in status_transitions.get(prior_status, set()):
+            errors.append(
+                f"{label} operation-state rollback reverses semantic review "
+                f"`{review_id}` status"
+            )
+
+    snapshot_invalidations = semantic_objects_by_id(
+        snapshot.get("invalidations"), "invalidation_id"
+    )
+    current_invalidations = semantic_objects_by_id(
+        current.get("invalidations"), "invalidation_id"
+    )
+    for invalidation_id, prior in snapshot_invalidations.items():
+        invalidation = current_invalidations.get(invalidation_id)
+        if invalidation is None:
+            errors.append(
+                f"{label} operation-state rollback semantic history drops invalidation "
+                f"`{invalidation_id}`"
+            )
+            continue
+        if prior.get("status") == "resolved":
+            if invalidation != prior:
+                errors.append(
+                    f"{label} operation-state rollback rewrites resolved semantic "
+                    f"invalidation `{invalidation_id}`"
+                )
+            continue
+        for field in ("trigger", "opened_revision"):
+            if invalidation.get(field) != prior.get(field):
+                errors.append(
+                    f"{label} operation-state rollback rewrites semantic invalidation "
+                    f"`{invalidation_id}` field `{field}`"
+                )
+        prior_cause = prior.get("cause")
+        current_cause = invalidation.get("cause")
+        if (
+            isinstance(prior_cause, str)
+            and isinstance(current_cause, str)
+            and not current_cause.startswith(prior_cause)
+        ):
+            errors.append(
+                f"{label} operation-state rollback replaces semantic invalidation "
+                f"`{invalidation_id}` cause instead of appending it"
+            )
+        prior_artifacts = semantic_artifact_set(prior.get("affected_artifacts"))
+        current_artifacts = semantic_artifact_set(
+            invalidation.get("affected_artifacts")
+        )
+        prior_bundles = semantic_string_set(prior.get("affected_bundles"))
+        current_bundles = semantic_string_set(invalidation.get("affected_bundles"))
+        prior_stale_ids = semantic_string_set(prior.get("stale_review_ids"))
+        current_stale_ids = semantic_string_set(invalidation.get("stale_review_ids"))
+        prior_required = semantic_required_review_set(prior.get("required_reviews"))
+        current_required = semantic_required_review_set(
+            invalidation.get("required_reviews")
+        )
+        semantic_subset(
+            prior_artifacts,
+            current_artifacts,
+            f"{label} operation-state rollback shrinks semantic invalidation "
+            f"`{invalidation_id}` affected artifacts",
+            errors,
+        )
+        semantic_subset(
+            prior_bundles,
+            current_bundles,
+            f"{label} operation-state rollback shrinks semantic invalidation "
+            f"`{invalidation_id}` affected bundles",
+            errors,
+        )
+        semantic_subset(
+            prior_stale_ids,
+            current_stale_ids,
+            f"{label} operation-state rollback shrinks semantic invalidation "
+            f"`{invalidation_id}` stale review IDs",
+            errors,
+        )
+        semantic_subset(
+            prior_required,
+            current_required,
+            f"{label} operation-state rollback shrinks semantic invalidation "
+            f"`{invalidation_id}` required reviews",
+            errors,
+        )
+        expanded = (
+            current_cause != prior_cause
+            or current_artifacts > prior_artifacts
+            or current_bundles > prior_bundles
+            or current_stale_ids > prior_stale_ids
+            or current_required > prior_required
+        )
+        if (
+            expanded
+            and type(snapshot_basis) is int
+            and type(current_basis) is int
+            and current_basis <= snapshot_basis
+        ):
+            errors.append(
+                f"{label} operation-state rollback expands semantic invalidation "
+                f"`{invalidation_id}` without advancing basis revision"
+            )
+        if invalidation.get("status") not in {"open", "resolved"}:
+            errors.append(
+                f"{label} operation-state rollback invalidates semantic transition "
+                f"for `{invalidation_id}`"
+            )
+
+    snapshot_gate = snapshot.get("final_gate")
+    current_gate = current.get("final_gate")
+    if (
+        isinstance(snapshot_gate, dict)
+        and isinstance(current_gate, dict)
+        and snapshot_gate.get("required") is True
+        and current_gate.get("required") is not True
+    ):
+        errors.append(
+            f"{label} operation-state rollback disables a required semantic final gate"
+        )
+    if isinstance(snapshot_gate, dict) and isinstance(current_gate, dict):
+        snapshot_history = snapshot_gate.get("review_history")
+        current_history = current_gate.get("review_history")
+        if isinstance(snapshot_history, list) and isinstance(current_history, list):
+            if current_history[: len(snapshot_history)] != snapshot_history:
+                errors.append(
+                    f"{label} operation-state rollback rewrites semantic final gate history"
+                )
+
+
+def semantic_objects_by_id(value: Any, identity: str) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        return {}
+    return {
+        item[identity]: item
+        for item in value
+        if isinstance(item, dict) and isinstance(item.get(identity), str)
+    }
+
+
+def semantic_artifact_set(value: Any) -> set[tuple[str, str]]:
+    if not isinstance(value, list):
+        return set()
+    return {
+        (item["location"], item["path"])
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("location"), str)
+        and isinstance(item.get("path"), str)
+    }
+
+
+def semantic_string_set(value: Any) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
+def semantic_required_review_set(value: Any) -> set[tuple[str, str]]:
+    if not isinstance(value, list):
+        return set()
+    return {
+        (item["reviewer_role"], item["scope"])
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("reviewer_role"), str)
+        and isinstance(item.get("scope"), str)
+    }
+
+
+def semantic_subset(
+    prior: set[Any],
+    current: set[Any],
+    message: str,
+    errors: list[str],
+) -> None:
+    if not prior.issubset(current):
+        errors.append(message)
+
+
+def validate_snapshot_semantic_mutation_guard(
+    snapshot: dict[str, Any],
+    current_state: dict[str, Any],
+    active_paths: set[str],
+    label: str,
+    errors: list[str],
+) -> None:
+    if not active_paths:
+        return
+    selection = snapshot.get("context_selection")
+    if not isinstance(selection, dict) or selection.get("version") != "2":
+        return
+    snapshot_closure = snapshot.get("semantic_review_closure")
+    current_closure = current_state.get("semantic_review_closure")
+    if not isinstance(snapshot_closure, dict) or not isinstance(current_closure, dict):
+        return
+
+    accepted_scope = snapshot.get("accepted_scope")
+    domains: set[str] = set()
+    if isinstance(accepted_scope, list):
+        accepted = [value for value in accepted_scope if isinstance(value, str)]
+        for path in active_paths:
+            matches = [
+                domain
+                for domain in accepted
+                if managed_path_in_scope(path, {domain})
+            ]
+            if matches:
+                domains.add(max(matches, key=lambda value: len(Path(value).parts)))
+
+    snapshot_passes = snapshot_closure.get("review_passes")
+    relevant_current: list[str] = []
+    relevant_stale: list[str] = []
+    if isinstance(snapshot_passes, list):
+        for review in snapshot_passes:
+            if not isinstance(review, dict):
+                continue
+            if review.get("reviewer_role") != "development":
+                continue
+            if review.get("scope") not in domains:
+                continue
+            review_id = review.get("review_id")
+            if not isinstance(review_id, str):
+                continue
+            if review.get("status") == "current":
+                relevant_current.append(review_id)
+            elif review.get("status") == "stale":
+                relevant_stale.append(review_id)
+    snapshot_gate = snapshot_closure.get("final_gate")
+    final_history = (
+        snapshot_gate.get("review_history")
+        if isinstance(snapshot_gate, dict)
+        else None
+    )
+    final_review_id = (
+        final_history[-1]
+        if isinstance(final_history, list)
+        and final_history
+        and isinstance(final_history[-1], str)
+        else None
+    )
+    final_review = (
+        next(
+            (
+                review
+                for review in snapshot_passes
+                if isinstance(review, dict)
+                and review.get("review_id") == final_review_id
+            ),
+            None,
+        )
+        if isinstance(snapshot_passes, list) and isinstance(final_review_id, str)
+        else None
+    )
+    if isinstance(final_review, dict):
+        if final_review.get("status") == "current":
+            relevant_current.append(final_review_id)
+        elif final_review.get("status") == "stale":
+            relevant_stale.append(final_review_id)
+    if relevant_current:
+        errors.append(
+            f"{label} operation-state rollback must open semantic invalidation and "
+            "stale reviewed PASS(es) before guarded mutation: "
+            + ", ".join(sorted(relevant_current))
+        )
+
+    snapshot_invalidations = snapshot_closure.get("invalidations")
+    snapshot_by_id: dict[str, dict[str, Any]] = {}
+    if isinstance(snapshot_invalidations, list):
+        for invalidation in snapshot_invalidations:
+            if not isinstance(invalidation, dict):
+                continue
+            invalidation_id = invalidation.get("invalidation_id")
+            if isinstance(invalidation_id, str):
+                snapshot_by_id[invalidation_id] = invalidation
+    for review_id in relevant_stale:
+        if not any(
+            invalidation.get("status") == "open"
+            and review_id in invalidation.get("stale_review_ids", [])
+            and semantic_invalidation_affects_paths(invalidation, active_paths)
+            for invalidation in snapshot_by_id.values()
+        ):
+            errors.append(
+                f"{label} operation-state rollback stale PASS `{review_id}` lacks an "
+                "open pre-mutation invalidation for the guarded artifact"
+            )
+
+    current_invalidations = current_closure.get("invalidations")
+    if not isinstance(current_invalidations, list):
+        return
+    for invalidation in current_invalidations:
+        if not isinstance(invalidation, dict) or not semantic_invalidation_affects_paths(
+            invalidation, active_paths
+        ):
+            continue
+        invalidation_id = invalidation.get("invalidation_id")
+        prior = snapshot_by_id.get(invalidation_id)
+        if (
+            isinstance(prior, dict)
+            and prior.get("status") == "resolved"
+            and invalidation == prior
+        ):
+            continue
+        if (
+            not isinstance(invalidation_id, str)
+            or not isinstance(prior, dict)
+            or prior.get("status") != "open"
+            or not semantic_invalidation_affects_paths(prior, active_paths)
+        ):
+            errors.append(
+                f"{label} operation-state rollback must contain open invalidation "
+                f"`{invalidation_id or '<unknown>'}` before guarded mutation"
+            )
+
+
+def semantic_invalidation_affects_paths(
+    invalidation: dict[str, Any], active_paths: set[str]
+) -> bool:
+    artifacts = invalidation.get("affected_artifacts")
+    if not isinstance(artifacts, list):
+        return False
+    return any(
+        isinstance(artifact, dict)
+        and artifact.get("location") == "managed-docs"
+        and artifact.get("path") in active_paths
+        for artifact in artifacts
+    )
 
 
 def validate_snapshot_selection_routing(
@@ -1863,8 +2857,8 @@ def validate_snapshot_selection_routing(
         )
     )
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or selection.get("version") != "1":
-        local.append("snapshot context_selection must use version `1`")
+    if not isinstance(selection, dict) or selection.get("version") not in {"1", "2"}:
+        local.append("snapshot context_selection must use version `1` or `2`")
         candidates: Any = None
     else:
         candidates = selection.get("candidates")
@@ -1955,6 +2949,12 @@ def validate_snapshot_selection_routing(
         candidate_targets,
         candidate_dispositions,
         local,
+    )
+    validate_semantic_review_closure(
+        snapshot,
+        local,
+        require_final=False,
+        required_final_role=None,
     )
     snapshot_artifacts = snapshot.get("operation_created_artifacts")
     if snapshot_artifacts is not None and not isinstance(snapshot_artifacts, list):

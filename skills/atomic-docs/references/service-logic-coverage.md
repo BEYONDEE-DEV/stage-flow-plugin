@@ -37,6 +37,8 @@ An approved domain may need only its domain context atom and no separate behavio
 
 Reapply this admission decision when later source inspection reveals another fact. A reviewer must not turn an unselected fact into required managed-doc detail merely to make source coverage more complete.
 
+Before a required final integration/baseline review, reapply admission to the operation's retained selected candidates, or only the affected candidate closure for a non-baseline operation. Confirm each still has a current durable selection basis. Existing file length, AID count, risky code, destructive names, or prior reviewer PASS cannot preserve a dormant/unreachable candidate by themselves. In version 2, a late `write→merge|drop` correction follows `semantic-review-closure.md` before its prior PASS is reused; a legacy operation uses its recorded correction/review flow without adding closure state.
+
 ## Current Contract Evidence
 
 A selected source-established context claim may describe a purpose, result, local boundary, important rule, state/effect, integration, owner, or constraint supported by a reachable production path and, when available, behavior-relevant tests, schemas, settings, or local API contracts. It may be documented without separate user approval. AI authorship alone does not make the meaning inferred or create a Gap; a method name, field annotation, or test name alone still does not establish runtime behavior.
