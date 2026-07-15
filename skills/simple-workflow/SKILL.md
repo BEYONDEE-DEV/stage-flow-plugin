@@ -1,6 +1,6 @@
 ---
 name: simple-workflow
-description: "Use when the user explicitly asks to use Simple Workflow, simple-workflow, `.simple`, or the Simple Workflow plugin, or when an active `.simple` session pointer exists. Enforces a small plan-centered workflow: listen to requirements, write `plan.md`, review it with a subagent, let the agent determine explicit user approval from conversation context, and structurally gate `create_goal` against the reviewed request."
+description: "Use when the user explicitly asks to use Simple Workflow, simple-workflow, `.simple`, or the Simple Workflow plugin, or when an active `.simple` session pointer exists. Enforces a small plan-centered workflow: challenge inferred intent before confirmation, write `plan.md`, review it with a subagent, let the agent determine explicit user approval from conversation context, and structurally gate `create_goal` against the reviewed request."
 ---
 
 # Simple Workflow
@@ -12,13 +12,15 @@ Use this skill to keep Codex work tied to a single human-readable plan while pre
 Follow exactly this sequence:
 
 1. Listen to the user's requirements.
-2. Inspect the project, infer the user's intent, and ask the user to confirm or correct that inferred intent before writing `plan.md`. Ask clarification questions from broad to narrow: 대분류 before 중분류, and 중분류 before 소분류.
-3. Write `plan.md` from the confirmed intent and requirements, including the observable outcome, completion criteria, and planned completion evidence for every requirement.
-4. Review `plan.md` with a subagent and write internal `review.md`.
-5. If review fails, revise `plan.md` and repeat the subagent review until it passes.
-6. When the agent determines from conversation context that the user clearly authorizes execution, first persist approval for the current reviewed fingerprint, then reconcile the Goal with `get_goal` and call `create_goal` at most once.
-7. Execute the approved `plan.md`, adapt implementation details only inside the approved goal and scope, and run its validation commands.
-8. Map every requirement to actual completion evidence, run both post-execution reviews, pass the completion pre-gate, complete the Goal, and then close the local request metadata.
+2. Inspect the project and infer the user's intent, expected outcome, boundaries, and assumptions.
+3. Before the first user intent confirmation, run the bounded `Intent Challenge Review`. Disclose every material finding, obtain the user's decision without silently changing the request, and repeat the review until no unresolved material finding remains.
+4. Ask the user to confirm or correct the challenged intent. Then ask any remaining clarification questions from broad to narrow: 대분류 before 중분류, and 중분류 before 소분류.
+5. Write `plan.md` from the confirmed intent and requirements, including the observable outcome, completion criteria, and planned completion evidence for every requirement.
+6. Review `plan.md` with a subagent and write internal `review.md`. The reviewer must check that the resolved Intent Challenge result, confirmed intent, and plan agree.
+7. If review fails only for a non-material plan defect, revise `plan.md` and repeat the subagent review until it passes. If the reviewer finds a new material requirement problem, return to the user-decision flow in step 3 instead of automatically changing the plan.
+8. When the agent determines from conversation context that the user clearly authorizes execution, first persist approval for the current reviewed fingerprint, then reconcile the Goal with `get_goal` and call `create_goal` at most once.
+9. Execute the approved `plan.md`, adapt implementation details only inside the approved goal and scope, and run its validation commands.
+10. Map every requirement to actual completion evidence, run both post-execution reviews, pass the completion pre-gate, complete the Goal, and then close the local request metadata.
 
 Natural-language approval intent belongs to the agent applying this skill. Hooks must not classify approval with keyword or regular-expression matching. A `UserPromptSubmit` hook may report request readiness, while `PreToolUse(create_goal)` only enforces structural prerequisites after the agent has already determined that the user approved execution.
 
@@ -44,7 +46,7 @@ Use request IDs in this form: `YYYYMMDD-HHMM-short-slug`.
 
 Allowed phases are `plan`, `review`, and `completed`.
 
-Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests use integer `workflow_version: 2`, `plan_approval_status: pending|approved`, and may record `goal_status` as `pending`, `active`, `completing`, or `completed`. After Goal creation, `goal_plan_fingerprint` permanently identifies the plan fingerprint named in the original Goal objective, while `approved_plan_fingerprint` identifies the latest plan explicitly approved for execution. Requests without `workflow_version` are legacy requests; unknown versions are invalid. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
+Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests use integer `workflow_version: 2`, exact integer `intent_challenge_version: 1`, `plan_approval_status: pending|approved`, and may record `goal_status` as `pending`, `active`, `completing`, or `completed`. The intent marker means the request must use the structured Intent Challenge review contract. Marker-free existing v2 and legacy requests retain their previous review schema; any other marker value is invalid. After Goal creation, `goal_plan_fingerprint` permanently identifies the plan fingerprint named in the original Goal objective, while `approved_plan_fingerprint` identifies the latest plan explicitly approved for execution. Requests without `workflow_version` are legacy requests; unknown versions are invalid. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
 
 The phase transitions are:
 
@@ -74,7 +76,7 @@ Use the same principles when writing `plan.md`, reviewing `plan.md` with a subag
 
 `## Flow Check` in `plan.md` must state whether the affected product, feature, state, data, user, command, hook, and validation flows are coherent after considering the planned changes. It must tell the user about any relevant flow problem discovered during planning, even when the problem was pre-existing and was not caused by the requested change. Report flow breaks such as broken user journeys, inconsistent state transitions, missing failure or retry paths, contradictory behavior across entry points, data moving through the wrong owner, or a validation path that no longer proves the real flow. If a discovered problem is outside the requested scope, say so explicitly instead of hiding it.
 
-`review.md` is internal. It must include `# Review`, `## Reviewed Plan Fingerprint` with `Reviewed Plan Fingerprint: sha256:<hex>`, `## Reviewer`, `## Verdict` whose complete trimmed body is exactly `PASS`, `## Blocking Issues` with a blocking-specific no-issue value such as `No blocking issues`, `None`, or `차단 없음`, and non-empty `## Flow Check` and `## Question Depth Check` results. A non-blocking flow observation does not invalidate a passing plan review. The internal review must use `Shared Planning And Review Principles`; its flow result must judge whether the plan exposes all relevant flow problems to the user and keeps the affected flow coherent, not merely whether the Simple Workflow procedure was followed.
+`review.md` is internal. It must include `# Review`, `## Reviewed Plan Fingerprint` with `Reviewed Plan Fingerprint: sha256:<hex>`, `## Reviewer`, `## Verdict` whose complete trimmed body is exactly `PASS`, `## Blocking Issues` with a blocking-specific no-issue value such as `No blocking issues`, `None`, or `차단 없음`, and non-empty `## Flow Check` and `## Question Depth Check` results. Requests with `intent_challenge_version: 1` additionally require `## Intent Challenge Check`: its `Finding | User Decision Or Resolution | Verdict` table records each material finding once with a unique `IC-###`, a substantive Korean decision or resolution, and exact `PASS`; when there were no material findings it contains one `NONE` row with the review basis. `### Intent Challenge Final Verdict` must be exact `PASS`. A non-blocking flow observation does not invalidate a passing plan review. The internal review must use `Shared Planning And Review Principles` and verify that the resolved Intent Challenge result, user-confirmed intent, and `plan.md` agree; its flow result must judge whether the plan exposes all relevant flow problems to the user and keeps the affected flow coherent, not merely whether the Simple Workflow procedure was followed.
 
 After execution reviews pass, append `## Completion Review` to the same `review.md`. It records the latest completion plan fingerprint, exactly one actual-evidence row and exact `PASS` verdict for every planned `REQ-###`, observable outcome evidence, and an exact final `PASS`. Do not create another evidence artifact.
 
@@ -82,7 +84,7 @@ Do not ask the user to read `review.md` as part of the normal workflow. Summariz
 
 ## Language Policy
 
-Write human-readable artifact body text in Korean. This applies to `plan.md` sections such as `## Summary`, `## Requirements Coverage`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`, and to internal `review.md` body text such as blocking, flow, question-depth, and notes.
+Write human-readable artifact body text in Korean. This applies to `plan.md` sections such as `## Summary`, `## Requirements Coverage`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`, and to internal `review.md` body text such as blocking, flow, question-depth, Intent Challenge resolutions, and notes.
 
 Keep fixed validator contract tokens unchanged when needed: headings, table column names, `REQ-###`, `PASS`, `FAIL`, `sha256`, file paths, commands, code identifiers, and validator status/control values may remain in English or code form.
 
@@ -92,7 +94,24 @@ At the start of a Simple Workflow turn, inspect `.simple/sessions/<session-id>/c
 
 If an active session pointer exists for a request in `plan` or `review` phase, treat follow-up user messages as Simple Workflow continuation even when the prompt does not mention the plugin again. Short answers, confirmations, corrections, and renewed requests such as `응`, `맞아`, `그렇게 해줘`, or `수정해줘` must continue from the active request and follow the same `plan.md`, internal review, validator, and approval rules. A completed request must not capture unrelated follow-up prompts; explicit Simple Workflow invocation starts or selects another request.
 
-Before asking questions, inspect the project enough to understand the request. Then state the inferred intent, expected outcome, and notable flow risks or assumptions from the affected product or system flow, including relevant pre-existing issues discovered while planning, and ask the user to confirm or correct that intent before writing `plan.md`.
+Before asking the user to confirm the request, inspect the project enough to understand it and form a first inference of the intent, expected outcome, boundaries, assumptions, and notable affected-flow risks. Run the Intent Challenge Gate below against that first inference. Only after every material finding has a user decision or resolution and the gate passes, state the resulting intent and ask the user to confirm or correct it. Then apply the existing Question Depth Gate before writing `plan.md`.
+
+## Intent Challenge Gate
+
+This gate is mandatory once for every new request with `intent_challenge_version: 1`, after project inspection and the main agent's first inference but before the first user intent confirmation. It is an initial requirements-quality check, not an approval check and not a second implementation-plan review. Do not replay it merely because a later material replan uses the existing re-review and reapproval flow.
+
+Run a bounded subagent review using only the user's request, inspected project facts, the inferred intent, expected outcome, boundaries and assumptions, and plausible alternatives grounded in those facts. Ask the reviewer to challenge:
+
+- whether the requested solution fits the underlying problem;
+- false assumptions, contradictions, omissions, and unclear success conditions;
+- affected users, systems, owners, and responsibility boundaries;
+- simpler or safer alternatives that preserve the intended outcome;
+- failure paths, edge cases, irreversible effects, and material risk; and
+- mismatches between the request or inference and the actual project.
+
+The reviewer identifies findings; it does not replace the user's intent or authorize a requirement change. For every material finding, the main agent must tell the user the supporting fact, likely impact, and decision needed. Never silently or automatically apply the reviewer's preferred alternative. Include the user's correction or explicit tradeoff acceptance in the next bounded review and repeat until the reviewer returns `PASS` with no unresolved material finding. Only then ask for the first intent confirmation and proceed to the Question Depth Gate.
+
+Do not create a challenge artifact. Preserve the durable result later in the existing `review.md` under `## Intent Challenge Check`. Record every material finding as one unique `IC-###` row with the user's decision or resolution and exact `PASS`, or use one `NONE` row with a substantive Korean review basis when there was no material finding. The final verdict must be exact `PASS`.
 
 ## Question Depth Gate
 
@@ -107,6 +126,8 @@ Question depth is adaptive, not a quota. Ask a question only when its answer can
 Before moving from `대분류` to `중분류`, run a bounded subagent check asking whether any unresolved `대분류` question remains. Before moving from `중분류` to `소분류`, run another bounded subagent check asking whether any unresolved `중분류` question remains. Give the subagent only the user's request, inspected project facts, answered questions, and the candidate next-depth questions. The subagent must return `PASS` only when no higher-level question is still needed for `plan.md`.
 
 If the subagent finds a missing higher-level question, ask that question before descending. Do not write `plan.md` while a broad or mid-level decision that can change the plan is still open. Do not create a new artifact for these checks; summarize the latest checkpoint to the user when asking the next batch and record the final result in `review.md` under `## Question Depth Check`.
+
+During the initial `plan.md` review, the reviewer must re-check the resolved Intent Challenge result, the user's confirmed intent, and the plan for consistency. If this review discovers a new material requirement problem, do not automatically revise the requirement or plan. Tell the user the new fact, impact, and decision needed; repeat the Intent Challenge Review with that decision, rerun any Question Depth checkpoints affected by it, rewrite and re-review the plan, and obtain execution approval for the final reviewed fingerprint.
 
 Before moving to the next step, run the plugin-bundled validator against the target project root. The validator lives under the Simple Workflow plugin root, not under the target project's `scripts/` directory:
 
@@ -141,6 +162,7 @@ Keep execution flexible without silently changing the approved goal:
 - A method-only adaptation changes implementation mechanics but preserves every approved requirement, scope boundary, expected outcome, owner, and validation standard. Do not rewrite `plan.md` or ask for another approval. Explain the deviation and prove equivalent or better completion evidence in both post-execution reviews.
 - A material change modifies a requirement, scope boundary, expected outcome, ownership, irreversible risk, or validation standard. Stop before executing the changed work and tell the user what new fact was discovered plus the retry, goal-preserving fallback, or rescope choices.
 - Before editing a material plan, obtain the user's decision about the change. Then durably set `plan_approval_status: pending`, revise `plan.md`, repeat the internal review and `--phase review` validation, summarize the revision, and ask for explicit execution approval again.
+- Do not repeat the initial Intent Challenge Gate during material replan, including its plan review. Use the existing material-change user decision, affected Question Depth checkpoints, plan review, and reapproval flow instead.
 - While a v2 plan is pending approval, `UserPromptSubmit` readiness must say that execution is on hold. `Stop` must still allow Codex to send the reapproval request; hooks must not decide the user's answer.
 - After explicit reapproval, update only `approved_plan_fingerprint` to the current reviewed plan fingerprint, set `plan_approval_status: approved`, rerun `--phase review`, and continue the same active Goal. Never call `create_goal` again and never change the immutable `goal_plan_fingerprint`.
 

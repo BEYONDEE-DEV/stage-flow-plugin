@@ -78,6 +78,49 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("Infer reversible low-risk details", self.text)
         self.assertIn("behaviorally equivalent implementation details", self.text)
 
+    def test_intent_challenge_precedes_confirmation_and_question_depth(self) -> None:
+        core = self.text[self.text.index("## Core Rule"):self.text.index("## Request Storage")]
+        self.assertLess(core.index("run the bounded `Intent Challenge Review`"), core.index("Ask the user to confirm"))
+        self.assertLess(core.index("Ask the user to confirm"), core.index("Write `plan.md`"))
+        self.assertIn("after project inspection and the main agent's first inference but before the first user intent confirmation", self.text)
+        self.assertIn("Only then ask for the first intent confirmation and proceed to the Question Depth Gate", self.text)
+
+    def test_intent_challenge_is_bounded_and_covers_requirement_quality(self) -> None:
+        self.assertIn("using only the user's request, inspected project facts", self.text)
+        self.assertIn("inferred intent, expected outcome, boundaries and assumptions", self.text)
+        self.assertIn("plausible alternatives grounded in those facts", self.text)
+        for perspective in (
+            "whether the requested solution fits the underlying problem",
+            "false assumptions, contradictions, omissions",
+            "affected users, systems, owners",
+            "simpler or safer alternatives",
+            "failure paths, edge cases, irreversible effects",
+            "mismatches between the request or inference and the actual project",
+        ):
+            self.assertIn(perspective, self.text)
+        self.assertIn("it does not replace the user's intent or authorize a requirement change", self.text)
+
+    def test_material_intent_findings_require_user_decision_and_repeat(self) -> None:
+        self.assertIn("supporting fact, likely impact, and decision needed", self.text)
+        self.assertIn("Never silently or automatically apply", self.text)
+        self.assertIn("user's correction or explicit tradeoff acceptance", self.text)
+        self.assertIn("repeat until the reviewer returns `PASS` with no unresolved material finding", self.text)
+        self.assertIn("do not automatically revise the requirement or plan", self.text)
+        self.assertIn("rerun any Question Depth checkpoints affected by it", self.text)
+
+    def test_intent_challenge_uses_marker_and_existing_review_artifact(self) -> None:
+        self.assertIn("exact integer `intent_challenge_version: 1`", self.text)
+        self.assertIn("Marker-free existing v2 and legacy requests retain their previous review schema", self.text)
+        self.assertIn("`Finding | User Decision Or Resolution | Verdict`", self.text)
+        self.assertIn("unique `IC-###`", self.text)
+        self.assertIn("one `NONE` row", self.text)
+        self.assertIn("`### Intent Challenge Final Verdict` must be exact `PASS`", self.text)
+        self.assertIn("Do not create a challenge artifact", self.text)
+        self.assertIn("Do not repeat the initial Intent Challenge Gate during material replan", self.text)
+        self.assertIn('"intent_challenge_version": 1', self.artifact_text)
+        self.assertIn("Existing v2 and legacy requests that", self.artifact_text)
+        self.assertIn("## Intent Challenge Check", self.artifact_text)
+
     def test_material_replan_reuses_goal_and_requires_reapproval(self) -> None:
         self.assertIn("## Adaptive Execution And Material Replan", self.text)
         self.assertIn("A method-only adaptation", self.text)

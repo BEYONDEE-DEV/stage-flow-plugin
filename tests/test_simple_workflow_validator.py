@@ -14,6 +14,7 @@ VALIDATOR = ROOT / "scripts" / "validate_simple_workflow.py"
 REQUEST_ID = "20260609-1120-test-request"
 SESSION_ID = "test-session"
 TEST_TMP = ROOT / "tests" / ".tmp"
+MISSING = object()
 
 
 class TempProject:
@@ -72,6 +73,20 @@ class ValidatorTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn(fragment, result.stdout)
+        state = subprocess.run(
+            [sys.executable, str(VALIDATOR), "--print-template", "state"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        review = subprocess.run(
+            [sys.executable, str(VALIDATOR), "--print-template", "review"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertIn('"intent_challenge_version": 1', state.stdout)
+        self.assertIn("## Intent Challenge Check", review.stdout)
 
     def test_plan_requires_sections_korean_and_exact_coverage_header(self) -> None:
         with temp_project() as td:
@@ -156,6 +171,112 @@ class ValidatorTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), temp_project() as td:
                 root = make_v2_project(Path(td), review_kwargs=kwargs)
                 self.assertIn(expected, self.validate(root, "review", False).stdout)
+
+    def test_intent_challenge_marker_requires_valid_structured_review(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), intent_challenge_version=1)
+            self.validate(root, "review")
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                intent_challenge_version=1,
+                review_kwargs={
+                    "intent_challenge": intent_challenge_text(
+                        rows=(
+                            "| IC-001 | 사용자가 비가역 위험을 수용했다. | PASS |\n"
+                            "| IC-002 | 더 단순한 대안을 최종 요구에 반영했다. | PASS |"
+                        )
+                    )
+                },
+            )
+            self.validate(root, "review")
+        with temp_project() as td:
+            root = make_v2_project(
+                Path(td),
+                intent_challenge_version=1,
+                review_body=review_text("0" * 64),
+            )
+            request_dir = root / ".simple" / "requests" / REQUEST_ID
+            (request_dir / "review.md").write_text(
+                review_text(sha256(request_dir / "plan.md")),
+                encoding="utf-8",
+            )
+            self.assertIn("Intent Challenge Check", self.validate(root, "review", False).stdout)
+
+    def test_intent_challenge_rejects_invalid_table_and_unresolved_findings(self) -> None:
+        cases = (
+            (
+                intent_challenge_text(header="Finding | Resolution | Verdict"),
+                "header must be exactly",
+            ),
+            (intent_challenge_text(rows=""), "at least one data row"),
+            (
+                intent_challenge_text(
+                    rows=(
+                        "| IC-001 | 사용자가 위험을 수용했다. | PASS |\n"
+                        "| IC-001 | 같은 결정을 중복 기록했다. | PASS |"
+                    )
+                ),
+                "finding ids must be unique",
+            ),
+            (
+                intent_challenge_text(
+                    rows=(
+                        "| NONE | 사용자 결정이 필요한 finding이 없다. | PASS |\n"
+                        "| IC-001 | 사용자가 위험을 수용했다. | PASS |"
+                    )
+                ),
+                "`NONE` must be the only",
+            ),
+            (
+                intent_challenge_text(rows="| IC-1 | 사용자가 위험을 수용했다. | PASS |"),
+                "must be `IC-###` or `NONE`",
+            ),
+            (
+                intent_challenge_text(rows="| IC-001 | TODO | PASS |"),
+                "obvious placeholder",
+            ),
+            (
+                intent_challenge_text(rows="| IC-001 | User accepted the risk. | PASS |"),
+                "must include Korean body text",
+            ),
+            (
+                intent_challenge_text(rows="| IC-001 | 사용자가 위험을 수용했다. | FAIL |"),
+                "must be exactly `PASS`",
+            ),
+            (
+                intent_challenge_text(rows="| IC-001 | 사용자가 위험을 수용했다. | PASS | extra |"),
+                "exactly three cells",
+            ),
+            (intent_challenge_text(final_verdict="FAIL"), "Final Verdict must be exactly `PASS`"),
+        )
+        for challenge, expected in cases:
+            with self.subTest(expected=expected), temp_project() as td:
+                root = make_v2_project(
+                    Path(td),
+                    intent_challenge_version=1,
+                    review_kwargs={"intent_challenge": challenge},
+                )
+                self.assertIn(expected, self.validate(root, "review", False).stdout)
+
+    def test_intent_challenge_marker_preserves_markerless_v2_and_legacy_reviews(self) -> None:
+        with temp_project() as td:
+            self.validate(make_v2_project(Path(td)), "review")
+        with temp_project() as td:
+            self.validate(make_project(Path(td)), "review")
+
+    def test_intent_challenge_marker_rejects_unknown_values_and_legacy_use(self) -> None:
+        for marker in (0, 2, "1", True, None):
+            with self.subTest(marker=marker), temp_project() as td:
+                root = make_v2_project(Path(td), intent_challenge_version=marker)
+                self.assertIn("exact integer `1`", self.validate(root, "review", False).stdout)
+        with temp_project() as td:
+            root = make_project(Path(td))
+            state_path = root / ".simple" / "requests" / REQUEST_ID / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["intent_challenge_version"] = 1
+            write_json(state_path, state)
+            self.assertIn("requires workflow_version `2`", self.validate(root, "review", False).stdout)
 
     def test_all_seven_v2_state_combinations_are_allowed(self) -> None:
         combinations = (
@@ -309,7 +430,11 @@ def make_v2_project(
     review_verdict: str = "PASS",
     review_body: str | None = None,
     review_kwargs: dict[str, str] | None = None,
+    intent_challenge_version: object = MISSING,
 ) -> Path:
+    kwargs = dict(review_kwargs or {})
+    if type(intent_challenge_version) is int and intent_challenge_version == 1:
+        kwargs.setdefault("intent_challenge", intent_challenge_text())
     root = make_project(
         root,
         phase=phase,
@@ -318,7 +443,7 @@ def make_v2_project(
         review_blocking=review_blocking,
         review_verdict=review_verdict,
         review_body=review_body,
-        review_kwargs=review_kwargs,
+        review_kwargs=kwargs,
     )
     request_dir = root / ".simple" / "requests" / REQUEST_ID
     current = "sha256:" + sha256(request_dir / "plan.md")
@@ -331,6 +456,8 @@ def make_v2_project(
         "plan_approval_status": approval,
         "goal_status": goal,
     }
+    if intent_challenge_version is not MISSING:
+        state["intent_challenge_version"] = intent_challenge_version
     if goal in {"active", "completing", "completed"}:
         state["goal_plan_fingerprint"] = goal_fingerprint or current
     if approval == "approved":
@@ -400,9 +527,11 @@ def review_text(
     verdict: str = "PASS",
     flow: str = "관련 흐름을 검토했고 비차단 문제만 기록했다.",
     question_depth: str = "상위 질문이 남아 있지 않다.",
+    intent_challenge: str | None = None,
     notes: str = "검토 완료.",
 ) -> str:
     issues = "차단 이슈가 남아 있다." if blocking else "차단 없음"
+    challenge = f"\n{intent_challenge.rstrip()}\n" if intent_challenge else ""
     return f"""# Review
 
 ## Reviewed Plan Fingerprint
@@ -428,10 +557,30 @@ subagent
 ## Question Depth Check
 
 {question_depth}
-
+{challenge}
 ## Notes
 
 {notes}
+"""
+
+
+def intent_challenge_text(
+    *,
+    header: str = "Finding | User Decision Or Resolution | Verdict",
+    rows: str = "| NONE | 요구사항과 대안을 검토했으며 사용자 결정이 필요한 finding이 없다. | PASS |",
+    final_verdict: str = "PASS",
+) -> str:
+    return f"""## Intent Challenge Check
+
+### Findings
+
+| {header} |
+| --- | --- | --- |
+{rows}
+
+### Intent Challenge Final Verdict
+
+{final_verdict}
 """
 
 

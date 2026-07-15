@@ -40,6 +40,7 @@ OBVIOUS_PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+INTENT_CHALLENGE_ID_RE = re.compile(r"^IC-\d{3}$")
 INLINE_CODE_RE = re.compile(r"`([^`]*)`")
 ALLOWED_V2_STATES = {
     ("plan", "pending", "pending"),
@@ -66,6 +67,7 @@ VALIDATOR_TEMPLATES = {
     "state": '''{
   "request_id": "20260609-1120-simple-workflow-plugin",
   "workflow_version": 2,
+  "intent_challenge_version": 1,
   "phase": "plan",
   "plan_approval_status": "pending",
   "goal_status": "pending",
@@ -131,6 +133,18 @@ PASS
 ## Question Depth Check
 
 상위 질문 없음
+
+## Intent Challenge Check
+
+### Findings
+
+| Finding | User Decision Or Resolution | Verdict |
+| --- | --- | --- |
+| NONE | 요구사항 타당성과 대안을 검토했으며 사용자 결정이 필요한 material finding이 없다. | PASS |
+
+### Intent Challenge Final Verdict
+
+PASS
 
 ## Notes
 
@@ -262,6 +276,12 @@ def validate_meta(ctx: Ctx, errors: list[str]) -> None:
     version = ctx.state.get("workflow_version")
     if version is not None and (type(version) is not int or version != 2):
         errors.append("`state.json` workflow_version must be integer `2` when present")
+    if "intent_challenge_version" in ctx.state:
+        challenge_version = ctx.state["intent_challenge_version"]
+        if type(challenge_version) is not int or challenge_version != 1:
+            errors.append("`state.json` intent_challenge_version must be exact integer `1` when present")
+        elif not is_v2(ctx.state):
+            errors.append("`state.json` intent_challenge_version requires workflow_version `2`")
 
 
 def validate_plan(ctx: Ctx, errors: list[str]) -> None:
@@ -314,7 +334,10 @@ def validate_review(ctx: Ctx, errors: list[str]) -> None:
     text = read_md(ctx.request_dir / "review.md", "`review.md`", errors)
     if not text:
         return
-    need_heads(text, "review.md", ["# Review", "## Reviewed Plan Fingerprint", "## Reviewer", "## Verdict", "## Blocking Issues", "## Flow Check", "## Question Depth Check"], errors)
+    heads = ["# Review", "## Reviewed Plan Fingerprint", "## Reviewer", "## Verdict", "## Blocking Issues", "## Flow Check", "## Question Depth Check"]
+    if has_intent_challenge_contract(ctx.state):
+        heads.append("## Intent Challenge Check")
+    need_heads(text, "review.md", heads, errors)
     fp = reviewed_fp(text)
     if not fp:
         errors.append("`review.md` must include `Reviewed Plan Fingerprint: sha256:<hex>`")
@@ -328,7 +351,57 @@ def validate_review(ctx: Ctx, errors: list[str]) -> None:
         errors.append("`review.md` Flow Check must include a non-empty review result")
     if is_blank_or_placeholder(section(text, "## Question Depth Check")):
         errors.append("`review.md` Question Depth Check must include a non-empty review result")
+    if has_intent_challenge_contract(ctx.state):
+        validate_intent_challenge(section(text, "## Intent Challenge Check"), errors)
     validate_review_language(text, errors)
+
+
+def validate_intent_challenge(value: str, errors: list[str]) -> None:
+    if not value:
+        return
+    need_heads(
+        value,
+        "review.md Intent Challenge Check",
+        ["### Findings", "### Intent Challenge Final Verdict"],
+        errors,
+    )
+    findings = section(value, "### Findings")
+    header, rows = intent_challenge_table(findings)
+    if header != ["Finding", "User Decision Or Resolution", "Verdict"]:
+        errors.append(
+            "`review.md` Intent Challenge Findings header must be exactly "
+            "`Finding | User Decision Or Resolution | Verdict`"
+        )
+    if not rows:
+        errors.append("`review.md` Intent Challenge Findings must include at least one data row")
+    ids: list[str] = []
+    for row in rows:
+        if len(row) != 3:
+            errors.append("`review.md` each Intent Challenge Findings row must contain exactly three cells")
+            continue
+        finding_id, resolution, verdict = row
+        if finding_id != "NONE" and not INTENT_CHALLENGE_ID_RE.fullmatch(finding_id):
+            errors.append("`review.md` Intent Challenge finding id must be `IC-###` or `NONE`")
+        ids.append(finding_id)
+        if is_blank_or_placeholder(resolution):
+            errors.append(
+                f"`review.md` Intent Challenge resolution for `{finding_id}` must not be empty or an obvious placeholder"
+            )
+        elif not HANGUL_RE.search(resolution):
+            errors.append(
+                f"`review.md` Intent Challenge resolution for `{finding_id}` must include Korean body text"
+            )
+        if verdict != "PASS":
+            errors.append(
+                f"`review.md` Intent Challenge verdict for `{finding_id}` must be exactly `PASS`"
+            )
+    finding_ids = [finding_id for finding_id in ids if finding_id != "NONE"]
+    if len(finding_ids) != len(set(finding_ids)):
+        errors.append("`review.md` Intent Challenge finding ids must be unique")
+    if "NONE" in ids and (len(ids) != 1 or ids.count("NONE") != 1):
+        errors.append("`review.md` Intent Challenge `NONE` must be the only finding row")
+    if not exact_pass(section(value, "### Intent Challenge Final Verdict")):
+        errors.append("`review.md` Intent Challenge Final Verdict must be exactly `PASS`")
 
 
 def validate_completion(ctx: Ctx, phase: str, errors: list[str]) -> None:
@@ -504,6 +577,22 @@ def table_rows(value: str) -> list[list[str]]:
     return rows
 
 
+def intent_challenge_table(value: str) -> tuple[list[str], list[list[str]]]:
+    header: list[str] = []
+    rows: list[list[str]] = []
+    for line in value.splitlines():
+        if "|" not in line:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if cells and norm(cells[0]) == "finding":
+            header = cells
+            continue
+        if cells and all(re.fullmatch(r":?-+:?", cell) for cell in cells):
+            continue
+        rows.append(cells)
+    return header, rows
+
+
 def is_blank_or_placeholder(value: str) -> bool:
     stripped = value.strip()
     if not stripped or stripped == "-":
@@ -632,6 +721,10 @@ def validate_v2_approval_metadata(
 
 def is_v2(state: dict[str, Any]) -> bool:
     return type(state.get("workflow_version")) is int and state.get("workflow_version") == 2
+
+
+def has_intent_challenge_contract(state: dict[str, Any]) -> bool:
+    return type(state.get("intent_challenge_version")) is int and state.get("intent_challenge_version") == 1
 
 
 def plan_fp(request_dir: Path) -> str:

@@ -37,6 +37,7 @@ Simple Workflow uses one human artifact, one internal review record, and small m
 {
   "request_id": "20260609-1120-simple-workflow-plugin",
   "workflow_version": 2,
+  "intent_challenge_version": 1,
   "phase": "plan",
   "plan_approval_status": "pending",
   "goal_status": "pending",
@@ -57,6 +58,11 @@ Missing `workflow_version` identifies a legacy request. New requests use integer
 `workflow_version: 2`; other values are invalid. V2 requests use `plan_approval_status: pending`
 before initial approval or during material replan, and `approved` only while the current plan is
 authorized for execution.
+
+New requests also use exact integer `intent_challenge_version: 1`. This marker requires the
+structured `## Intent Challenge Check` review contract below. Existing v2 and legacy requests that
+do not have the marker keep their previous review schema. A marker with any other value is invalid,
+and the marker is invalid without `workflow_version: 2`.
 
 `goal_status` is optional for legacy requests. New requests use `pending`, change it to `active`
 only after `create_goal` succeeds, set `completing` immediately before requesting Goal completion,
@@ -163,6 +169,18 @@ PASS
 
 상위 질문 없음
 
+## Intent Challenge Check
+
+### Findings
+
+| Finding | User Decision Or Resolution | Verdict |
+| --- | --- | --- |
+| NONE | 요구사항 타당성과 대안을 검토했으며 사용자 결정이 필요한 material finding이 없다. | PASS |
+
+### Intent Challenge Final Verdict
+
+PASS
+
 ## Notes
 
 현재 `plan.md` fingerprint에 대한 내부 리뷰가 통과했다.
@@ -172,6 +190,16 @@ The complete trimmed `## Verdict` body must equal `PASS`; containing the word `P
 different verdict is invalid. `## Blocking Issues` uses blocking-specific no-issue vocabulary.
 `## Flow Check` and `## Question Depth Check` require non-empty review results and may record a
 non-blocking observation without invalidating the passing verdict.
+
+For a request with `intent_challenge_version: 1`, `## Intent Challenge Check` records the durable
+result of the bounded review that ran before the first user intent confirmation. The Findings table
+header is exactly `Finding | User Decision Or Resolution | Verdict` and contains at least one row.
+Each material finding uses a unique `IC-###`, substantive Korean decision or resolution text, and
+exact `PASS`. If there were no material findings, exactly one `NONE` row records the Korean review
+basis. `NONE` cannot be combined with another row. Every row and
+`### Intent Challenge Final Verdict` must be exact uppercase `PASS`, proving that no material
+finding remains unresolved. The plan reviewer also checks that these resolutions, the confirmed
+intent, and the current plan agree.
 
 After both post-execution reviews pass, the main agent appends this internal section to the same
 `review.md`:
