@@ -28,6 +28,7 @@ Graph frontmatter is structural metadata. Do not assign atom line IDs to `graph_
 - `target_path` is a mutable locator that points to the current existing target `*-atom.md` file relative to the docs root.
 - If `target_path` is stale but `target_key` resolves to an existing atom with the same `atom_key`, correct the path during refresh and show the path correction in the change plan.
 - Graph edges may only target existing atom files. Future, missing, rename, or merge candidates belong in a change plan or `Gaps` until the target file exists.
+- Before deleting or merging an Atom, find every incoming edge to its `atom_key`. Current-operation correction must remove those edges only from operation-owned artifacts; an existing-Atom action must list every affected existing edge owner in its approved immutable closure. A newly found owner invalidates that action fingerprint instead of being silently added. Finalize only when no edge targets the removed key and merge rewrites resolve to the approved target key/path.
 - The criteria document at `project/atomization-criteria.md` is not an atom file and must not be used as a `graph_edges` source or target.
 
 ## Edge Types And Direction

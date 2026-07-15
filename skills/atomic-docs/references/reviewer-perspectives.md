@@ -32,6 +32,8 @@ A FAIL report adds only blocking findings. Each blocking finding records the aff
 
 Do not choose `correct_selected_claim` for a finding until removal and generalization have been considered for that finding. Do not repeat unchanged risk triggers, principle-file lists, source indexes, atom content, or a decision matrix in every PASS report. Keep applicable triggers and agent/reviewer state in `work-state.json`.
 
+For a whole-Atom `remove`, name the candidate and whether correction is a current-operation-created drop, an exact already approved existing-Atom action, or a new protected action. The first two continue automatically through `docs-generation-flow.md`; only the third needs a user decision. Do not turn a correctable current-operation drop into Goal `blocked` or request the same approved delete/merge twice.
+
 A reviewer must not issue PASS when an applicable principle file was not read. The main agent aggregates reports but cannot replace a required independent reviewer or issue that reviewer's PASS itself.
 
 Reviewers may inspect source. Start from the operation evidence index instead of rediscovering every entry point. Independently reopen changed or risk-bearing claims and sample unchanged high-consequence claims whose error could alter the verdict. Do not reread every cited line mechanically or search for every undocumented behavior. Source access is required when checking fidelity, important context omissions, ownership, or impact. The quality test is whether the docs orient source inspection and expose the important constraints and contract touchpoints needed for development decisions.
@@ -153,5 +155,5 @@ Graph `reason` wording or inventory count alone does not trigger semantic review
 - For version-1 operations, when `remove` or `merge` changes candidate disposition, expected Atom keys, or risk references, rerun selection preflight before the writer or semantic rerun. Legacy operations use their recorded unversioned correction/preflight contract.
 - Do not rerun unaffected PASS results or a complete domain review for evidence-only correction.
 - Do not start the next sequential bundle until every reviewer applicable to the active bundle PASSes or a user decision is required.
-- Reviewer FAIL is not completion and is not a Goal blocker when it can be corrected inside accepted scope.
-- Ask the user only when PASS requires a user decision or a separately authorized destructive or external action.
+- Reviewer FAIL is not completion and is not a Goal blocker when it can be corrected inside accepted scope, including removal of unchanged output created by the current operation.
+- Ask the user only when PASS requires a user decision, an existing-Atom action absent from the approved manifest, an artifact ownership/hash conflict, or a separately authorized migration, push, or external action. Execute an exact approved delete/merge without repeated approval.

@@ -1209,9 +1209,53 @@ class DocsSkillTests(unittest.TestCase):
             (
                 "Accepted bootstrap scope authorizes domain-proposal discovery plus criteria and boundary review/revision cycles",
                 "do not require separate approval merely to run",
-                "deletion, migration, push, an external service call",
+                "unapproved existing-Atom delete/merge",
+                "Current-operation output correction and an exact previously approved action do not need repeated approval",
                 "Do not stop because a required subagent was not named again",
                 "is not a Goal-blocked state",
+            ),
+        )
+
+    def test_managed_artifact_corrections_reuse_only_exact_approval(self) -> None:
+        text = refs(
+            "docs-generation-flow.md",
+            "reviewer-perspectives.md",
+            "project-documents-and-inventory.md",
+            "atomic-graph.md",
+            "source-baseline-and-change-plan.md",
+            "validation-contract.md",
+        )
+        assert_all(
+            self,
+            text,
+            (
+                "operation_created_artifacts",
+                "whole-Atom `remove`",
+                "operation's fixed managed-docs revision",
+                "current managed-docs Git HEAD/index",
+                "Do not mark the Goal blocked or ask for deletion approval",
+                "approved_existing_actions",
+                "complete mutation closure before asking once",
+                "Reusing the exact approved action requires no second approval",
+                "action_execution",
+                "never overwrite the newer content during automatic recovery",
+                "Keep the backticked candidate ID and `drop` reason in inventory",
+                "complete pre-mutation `work-state.json`",
+                "partial hand-built or selection-invalid state extract",
+                "keep every unrelated top-level owner unchanged",
+                "restorable version-1 routing contract",
+                "unique candidate/artifact/action identities",
+                "exactly match every unrelated top-level owner",
+                "status-specific allowed/forbidden keys",
+                "JSON value is `null`",
+                "created_attempt_id",
+                "--require-actions-final",
+                "must have disjoint paths and keys",
+                "incoming edge to its `atom_key`",
+                "once approved, do not ask again for the same fingerprint",
+                "operation_created_artifacts` contains one record",
+                "approved_existing_actions` is immutable",
+                "Selection validation is the request-bound structural postcondition",
             ),
         )
 
@@ -1229,7 +1273,9 @@ class DocsSkillTests(unittest.TestCase):
                 "newly found domain",
                 "requires affected boundary review and user approval",
                 "expands source/docs scope",
-                "moves/deletes/merges an existing boundary",
+                "moves/deletes/merges an existing domain boundary",
+                "existing Atom delete/merge",
+                "same fingerprint",
                 "ambiguous boundary requiring user judgment",
             ),
         )

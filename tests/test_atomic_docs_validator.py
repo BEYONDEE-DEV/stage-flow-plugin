@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -58,6 +59,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         phase: str,
         *expected_atom_keys: str,
         request_id: str | None = None,
+        require_actions_final: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -71,6 +73,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             command.extend(["--expect-atom-key", atom_key])
         if request_id is not None:
             command.extend(["--request-id", request_id])
+        if require_actions_final:
+            command.append("--require-actions-final")
         return subprocess.run(
             command,
             check=False,
@@ -178,6 +182,51 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         )
         return request_id
 
+    def selection_state_path(self, request_id: str) -> Path:
+        return (
+            self.root
+            / ".stageflow"
+            / "atomic-docs"
+            / "requests"
+            / request_id
+            / "work-state.json"
+        )
+
+    def selection_request_root(self, request_id: str) -> Path:
+        return self.selection_state_path(request_id).parent
+
+    def read_selection_state(self, request_id: str) -> dict[str, object]:
+        return json.loads(self.selection_state_path(request_id).read_text(encoding="utf-8"))
+
+    def write_selection_data(self, request_id: str, state: dict[str, object]) -> None:
+        self.selection_state_path(request_id).write_text(json.dumps(state), encoding="utf-8")
+
+    def write_state_rollback(
+        self,
+        request_id: str,
+        relative_path: str,
+        state: dict[str, object],
+    ) -> tuple[Path, str]:
+        path = self.selection_request_root(request_id) / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state), encoding="utf-8")
+        return path, self.file_sha256(path)
+
+    @staticmethod
+    def file_sha256(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def approved_action_fingerprint(action: dict[str, object]) -> str:
+        payload = {key: value for key, value in action.items() if key != "approved_action_fingerprint"}
+        owners = payload.get("reference_owners")
+        if isinstance(owners, list):
+            payload["reference_owners"] = sorted(owners, key=lambda owner: owner["path"])
+        serialized = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(serialized).hexdigest()
+
     def test_bootstrap_passes_without_atoms_or_baseline(self) -> None:
         result = self.run_validator("bootstrap")
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
@@ -238,6 +287,993 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("PASS selection", result.stdout)
+
+    def test_selection_tracks_current_operation_artifact_through_drop_and_zero_output(self) -> None:
+        atom = self.write_atom("domain/temporary-detail-atom.md", "temporary-detail")
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "temporary-detail",
+                    "domain": "domain",
+                    "candidate": "임시 상세",
+                    "disposition": "write",
+                    "selection_basis": "검토 전에는 독립 맥락 후보였다.",
+                    "candidate_atom_keys": ["temporary-detail"],
+                }
+            ],
+            bundle_keys=["temporary-detail"],
+            request_id="20260715-100001-created-artifact",
+            accepted_scope=["domain", "other"],
+        )
+        state = self.read_selection_state(request_id)
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "temporary-detail",
+                "atom_key": "temporary-detail",
+                "path": "domain/temporary-detail-atom.md",
+                "created_attempt_id": "domain-attempt-1",
+                "last_operation_sha256": self.file_sha256(atom),
+                "status": "present",
+            }
+        ]
+        state["persistent_agent_ids"] = {
+            "writer": "writer-1",
+            "reviewer": "reviewer-1",
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        rollback = self.selection_request_root(request_id) / "rollback" / "temporary-detail.md"
+        rollback.parent.mkdir(parents=True)
+        rollback.write_bytes(atom.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/temporary-detail-work-state.json",
+            state,
+        )
+        state["context_selection"]["candidates"][0] = {
+            "candidate_id": "temporary-detail",
+            "domain": "domain",
+            "candidate": "임시 상세",
+            "disposition": "drop",
+            "selection_basis": "소스에서 바로 확인할 수 있어 영구 문서가 불필요하다.",
+        }
+        state["bundle_queue"] = []
+        state["operation_created_artifacts"][0].update(
+            {
+                "status": "removal_pending",
+                "rollback_path": "rollback/temporary-detail.md",
+                "state_rollback_path": "rollback/temporary-detail-work-state.json",
+                "state_rollback_sha256": state_backup_hash,
+            }
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is missing from operation inventory", result.stdout)
+
+        (self.selection_request_root(request_id) / "inventory.md").write_text(
+            "# 후보\n\n- `temporary-detail`: 검토 결과 영구 Atom에서 제외\n",
+            encoding="utf-8",
+        )
+        state_backup = (
+            self.selection_request_root(request_id)
+            / "rollback"
+            / "temporary-detail-work-state.json"
+        )
+        state_backup_bytes = state_backup.read_bytes()
+        full_snapshot = json.loads(state_backup_bytes)
+        partial_snapshot = {
+            "context_selection": full_snapshot["context_selection"],
+            "operation_created_artifacts": full_snapshot["operation_created_artifacts"],
+        }
+        state_backup.write_text(json.dumps(partial_snapshot), encoding="utf-8")
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is missing core field(s)", result.stdout)
+
+        changed_owner_snapshot = json.loads(state_backup_bytes)
+        changed_owner_snapshot["persistent_agent_ids"]["reviewer"] = "reviewer-2"
+        state_backup.write_text(
+            json.dumps(changed_owner_snapshot), encoding="utf-8"
+        )
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "changes unrelated top-level owner `persistent_agent_ids`",
+            result.stdout,
+        )
+
+        extra_null_owner_snapshot = json.loads(state_backup_bytes)
+        extra_null_owner_snapshot["unexpected_owner"] = None
+        state_backup.write_text(
+            json.dumps(extra_null_owner_snapshot), encoding="utf-8"
+        )
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "changes unrelated top-level owner `unexpected_owner`",
+            result.stdout,
+        )
+
+        broken_queue_snapshot = json.loads(state_backup_bytes)
+        broken_queue_snapshot["bundle_queue"] = []
+        state_backup.write_text(json.dumps(broken_queue_snapshot), encoding="utf-8")
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is not restorable", result.stdout)
+        self.assertIn("is missing from bundle queue", result.stdout)
+
+        wrong_domain_snapshot = json.loads(state_backup_bytes)
+        wrong_domain_snapshot["context_selection"]["candidates"][0]["domain"] = (
+            "other"
+        )
+        wrong_domain_snapshot["bundle_queue"][0]["domain"] = "other"
+        state_backup.write_text(json.dumps(wrong_domain_snapshot), encoding="utf-8")
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("changes context candidate domain ownership", result.stdout)
+        self.assertIn("path is outside candidate domain `other`", result.stdout)
+
+        duplicate_artifact_snapshot = json.loads(state_backup_bytes)
+        duplicate_artifact_snapshot["operation_created_artifacts"].append(
+            dict(duplicate_artifact_snapshot["operation_created_artifacts"][0])
+        )
+        state_backup.write_text(
+            json.dumps(duplicate_artifact_snapshot), encoding="utf-8"
+        )
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("repeats `operation_created_artifacts` identity", result.stdout)
+        self.assertIn("repeats operation-created atom_key", result.stdout)
+
+        invalid_present_snapshot = json.loads(state_backup_bytes)
+        invalid_present_snapshot["operation_created_artifacts"][0][
+            "rollback_path"
+        ] = None
+        state_backup.write_text(
+            json.dumps(invalid_present_snapshot), encoding="utf-8"
+        )
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("present must not set `rollback_path`", result.stdout)
+
+        wrong_attempt_snapshot = json.loads(state_backup_bytes)
+        wrong_attempt_snapshot["operation_created_artifacts"][0][
+            "created_attempt_id"
+        ] = "older-attempt"
+        state_backup.write_text(json.dumps(wrong_attempt_snapshot), encoding="utf-8")
+        state["operation_created_artifacts"][0]["state_rollback_sha256"] = (
+            self.file_sha256(state_backup)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("does not contain the pre-removal artifact state", result.stdout)
+
+        state_backup.write_bytes(state_backup_bytes)
+        state["operation_created_artifacts"][0][
+            "state_rollback_sha256"
+        ] = state_backup_hash
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must be `removed`", result.stdout)
+
+        atom.unlink()
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        state["operation_created_artifacts"][0]["status"] = "removed"
+        self.write_selection_data(request_id, state)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("PASS selection final", result.stdout)
+
+    def test_selection_rejects_created_artifact_presence_and_hash_mismatches(self) -> None:
+        cases = (
+            ("present-missing", "present", False, "1" * 64, "expected managed path"),
+            ("removed-present", "removed", True, "1" * 64, "requires managed path"),
+            ("present-hash", "present", True, "0" * 64, "current hash does not match"),
+        )
+        for suffix, status, keep_file, digest, expected in cases:
+            with self.subTest(suffix=suffix):
+                atom = self.write_atom(f"domain/{suffix}-atom.md", suffix)
+                request_id = self.write_selection_state(
+                    [
+                        {
+                            "candidate_id": suffix,
+                            "domain": "domain",
+                            "candidate": "검증 후보",
+                            "disposition": "write" if status == "present" else "drop",
+                            "selection_basis": "상태 불일치를 검증한다.",
+                            **({"candidate_atom_keys": [suffix]} if status == "present" else {}),
+                        }
+                    ],
+                    bundle_keys=[suffix] if status == "present" else [],
+                    request_id=f"20260715-10001-{suffix}",
+                )
+                if not keep_file:
+                    atom.unlink()
+                state = self.read_selection_state(request_id)
+                state["operation_created_artifacts"] = [
+                    {
+                        "candidate_id": suffix,
+                        "atom_key": suffix,
+                        "path": f"domain/{suffix}-atom.md",
+                        "created_attempt_id": "attempt-1",
+                        "last_operation_sha256": digest,
+                        "status": status,
+                    }
+                ]
+                self.write_selection_data(request_id, state)
+                result = self.run_validator("selection", request_id=request_id)
+                self.assertEqual(1, result.returncode)
+                self.assertIn(expected, result.stdout)
+
+    def test_selection_rejects_created_artifact_outside_candidate_domain(self) -> None:
+        atom = self.write_atom("outside/new-output-atom.md", "new-output")
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "new-output",
+                    "domain": "domain",
+                    "candidate": "승인 범위 안 후보",
+                    "disposition": "write",
+                    "selection_basis": "생성 경로 범위를 검증한다.",
+                    "candidate_atom_keys": ["new-output"],
+                }
+            ],
+            bundle_keys=["new-output"],
+            request_id="20260715-100019-created-outside",
+        )
+        state = self.read_selection_state(request_id)
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "new-output",
+                "atom_key": "new-output",
+                "path": "outside/new-output-atom.md",
+                "created_attempt_id": "attempt-1",
+                "last_operation_sha256": self.file_sha256(atom),
+                "status": "present",
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is outside candidate domain `domain`", result.stdout)
+
+    def test_selection_rejects_tracked_atom_as_operation_created(self) -> None:
+        atom = self.write_atom("domain/existing-atom.md", "existing")
+        self._git("add", "docs/domain/existing-atom.md")
+        self._git("commit", "-m", "existing managed atom")
+        tracked_commit = self._git("rev-parse", "HEAD").stdout.strip()
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "existing",
+                    "domain": "domain",
+                    "candidate": "기존 문서 오분류",
+                    "disposition": "write",
+                    "selection_basis": "생성 provenance를 검증한다.",
+                    "candidate_atom_keys": ["existing"],
+                }
+            ],
+            bundle_keys=["existing"],
+            request_id="20260715-100019-tracked-created",
+            source_commit=tracked_commit,
+        )
+        state = self.read_selection_state(request_id)
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "existing",
+                "atom_key": "existing",
+                "path": "domain/existing-atom.md",
+                "created_attempt_id": "attempt-1",
+                "last_operation_sha256": self.file_sha256(atom),
+                "status": "present",
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is already tracked and is not operation-created", result.stdout)
+        self.assertIn("already exists in managed docs Git HEAD", result.stdout)
+
+        self._git("rm", "docs/domain/existing-atom.md")
+        self._git("commit", "-m", "remove existing managed atom")
+        atom = self.write_atom("domain/existing-atom.md", "existing")
+        state["operation_created_artifacts"][0]["last_operation_sha256"] = (
+            self.file_sha256(atom)
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("exists at the operation's fixed docs revision", result.stdout)
+
+    def test_selection_validates_approved_existing_delete_once_and_applied_state(self) -> None:
+        source = self.write_atom("domain/old-contract-atom.md", "old-contract")
+        owner = self.write_atom(
+            "domain/owner-context-atom.md",
+            "owner-context",
+            edges=[
+                {
+                    "type": "depends_on",
+                    "target_key": "old-contract",
+                    "target_path": "domain/old-contract-atom.md",
+                    "reason": "기존 계약을 참조한다.",
+                }
+            ],
+        )
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "owner-context",
+                    "domain": "domain",
+                    "candidate": "소유자 맥락",
+                    "disposition": "write",
+                    "selection_basis": "남는 소유자 문서다.",
+                    "candidate_atom_keys": ["owner-context"],
+                }
+            ],
+            bundle_keys=["owner-context"],
+            request_id="20260715-100020-approved-delete",
+        )
+        source_member = {
+            "atom_key": "old-contract",
+            "path": "domain/old-contract-atom.md",
+            "preimage_sha256": self.file_sha256(source),
+        }
+        owner_member = {
+            "atom_key": "owner-context",
+            "path": "domain/owner-context-atom.md",
+            "preimage_sha256": self.file_sha256(owner),
+        }
+        action: dict[str, object] = {
+            "action_id": "remove-old-contract",
+            "action": "delete",
+            "source": source_member,
+            "reference_owners": [owner_member],
+        }
+        fingerprint = self.approved_action_fingerprint(action)
+        action["approved_action_fingerprint"] = fingerprint
+        state = self.read_selection_state(request_id)
+        state["approved_existing_actions"] = [action]
+        state["action_execution"] = [
+            {
+                "action_id": "remove-old-contract",
+                "approved_action_fingerprint": fingerprint,
+                "status": "approved",
+                "members": [
+                    {
+                        "role": "source",
+                        "atom_key": "old-contract",
+                        "path": "domain/old-contract-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": source_member["preimage_sha256"],
+                    },
+                    {
+                        "role": "reference_owner",
+                        "atom_key": "owner-context",
+                        "path": "domain/owner-context-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": owner_member["preimage_sha256"],
+                    },
+                ],
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        action["approved_action_fingerprint"] = "0" * 64
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("does not match its immutable manifest", result.stdout)
+        action["approved_action_fingerprint"] = fingerprint
+
+        rollback_root = (
+            self.selection_request_root(request_id)
+            / "rollback"
+            / "remove-old-contract"
+        )
+        rollback_root.mkdir(parents=True)
+        source_backup = rollback_root / "source.md"
+        owner_backup = rollback_root / "owner.md"
+        source_backup.write_bytes(source.read_bytes())
+        owner_backup.write_bytes(owner.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/remove-old-contract/work-state.json",
+            state,
+        )
+        state["action_execution"][0] = {
+            "action_id": "remove-old-contract",
+            "approved_action_fingerprint": fingerprint,
+            "status": "applying",
+            "state_rollback_path": "rollback/remove-old-contract/work-state.json",
+            "state_rollback_sha256": state_backup_hash,
+            "members": [
+                {
+                    "role": "source",
+                    "atom_key": "old-contract",
+                    "path": "domain/old-contract-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": source_member["preimage_sha256"],
+                    "rollback_path": "rollback/remove-old-contract/source.md",
+                },
+                {
+                    "role": "reference_owner",
+                    "atom_key": "owner-context",
+                    "path": "domain/owner-context-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": owner_member["preimage_sha256"],
+                    "rollback_path": "rollback/remove-old-contract/owner.md",
+                },
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        state_backup = rollback_root / "work-state.json"
+        state_backup_bytes = state_backup.read_bytes()
+        state_backup.write_bytes(state_backup_bytes + b"\n")
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("operation-state rollback hash does not match", result.stdout)
+        state_backup.write_bytes(state_backup_bytes)
+        invalid_snapshot = json.loads(state_backup_bytes)
+        invalid_snapshot["action_execution"] = []
+        state_backup.write_text(json.dumps(invalid_snapshot), encoding="utf-8")
+        state["action_execution"][0]["state_rollback_sha256"] = self.file_sha256(
+            state_backup
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("does not contain the pre-mutation execution state", result.stdout)
+
+        invalid_approved_snapshot = json.loads(state_backup_bytes)
+        invalid_approved_snapshot["action_execution"][0][
+            "state_rollback_path"
+        ] = "rollback/remove-old-contract/work-state.json"
+        state_backup.write_text(
+            json.dumps(invalid_approved_snapshot), encoding="utf-8"
+        )
+        state["action_execution"][0]["state_rollback_sha256"] = self.file_sha256(
+            state_backup
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "snapshot approved execution has unsupported field `state_rollback_path`",
+            result.stdout,
+        )
+
+        state_backup.write_bytes(state_backup_bytes)
+        state["action_execution"][0]["state_rollback_sha256"] = state_backup_hash
+        self.write_selection_data(request_id, state)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must be `applied`", result.stdout)
+
+        source.unlink()
+        owner = self.write_atom("domain/owner-context-atom.md", "owner-context")
+        state["action_execution"][0] = {
+            "action_id": "remove-old-contract",
+            "approved_action_fingerprint": fingerprint,
+            "status": "applying",
+            "state_rollback_path": "rollback/remove-old-contract/work-state.json",
+            "state_rollback_sha256": state_backup_hash,
+            "members": [
+                {
+                    "role": "source",
+                    "atom_key": "old-contract",
+                    "path": "domain/old-contract-atom.md",
+                    "expected_state": "absent",
+                    "rollback_path": "rollback/remove-old-contract/source.md",
+                },
+                {
+                    "role": "reference_owner",
+                    "atom_key": "owner-context",
+                    "path": "domain/owner-context-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": self.file_sha256(owner),
+                    "rollback_path": "rollback/remove-old-contract/owner.md",
+                },
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        state["action_execution"][0]["status"] = "applied"
+        self.write_selection_data(request_id, state)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_selection_validates_existing_merge_target_and_closure(self) -> None:
+        source = self.write_atom("domain/legacy-rule-atom.md", "legacy-rule")
+        target = self.write_atom("domain/current-rule-atom.md", "current-rule")
+        owner = self.write_atom(
+            "domain/rule-owner-atom.md",
+            "rule-owner",
+            edges=[
+                {
+                    "type": "depends_on",
+                    "target_key": "legacy-rule",
+                    "target_path": "domain/legacy-rule-atom.md",
+                    "reason": "이전 규칙을 참조한다.",
+                }
+            ],
+        )
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "current-rule",
+                    "domain": "domain",
+                    "candidate": "현재 규칙",
+                    "disposition": "write",
+                    "selection_basis": "병합 후 계약 소유자다.",
+                    "candidate_atom_keys": ["current-rule"],
+                },
+                {
+                    "candidate_id": "rule-owner",
+                    "domain": "domain",
+                    "candidate": "규칙 소비자",
+                    "disposition": "write",
+                    "selection_basis": "병합 대상 참조를 소유한다.",
+                    "candidate_atom_keys": ["rule-owner"],
+                },
+            ],
+            bundle_keys=["current-rule", "rule-owner"],
+            request_id="20260715-100030-approved-merge",
+        )
+        members = {
+            "source": {
+                "atom_key": "legacy-rule",
+                "path": "domain/legacy-rule-atom.md",
+                "preimage_sha256": self.file_sha256(source),
+            },
+            "target": {
+                "atom_key": "current-rule",
+                "path": "domain/current-rule-atom.md",
+                "preimage_sha256": self.file_sha256(target),
+            },
+            "owner": {
+                "atom_key": "rule-owner",
+                "path": "domain/rule-owner-atom.md",
+                "preimage_sha256": self.file_sha256(owner),
+            },
+        }
+        action: dict[str, object] = {
+            "action_id": "merge-legacy-rule",
+            "action": "merge",
+            "source": members["source"],
+            "target": members["target"],
+            "reference_owners": [members["owner"]],
+        }
+        fingerprint = self.approved_action_fingerprint(action)
+        action["approved_action_fingerprint"] = fingerprint
+        state = self.read_selection_state(request_id)
+        state["approved_existing_actions"] = [action]
+        state["action_execution"] = [
+            {
+                "action_id": "merge-legacy-rule",
+                "approved_action_fingerprint": fingerprint,
+                "status": "approved",
+                "members": [
+                    {
+                        "role": role,
+                        "atom_key": member["atom_key"],
+                        "path": member["path"],
+                        "expected_state": "present",
+                        "last_operation_sha256": member["preimage_sha256"],
+                    }
+                    for role, member in (
+                        ("source", members["source"]),
+                        ("target", members["target"]),
+                        ("reference_owner", members["owner"]),
+                    )
+                ],
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        rollback_root = (
+            self.selection_request_root(request_id)
+            / "rollback"
+            / "merge-legacy-rule"
+        )
+        rollback_root.mkdir(parents=True)
+        for name, path in (("source", source), ("target", target), ("owner", owner)):
+            (rollback_root / f"{name}.md").write_bytes(path.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/merge-legacy-rule/work-state.json",
+            state,
+        )
+        source.unlink()
+        target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        owner = self.write_atom(
+            "domain/rule-owner-atom.md",
+            "rule-owner",
+            edges=[
+                {
+                    "type": "depends_on",
+                    "target_key": "current-rule",
+                    "target_path": "domain/current-rule-atom.md",
+                    "reason": "통합된 현재 규칙을 참조한다.",
+                }
+            ],
+        )
+        state["action_execution"][0] = {
+            "action_id": "merge-legacy-rule",
+            "approved_action_fingerprint": fingerprint,
+            "status": "applying",
+            "state_rollback_path": "rollback/merge-legacy-rule/work-state.json",
+            "state_rollback_sha256": state_backup_hash,
+            "members": [
+                {
+                    "role": "source",
+                    "atom_key": "legacy-rule",
+                    "path": "domain/legacy-rule-atom.md",
+                    "expected_state": "absent",
+                    "rollback_path": "rollback/merge-legacy-rule/source.md",
+                },
+                {
+                    "role": "target",
+                    "atom_key": "current-rule",
+                    "path": "domain/current-rule-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": self.file_sha256(target),
+                    "rollback_path": "rollback/merge-legacy-rule/target.md",
+                },
+                {
+                    "role": "reference_owner",
+                    "atom_key": "rule-owner",
+                    "path": "domain/rule-owner-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": self.file_sha256(owner),
+                    "rollback_path": "rollback/merge-legacy-rule/owner.md",
+                },
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        state["action_execution"][0]["status"] = "applied"
+        self.write_selection_data(request_id, state)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        target.write_text(target.read_text(encoding="utf-8") + "changed\n", encoding="utf-8")
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("current hash does not match runtime postimage", result.stdout)
+
+    def test_selection_rejects_existing_action_outside_accepted_scope(self) -> None:
+        source = self.write_atom("outside/old-atom.md", "outside-old")
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "승인된 도메인",
+                    "disposition": "write",
+                    "selection_basis": "승인 범위 경계를 검증한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260715-100035-outside-action",
+        )
+        member = {
+            "atom_key": "outside-old",
+            "path": "outside/old-atom.md",
+            "preimage_sha256": self.file_sha256(source),
+        }
+        action: dict[str, object] = {
+            "action_id": "remove-outside-old",
+            "action": "delete",
+            "source": member,
+            "reference_owners": [],
+        }
+        fingerprint = self.approved_action_fingerprint(action)
+        action["approved_action_fingerprint"] = fingerprint
+        state = self.read_selection_state(request_id)
+        state["approved_existing_actions"] = [action]
+        state["action_execution"] = [
+            {
+                "action_id": "remove-outside-old",
+                "approved_action_fingerprint": fingerprint,
+                "status": "approved",
+                "members": [
+                    {
+                        "role": "source",
+                        "atom_key": "outside-old",
+                        "path": "outside/old-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": member["preimage_sha256"],
+                    }
+                ],
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is outside `accepted_scope`", result.stdout)
+
+    def test_selection_rejects_existing_source_with_created_provenance(self) -> None:
+        source = self.write_atom("domain/new-output-atom.md", "new-output")
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "new-output",
+                    "domain": "domain",
+                    "candidate": "현재 작업 산출물",
+                    "disposition": "write",
+                    "selection_basis": "소유권 계약 충돌을 검증한다.",
+                    "candidate_atom_keys": ["new-output"],
+                }
+            ],
+            bundle_keys=["new-output"],
+            request_id="20260715-100036-provenance-overlap",
+        )
+        digest = self.file_sha256(source)
+        member = {
+            "atom_key": "new-output",
+            "path": "domain/new-output-atom.md",
+            "preimage_sha256": digest,
+        }
+        action: dict[str, object] = {
+            "action_id": "remove-new-output-as-existing",
+            "action": "delete",
+            "source": member,
+            "reference_owners": [],
+        }
+        fingerprint = self.approved_action_fingerprint(action)
+        action["approved_action_fingerprint"] = fingerprint
+        state = self.read_selection_state(request_id)
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "new-output",
+                "atom_key": "new-output",
+                "path": "domain/new-output-atom.md",
+                "created_attempt_id": "attempt-1",
+                "last_operation_sha256": digest,
+                "status": "present",
+            }
+        ]
+        state["approved_existing_actions"] = [action]
+        state["action_execution"] = [
+            {
+                "action_id": "remove-new-output-as-existing",
+                "approved_action_fingerprint": fingerprint,
+                "status": "approved",
+                "members": [
+                    {
+                        "role": "source",
+                        "atom_key": "new-output",
+                        "path": "domain/new-output-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": digest,
+                    }
+                ],
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("source path `domain/new-output-atom.md` is also operation-created", result.stdout)
+
+    def test_selection_rejects_unapproved_graph_owner_and_unsafe_rollback_resume(self) -> None:
+        source = self.write_atom("domain/remove-me-atom.md", "remove-me")
+        owner = self.write_atom("domain/known-owner-atom.md", "known-owner")
+        unknown = self.write_atom(
+            "domain/unknown-owner-atom.md",
+            "unknown-owner",
+            edges=[
+                {
+                    "type": "depends_on",
+                    "target_key": "remove-me",
+                    "target_path": "domain/remove-me-atom.md",
+                    "reason": "승인되지 않은 참조다.",
+                }
+            ],
+        )
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "known-owner",
+                    "domain": "domain",
+                    "candidate": "알려진 소유자",
+                    "disposition": "write",
+                    "selection_basis": "삭제 후에도 유지된다.",
+                    "candidate_atom_keys": ["known-owner"],
+                },
+                {
+                    "candidate_id": "unknown-owner",
+                    "domain": "domain",
+                    "candidate": "새 참조 소유자",
+                    "disposition": "write",
+                    "selection_basis": "closure 검증을 위한 문서다.",
+                    "candidate_atom_keys": ["unknown-owner"],
+                },
+            ],
+            bundle_keys=["known-owner", "unknown-owner"],
+            request_id="20260715-100040-unsafe-resume",
+        )
+        source_member = {
+            "atom_key": "remove-me",
+            "path": "domain/remove-me-atom.md",
+            "preimage_sha256": self.file_sha256(source),
+        }
+        owner_member = {
+            "atom_key": "known-owner",
+            "path": "domain/known-owner-atom.md",
+            "preimage_sha256": self.file_sha256(owner),
+        }
+        action: dict[str, object] = {
+            "action_id": "remove-managed-atom",
+            "action": "delete",
+            "source": source_member,
+            "reference_owners": [owner_member],
+        }
+        fingerprint = self.approved_action_fingerprint(action)
+        action["approved_action_fingerprint"] = fingerprint
+        state = self.read_selection_state(request_id)
+        state["approved_existing_actions"] = [action]
+        state["action_execution"] = [
+            {
+                "action_id": "remove-managed-atom",
+                "approved_action_fingerprint": fingerprint,
+                "status": "approved",
+                "members": [
+                    {
+                        "role": "source",
+                        "atom_key": "remove-me",
+                        "path": "domain/remove-me-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": source_member["preimage_sha256"],
+                    },
+                    {
+                        "role": "reference_owner",
+                        "atom_key": "known-owner",
+                        "path": "domain/known-owner-atom.md",
+                        "expected_state": "present",
+                        "last_operation_sha256": owner_member["preimage_sha256"],
+                    },
+                ],
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("unapproved incoming graph owner", result.stdout)
+
+        unknown.unlink()
+        request_root = self.selection_request_root(request_id)
+        rollback_root = request_root / "rollback" / "remove-managed-atom"
+        rollback_root.mkdir(parents=True)
+        source_backup = rollback_root / "source.md"
+        owner_backup = rollback_root / "owner.md"
+        source_backup.write_bytes(source.read_bytes())
+        owner_backup.write_bytes(owner.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/remove-managed-atom/work-state.json",
+            state,
+        )
+        source.unlink()
+        state["action_execution"][0] = {
+            "action_id": "remove-managed-atom",
+            "approved_action_fingerprint": fingerprint,
+            "status": "rolling_back",
+            "state_rollback_path": "rollback/remove-managed-atom/work-state.json",
+            "state_rollback_sha256": state_backup_hash,
+            "members": [
+                {
+                    "role": "source",
+                    "atom_key": "remove-me",
+                    "path": "domain/remove-me-atom.md",
+                    "expected_state": "absent",
+                    "rollback_path": "rollback/remove-managed-atom/source.md",
+                },
+                {
+                    "role": "reference_owner",
+                    "atom_key": "known-owner",
+                    "path": "domain/known-owner-atom.md",
+                    "expected_state": "present",
+                    "last_operation_sha256": self.file_sha256(owner),
+                    "rollback_path": "rollback/remove-managed-atom/owner.md",
+                },
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        source_backup_bytes = source_backup.read_bytes()
+        source_backup.write_bytes(source_backup_bytes + b"changed")
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("rollback hash does not match approved preimage", result.stdout)
+        source_backup.write_bytes(source_backup_bytes)
+
+        owner.write_text(owner.read_text(encoding="utf-8") + "사용자 변경\n", encoding="utf-8")
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("current hash does not match runtime postimage", result.stdout)
+
+        owner.write_bytes(owner_backup.read_bytes())
+        source.write_bytes(source_backup.read_bytes())
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("expected path to be absent", result.stdout)
+
+        source_runtime = state["action_execution"][0]["members"][0]
+        source_runtime["expected_state"] = "present"
+        source_runtime["last_operation_sha256"] = source_member["preimage_sha256"]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        execution = state["action_execution"][0]
+        execution["status"] = "approved"
+        del execution["state_rollback_path"]
+        del execution["state_rollback_sha256"]
+        for member in execution["members"]:
+            del member["rollback_path"]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_selection_rejects_blank_basis_and_unknown_merge_target(self) -> None:
         request_id = self.write_selection_state(
