@@ -98,6 +98,32 @@ def dirty_state(path: Path) -> str:
     return "dirty" if value else "clean"
 
 
+def git_path(path: Path, name: str) -> Path | None:
+    value = run_git(path, ["rev-parse", "--git-path", name])
+    if not value:
+        return None
+    result = Path(value)
+    if not result.is_absolute():
+        result = path / result
+    return result.resolve()
+
+
+def operation_state(path: Path) -> str:
+    markers = [
+        ("rebase", ("rebase-merge", "rebase-apply")),
+        ("merge", ("MERGE_HEAD",)),
+        ("cherry-pick", ("CHERRY_PICK_HEAD",)),
+        ("revert", ("REVERT_HEAD",)),
+        ("bisect", ("BISECT_LOG",)),
+    ]
+    for state, names in markers:
+        for name in names:
+            marker = git_path(path, name)
+            if marker is not None and marker.exists():
+                return state
+    return "-"
+
+
 def parse_worktree_list(repo: Path) -> list[dict[str, str]]:
     output = run_git(repo, ["worktree", "list", "--porcelain"])
     if output is None:
@@ -123,6 +149,8 @@ def parse_worktree_list(repo: Path) -> list[dict[str, str]]:
             current["bare"] = "true"
         elif key == "detached":
             current["branch"] = "(detached)"
+        elif key in {"locked", "prunable"}:
+            current[key] = value or "true"
     if current:
         rows.append(current)
     return rows
@@ -153,6 +181,7 @@ def inspect(root: Path, max_depth: int) -> dict[str, Any]:
                             "upstream": upstream(path),
                             "head": short_head(path, item.get("head")),
                             "dirty": dirty_state(path),
+                            "operation_state": operation_state(path),
                         }
                     )
                 groups[key]["worktrees"].append(item)
@@ -201,29 +230,7 @@ def source_branch_for(root: Path, group: dict[str, Any], current_path: Path) -> 
     return "확인 필요"
 
 
-def print_status_block(bundle: dict[str, Any]) -> None:
-    source_branches = sorted(set(bundle["source_branches"]))
-    if bundle.get("source_unknown"):
-        source_branch = "확인 필요"
-    elif len(source_branches) == 1:
-        source_branch = source_branches[0]
-    elif source_branches:
-        source_branch = "확인 필요"
-    else:
-        source_branch = "확인 필요"
-
-    print(f"대상 묶음: {bundle['name']}")
-    print(f"원본 브랜치: {source_branch}")
-    print(f"기준 폴더: {bundle['base']}")
-    print()
-    for item in sorted(bundle["items"], key=lambda row: row["repo"]):
-        print(
-            f"{item['repo']}: 폴더 {item['folder']} / "
-            f"현재 브랜치 {item['branch']} / 변경상태 {item['dirty']}"
-        )
-
-
-def print_markdown(data: dict[str, Any]) -> None:
+def build_bundles(data: dict[str, Any]) -> list[dict[str, Any]]:
     root = Path(data["root"])
     bundles: dict[str, dict[str, Any]] = {}
 
@@ -254,35 +261,92 @@ def print_markdown(data: dict[str, Any]) -> None:
                 bundle["source_unknown"] = True
             bundle["items"].append(
                 {
+                    **wt,
                     "repo": Path(folder).parts[0] if folder != "." else path.name,
                     "folder": folder,
-                    "branch": wt.get("branch", "-"),
-                    "dirty": wt.get("dirty", "-"),
+                    "source_branch": source_branch,
+                    "common_git_dir": group["common_git_dir"],
                 }
             )
 
-    ordered_names = sorted(bundles, key=lambda name: (not name.startswith("worktrees/"), name))
-    for index, name in enumerate(ordered_names, start=1):
+    return [
+        bundles[name]
+        for name in sorted(bundles, key=lambda value: (not value.startswith("worktrees/"), value))
+    ]
+
+
+def select_bundles(bundles: list[dict[str, Any]], selector: str | None) -> list[dict[str, Any]]:
+    if selector is None:
+        return bundles
+
+    value = selector.strip().rstrip("/\\")
+    direct_names = {value, value.replace("\\", "/")}
+    if not value.startswith("worktrees/") and not value.startswith("worktrees\\"):
+        direct_names.add(f"worktrees/{value}")
+
+    requested_path = Path(value).expanduser()
+    if requested_path.is_absolute():
+        requested_base = str(requested_path.resolve())
+    else:
+        requested_base = None
+
+    return [
+        bundle
+        for bundle in bundles
+        if bundle["name"] in direct_names
+        or (requested_base is not None and str(Path(bundle["base"]).resolve()) == requested_base)
+    ]
+
+
+def print_status_block(bundle: dict[str, Any]) -> None:
+    source_branches = sorted(set(bundle["source_branches"]))
+    if bundle.get("source_unknown"):
+        source_branch = "확인 필요"
+    elif len(source_branches) == 1:
+        source_branch = source_branches[0]
+    elif source_branches:
+        source_branch = "확인 필요"
+    else:
+        source_branch = "확인 필요"
+
+    print(f"대상 묶음: {bundle['name']}")
+    print(f"원본 브랜치: {source_branch}")
+    print(f"기준 폴더: {bundle['base']}")
+    print()
+    for item in sorted(bundle["items"], key=lambda row: row["repo"]):
+        print(
+            f"{item['repo']}: 폴더 {item['folder']} / "
+            f"현재 브랜치 {item['branch']} / 변경상태 {item['dirty']}"
+        )
+
+
+def print_status(bundles: list[dict[str, Any]]) -> None:
+    for index, bundle in enumerate(bundles, start=1):
         if index > 1:
             print()
-        print_status_block(bundles[name])
+        print_status_block(bundle)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read-only Git worktree bundle inspector.")
     parser.add_argument("--root", required=True, help="Workspace root to inspect.")
     parser.add_argument("--max-depth", type=int, default=4, help="Directory scan depth.")
-    parser.add_argument("--json", action="store_true", help="Print JSON instead of markdown.")
+    parser.add_argument("--bundle", help="Show only this bundle name or absolute bundle path.")
+    parser.add_argument("--json", action="store_true", help="Print JSON instead of status text.")
     args = parser.parse_args()
 
     root = Path(args.root)
     if not root.is_dir():
         parser.error(f"--root is not a directory: {root}")
     data = inspect(root, args.max_depth)
+    bundles = select_bundles(build_bundles(data), args.bundle)
+    if args.bundle and not bundles:
+        parser.error(f"--bundle did not match a discovered bundle: {args.bundle}")
     if args.json:
+        data["bundles"] = bundles
         print(json.dumps(data, indent=2, sort_keys=True))
     else:
-        print_markdown(data)
+        print_status(bundles)
     return 0
 
 
