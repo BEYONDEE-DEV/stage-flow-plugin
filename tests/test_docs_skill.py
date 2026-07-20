@@ -43,6 +43,7 @@ class DocsSkillTests(unittest.TestCase):
             "criteria-flow.md",
             "docs-generation-flow.md",
             "semantic-review-closure.md",
+            "operation-metrics.md",
             "reviewer-perspectives.md",
             "project-documents-and-inventory.md",
             "source-baseline-and-change-plan.md",
@@ -143,7 +144,14 @@ class DocsSkillTests(unittest.TestCase):
                 "refresh-flow.md",
                 "reviewer-perspectives.md",
                 "semantic-review-closure.md",
+                "operation-metrics.md",
                 "source-baseline-and-change-plan.md",
+            ),
+            "operation-metrics.md": (
+                "docs-generation-flow.md",
+                "reviewer-perspectives.md",
+                "semantic-review-closure.md",
+                "validation-contract.md",
             ),
             "semantic-review-closure.md": (
                 "reviewer-perspectives.md",
@@ -173,7 +181,8 @@ class DocsSkillTests(unittest.TestCase):
             "project-goal.md` treats docs config, baseline/cache paths": "project-documents-and-inventory.md",
             "For an existing approved docs set, select one profile before detailed source discovery": "refresh-flow.md",
             "| Change after review | Required rerun |": "reviewer-perspectives.md",
-            "Every Atomic Docs operation created under this contract uses": "semantic-review-closure.md",
+            "New Atomic Docs operations use `context_selection.version: \"3\"`": "semantic-review-closure.md",
+            "normative owner of Atomic Docs operation timing and rerun-work records": "operation-metrics.md",
             "Create the first baseline only when": "source-baseline-and-change-plan.md",
             "Document until the applicable questions can be answered": "service-logic-coverage.md",
             "Each atom file must preserve these sections": "atom-format-and-judgment.md",
@@ -955,8 +964,8 @@ class DocsSkillTests(unittest.TestCase):
                 "This is not a project-wide semantic review",
                 "do not blanket-rerun the writer",
                 "Rerun the writer only when selected output or documented meaning changes",
-                "current-corpus comparison exposes a local defect",
-                "apply the rerun table below",
+                "current-corpus comparison exposes a local admission, depth, fidelity, or risk-routing defect",
+                "Apply the rerun table below",
             ),
         )
 
@@ -976,6 +985,76 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
+    def test_risk_pass_reuse_requires_confirmed_risk_neutral_impact(self) -> None:
+        reviewers = read(REFS / "reviewer-perspectives.md")
+        closure = read(REFS / "semantic-review-closure.md")
+        assert_all(
+            self,
+            reviewers + closure,
+            (
+                "correction is not automatically risk-neutral",
+                "development reviewer independently confirms",
+                "candidate-linked trigger",
+                "risky contract meaning",
+                "owner/route",
+                "adverse behavior",
+                "evidence basis",
+                "If any dimension changed or remains uncertain, include the risk reviewer",
+                "correction mode alone never decides rerun scope",
+                "Derive `required_reviews` from the meaning and evidence impact table",
+                "open the invalidation before editing with development review required",
+                "prevents that risk PASS from authorizing resolution or final completion",
+                "do not record a corrected-basis development PASS",
+                "expand the still-open invalidation to stale the risk PASS",
+                "only post-edit expansion path",
+            ),
+        )
+
+    def test_managed_docs_do_not_preserve_queue_time_availability(self) -> None:
+        text = read(SKILL) + read(REFS / "project-documents-and-inventory.md")
+        assert_all(
+            self,
+            text,
+            (
+                "accepted final owners/relationships",
+                "queue-time availability",
+                '"not created yet"',
+                "retain the pending owner/consumer note in inventory or `work-state.json`",
+                "reconcile it after the target bundle",
+                "do not turn operation progress into durable product context",
+            ),
+        )
+
+    def test_final_reviewer_keeps_local_safety_net_without_full_replay(self) -> None:
+        text = read(REFS / "reviewer-perspectives.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Independently inspect the current managed docs and operation inventory",
+                "Do not mechanically repeat every unchanged domain checklist",
+                "local admission, depth, fidelity, or risk-routing defect",
+                "final review remains a safety net",
+                "run only impact-selected reviewers",
+                "rerun this reviewer against the corrected current corpus",
+            ),
+        )
+
+    def test_external_evidence_and_gap_admission_remain_economical(self) -> None:
+        text = read(SKILL) + read(REFS / "service-logic-coverage.md")
+        assert_all(
+            self,
+            text,
+            (
+                "Do not cross into another repository or provider to build a general defect inventory",
+                "retained claim's owner, shared/external contract, or change impact",
+                "field-level UX improvement",
+                "display fallback",
+                "incidental exception possibility",
+                "not a managed Gap",
+            ),
+        )
+
     def test_post_pass_semantic_changes_open_and_resolve_affected_closure(self) -> None:
         closure = read(REFS / "semantic-review-closure.md")
         flow = read(REFS / "docs-generation-flow.md")
@@ -984,7 +1063,7 @@ class DocsSkillTests(unittest.TestCase):
             closure + flow,
             (
                 "forward-only semantic review invalidation state",
-                "Existing version-1 or unversioned operations continue their recorded flow without migration",
+                "Existing version-1 or unversioned operations continue without migration",
                 "Open an invalidation before changing a meaning that already contributed to a PASS",
                 "Change only affected `current` review passes to `stale`",
                 "Do not stale unrelated bundle PASSes",
@@ -1181,7 +1260,7 @@ class DocsSkillTests(unittest.TestCase):
                 "review only the affected closure",
                 "Do not add this reviewer merely because several independent bundles changed",
                 "expand the review to the whole project",
-                "Do not repeat unchanged domain detail",
+                "Do not mechanically repeat every unchanged domain checklist",
                 "cross-domain ownership",
                 "shared payload/state/storage/permission/integration contracts",
                 "Every newly run domain review uses the operation's `source_commit_observed`",
@@ -1189,7 +1268,7 @@ class DocsSkillTests(unittest.TestCase):
                 "unscoped docs structure is valid",
                 "Only the project-wide form of this reviewer can approve global baseline",
                 "After this reviewer PASS is recorded as the final baseline gate",
-                "Reopen the affected bundle",
+                "reopen that affected bundle",
             ),
         )
 
@@ -1310,7 +1389,7 @@ class DocsSkillTests(unittest.TestCase):
                 "partial hand-built or selection-invalid state extract",
                 "keep every unrelated top-level owner unchanged",
                 "restorable versioned routing contract",
-                "pre-mutation semantic closure at the same contract version",
+                "pre-mutation closure at the same contract version",
                 "unrelated risk PASSes remain current",
                 "A later resolved invalidation cannot retroactively authorize the mutation",
                 "Review PASS and invalidation records from the snapshot remain in current state",
@@ -1596,6 +1675,8 @@ class DocsSkillTests(unittest.TestCase):
                 "--request-id <request-id>",
                 "--phase docs",
                 "--phase baseline",
+                "--phase metrics-preterminal",
+                "--phase metrics-final",
                 "request-bound final selection/docs/baseline check",
                 "rejects open invalidations",
                 "remaining `stale` PASSes",
@@ -1612,7 +1693,7 @@ class DocsSkillTests(unittest.TestCase):
                 "every risk trigger resolves its candidate and output/merge target",
                 '"context_selection"',
                 '"candidate_id"',
-                "An unversioned active request continues its recorded state",
+                "an unversioned active request continues without selection validation",
                 "scope expansion still follows its normal approval and Goal boundary",
                 "whether a candidate's `write|merge|drop` selection",
                 "Never search for or invoke",
@@ -1621,7 +1702,36 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_selection_contract_version_two_is_new_operation_only_and_legacy_work_is_not_migrated(self) -> None:
+    def test_version_three_metrics_measure_work_without_becoming_quality_gate(self) -> None:
+        metrics = read(REFS / "operation-metrics.md")
+        flow = read(REFS / "docs-generation-flow.md")
+        validation = read(REFS / "validation-contract.md")
+        assert_all(
+            self,
+            metrics + flow + validation,
+            (
+                '`context_selection.version: "3"`',
+                '`operation_metrics.version: "1"`',
+                "Existing version-2, version-1, and unversioned operations continue without migration",
+                "operation wall-clock as the primary observation",
+                "completed span/rerun counts as secondary workload observations",
+                "Do not turn either into a promised ETA or a validator performance threshold",
+                "only the root and that final validation span may remain active",
+                "On `FAIL`, keep the root active",
+                "latest final validation as the last span",
+                "last span with outcome `PASS`",
+                "a metric span cannot downgrade it to `docs`",
+                "--phase metrics-preterminal",
+                "--phase metrics-final",
+                "read-only self-exclusions",
+                "append-only through managed-artifact removal and merge rollback snapshots",
+                "Each queue item has one successful `bundle` span",
+                "`span_id` equals its `review_id`",
+                "whether a correction is risk-neutral or a measured span/rerun was necessary or efficient",
+            ),
+        )
+
+    def test_selection_contract_version_three_is_new_operation_only_and_legacy_work_is_not_migrated(self) -> None:
         text = read(SKILL) + refs(
             "docs-generation-flow.md",
             "reviewer-perspectives.md",
@@ -1631,11 +1741,11 @@ class DocsSkillTests(unittest.TestCase):
             self,
             text,
             (
-                "selection contract version 2",
-                "Existing version-1 or unversioned operations continue without migration",
-                "Existing version-1 requests keep their selection preflight without semantic closure",
-                "unversioned requests continue their recorded state and do not invoke selection validation",
-                "Existing version-1 or unversioned operations use their recorded correction/review flow without adding closure state",
+                "selection contract version 3",
+                "Existing version-2 requests keep closure without metrics",
+                "version-1 requests keep selection without closure",
+                "unversioned requests continue their recorded state without selection validation",
+                "Existing version-1 or unversioned operations use their recorded correction/review contract without adding closure state",
                 "A versioned operation reruns selection preflight first",
                 "versioned selection preflight or the unversioned recorded preflight",
             ),

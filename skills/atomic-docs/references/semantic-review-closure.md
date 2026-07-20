@@ -14,7 +14,7 @@ This reference is the normative owner of forward-only semantic review invalidati
 
 ## Forward-Only State
 
-Every Atomic Docs operation created under this contract uses `context_selection.version: "2"` and adds `semantic_review_closure` to `work-state.json` after Goal handoff and before candidate writing. Existing version-1 or unversioned operations continue their recorded flow without migration and cannot claim this contract's structural guarantee. Version 1 must not be retrofitted with the field merely to claim the new guarantee.
+New Atomic Docs operations use `context_selection.version: "3"`; existing version-2 operations keep this same closure contract. Both add `semantic_review_closure` to `work-state.json` after Goal handoff and before candidate writing. Version 3 adds only the sibling metrics contract from `operation-metrics.md`. Existing version-1 or unversioned operations continue without migration and cannot claim this closure guarantee.
 
 Use this version-1 shape:
 
@@ -100,7 +100,9 @@ A current-operation Atom drop remains automatic, and an exact approved existing-
 
 ## Correction And Resolution
 
-Run selection and structural preflight after the correction. Then run only the review pairs in `required_reviews` plus any newly triggered risk or integration review. Record each PASS with a unique `review_id`, the exact reviewer role and scope, and the current `basis_revision`.
+Run selection and structural preflight after the correction. Derive `required_reviews` from the meaning and evidence impact table in `reviewer-perspectives.md`, not from the correction label alone. Reuse a risk PASS only after development review confirms every recorded risk trigger, risky contract meaning, owner/route, adverse behavior, and evidence basis stayed unchanged; uncertainty requires risk review. Record each required PASS with a unique `review_id`, exact role/scope, and current `basis_revision`.
+
+When risk impact cannot be known before inspecting the corrected result, open the invalidation before editing with development review required and leave the prior risk PASS `current`. The open invalidation prevents that risk PASS from authorizing resolution or final completion by itself. If development review confirms every risk dimension stayed unchanged, record its PASS and reuse the risk PASS. If it finds a change or uncertainty, do not record a corrected-basis development PASS: advance the basis, expand the still-open invalidation to stale the risk PASS and require risk review, then rerun development and risk at that basis. This is the only post-edit expansion path; it is valid because the invalidation never closed and no corrected-basis PASS was recorded before expansion.
 
 Resolve an invalidation only when every required pair has a `current` PASS at its `resolved_revision`, the affected inventory/owner/graph routes agree with the managed docs, and no correction finding remains. Set `resolved_revision` to the current `basis_revision`, change its listed old PASSes from `stale` to `superseded`, and set status to `resolved`. A later current PASS for the same pair may have a newer basis. An open invalidation has no `resolved_revision` and its listed prior PASSes remain `stale`.
 

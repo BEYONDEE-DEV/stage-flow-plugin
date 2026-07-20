@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import subprocess
@@ -7,6 +8,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from scripts.validate_atomic_docs import (
+    required_final_validation_scope,
+    validate_state_snapshot_completeness,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_atomic_docs.py"
@@ -43,6 +49,19 @@ class AtomicDocsValidatorTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_required_final_validation_scope_uses_operation_profile(self) -> None:
+        self.assertEqual(
+            "baseline",
+            required_final_validation_scope({"operation_profile": "initial-baseline"}),
+        )
+        self.assertEqual(
+            "baseline",
+            required_final_validation_scope(
+                {"operation_profile": "baseline-diff-refresh"}
+            ),
+        )
+        self.assertEqual("docs", required_final_validation_scope({}))
 
     def _git(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -1624,7 +1643,9 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         )
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(1, result.returncode)
-        self.assertIn("`context_selection.version` must be `1` or `2`", result.stdout)
+        self.assertIn(
+            "`context_selection.version` must be `1`, `2`, or `3`", result.stdout
+        )
         self.assertIn("source commit `0000000000000000000000000000000000000000` is not reachable", result.stdout)
         self.assertIn("must include lower-kebab-case `candidate_id`", result.stdout)
 
@@ -2253,8 +2274,600 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(1, result.returncode)
         self.assertIn(
-            "`semantic_review_closure` requires `context_selection.version` `2`",
+            "`semantic_review_closure` requires `context_selection.version` `2` or `3`",
             result.stdout,
+        )
+
+    def test_selection_version_three_requires_metrics_and_preserves_version_two(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260716-090000-version-three-metrics",
+            selection_version="3",
+        )
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must contain `semantic_review_closure`", result.stdout)
+        self.assertIn("must contain `operation_metrics`", result.stdout)
+
+        state = self.read_selection_state(request_id)
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 1,
+            "review_passes": [],
+            "invalidations": [],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        state["operation_metrics"] = {
+            "version": "1",
+            "status": "active",
+            "started_at": "2026-07-16t00:00:00z",
+            "spans": [],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        state["operation_metrics"].update(
+            {
+                "status": "finished",
+                "finished_at": "2026-07-16T00:01:00Z",
+            }
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("`active` validation requires an active operation", result.stdout)
+        state["operation_metrics"] = {
+            "version": "1",
+            "status": "active",
+            "started_at": "2026-07-16T00:00:00Z",
+            "spans": [],
+        }
+
+        state["context_selection"]["version"] = "2"
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "`operation_metrics` requires `context_selection.version` `3`",
+            result.stdout,
+        )
+
+        state["operation_metrics"] = None
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "`operation_metrics` requires `context_selection.version` `3`",
+            result.stdout,
+        )
+
+        del state["operation_metrics"]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_request_bound_docs_preserve_version_one_and_unversioned_compatibility(self) -> None:
+        self.write_atom("domain/domain-context-atom.md", "domain-context")
+        version_one = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260716-090005-version-one-final-docs",
+            selection_version="1",
+        )
+        result = self.run_validator("docs", request_id=version_one)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        unversioned = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260716-090006-unversioned-final-docs",
+            selection_version=None,
+        )
+        result = self.run_validator("docs", request_id=unversioned)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_operation_metrics_final_fail_retry_and_terminal_sequence(self) -> None:
+        self.write_atom("domain/domain-context-atom.md", "domain-context")
+        self.write_baseline("partial")
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260716-090001-final-metrics",
+            selection_version="3",
+        )
+        state = self.read_selection_state(request_id)
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 1,
+            "review_passes": [
+                {
+                    "review_id": "domain-development-1",
+                    "reviewer_role": "development",
+                    "scope": "domain",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "project-baseline-1",
+                    "reviewer_role": "baseline",
+                    "scope": "project-wide",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [],
+            "final_gate": {
+                "required": True,
+                "review_history": ["project-baseline-1"],
+                "review_id": "project-baseline-1",
+            },
+        }
+        state["operation_metrics"] = {
+            "version": "1",
+            "status": "active",
+            "started_at": "2026-07-16T09:00:00+09:00",
+            "spans": [
+                {
+                    "span_id": "domain-bundle-1",
+                    "kind": "bundle",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:01:00+09:00",
+                    "finished_at": "2026-07-16T09:05:00+09:00",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "domain-writer-1",
+                    "kind": "writer",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:02:00+09:00",
+                    "finished_at": "2026-07-16T09:05:00+09:00",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "domain-development-1",
+                    "kind": "development-review",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:06:00+09:00",
+                    "finished_at": "2026-07-16T09:09:00+09:00",
+                    "outcome": "PASS",
+                },
+                {
+                    "span_id": "project-baseline-1",
+                    "kind": "baseline-review",
+                    "scope": "project-wide",
+                    "attempt_id": "baseline-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:10:00+09:00",
+                    "finished_at": "2026-07-16T09:20:00+09:00",
+                    "outcome": "PASS",
+                },
+                {
+                    "span_id": "baseline-validation-1",
+                    "kind": "validation",
+                    "scope": "baseline",
+                    "attempt_id": "baseline-validation-attempt-1",
+                    "status": "active",
+                    "started_at": "2026-07-16T09:21:00+09:00",
+                },
+            ],
+        }
+        self.write_selection_data(request_id, state)
+
+        docs_only = copy.deepcopy(state)
+        docs_validation = docs_only["operation_metrics"]["spans"][-1]
+        docs_validation["scope"] = "docs"
+        docs_validation["attempt_id"] = "docs-validation-attempt-1"
+        self.write_selection_data(request_id, docs_only)
+        result = self.run_validator("docs", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("operation requires final `baseline` validation", result.stdout)
+
+        docs_validation.update(
+            {
+                "status": "finished",
+                "finished_at": "2026-07-16T09:22:00+09:00",
+                "outcome": "PASS",
+            }
+        )
+        self.write_selection_data(request_id, docs_only)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("requires final `baseline` validation", result.stdout)
+        self.assertIn("partial baselines are invalid", result.stdout)
+
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("baseline", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("partial baselines are invalid", result.stdout)
+
+        first_validation = state["operation_metrics"]["spans"][-1]
+        first_validation.update(
+            {
+                "status": "finished",
+                "finished_at": "2026-07-16T09:22:00+09:00",
+                "outcome": "FAIL",
+            }
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("latest final validation span to have outcome `PASS`", result.stdout)
+
+        self.write_baseline()
+        state["operation_metrics"]["spans"].extend(
+            [
+                {
+                    "span_id": "domain-correction-1",
+                    "kind": "writer",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-2",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:23:00+09:00",
+                    "finished_at": "2026-07-16T09:25:00+09:00",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "baseline-validation-2",
+                    "kind": "validation",
+                    "scope": "baseline",
+                    "attempt_id": "baseline-validation-attempt-2",
+                    "status": "active",
+                    "started_at": "2026-07-16T09:26:00+09:00",
+                    "rerun_of": "baseline-validation-1",
+                    "rerun_reason": "이전 검증 실패를 수정한 뒤 다시 확인한다.",
+                },
+            ]
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("baseline", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        second_validation = state["operation_metrics"]["spans"][-1]
+        second_validation.update(
+            {
+                "status": "finished",
+                "finished_at": "2026-07-16T09:27:00+09:00",
+                "outcome": "PASS",
+            }
+        )
+        stale_closure_state = copy.deepcopy(state)
+        stale_closure = stale_closure_state["semantic_review_closure"]
+        stale_closure["basis_revision"] = 2
+        stale_closure["review_passes"][0]["status"] = "stale"
+        stale_closure["invalidations"] = [
+            {
+                "invalidation_id": "late-meaning-change-1",
+                "trigger": "documented-meaning",
+                "cause": "최종 검증 뒤 문서 의미가 바뀌었다.",
+                "opened_revision": 2,
+                "affected_artifacts": [
+                    {"location": "managed-docs", "path": "domain/domain-context-atom.md"}
+                ],
+                "affected_bundles": ["domain"],
+                "stale_review_ids": ["domain-development-1"],
+                "required_reviews": [
+                    {"reviewer_role": "development", "scope": "domain"}
+                ],
+                "status": "open",
+            }
+        ]
+        self.write_selection_data(request_id, stale_closure_state)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is still open at final validation", result.stdout)
+
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        stale_state = copy.deepcopy(state)
+        stale_state["operation_metrics"]["spans"].append(
+            {
+                "span_id": "late-writer-1",
+                "kind": "writer",
+                "scope": "domain",
+                "attempt_id": "domain-attempt-3",
+                "status": "finished",
+                "started_at": "2026-07-16T09:27:10+09:00",
+                "finished_at": "2026-07-16T09:27:20+09:00",
+                "outcome": "completed",
+            }
+        )
+        self.write_selection_data(request_id, stale_state)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("to be the last recorded span", result.stdout)
+        self.write_selection_data(request_id, state)
+
+        state["operation_metrics"].update(
+            {
+                "status": "finished",
+                "finished_at": "2026-07-16T09:28:00+09:00",
+            }
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("metrics-final", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_operation_metrics_final_requires_queue_and_review_coverage(self) -> None:
+        self.write_atom("domain/domain-context-atom.md", "domain-context")
+        self.write_baseline()
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            risk_triggers=[
+                {
+                    "candidate_id": "domain-context",
+                    "atom_key": "domain-context",
+                    "triggers": ["shared policy contract"],
+                    "basis": "선택된 공유 계약이 변경 영향에 중요하다.",
+                }
+            ],
+            request_id="20260716-090003-missing-metric-coverage",
+            selection_version="3",
+        )
+        state = self.read_selection_state(request_id)
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 1,
+            "review_passes": [
+                {
+                    "review_id": "domain-development-1",
+                    "reviewer_role": "development",
+                    "scope": "domain",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "project-baseline-1",
+                    "reviewer_role": "baseline",
+                    "scope": "project-wide",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [],
+            "final_gate": {
+                "required": True,
+                "review_history": ["project-baseline-1"],
+                "review_id": "project-baseline-1",
+            },
+        }
+        state["operation_metrics"] = {
+            "version": "1",
+            "status": "active",
+            "started_at": "2026-07-16T09:00:00+09:00",
+            "spans": [
+                {
+                    "span_id": "baseline-validation-1",
+                    "kind": "validation",
+                    "scope": "baseline",
+                    "attempt_id": "baseline-validation-attempt-1",
+                    "status": "active",
+                    "started_at": "2026-07-16T09:10:00+09:00",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("baseline", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("completed bundle/writer attempt", result.stdout)
+        self.assertIn(
+            "current semantic review PASS `domain-development-1`", result.stdout
+        )
+        self.assertIn(
+            "current semantic review PASS `project-baseline-1`", result.stdout
+        )
+        self.assertIn("needs a finished risk-review metric span", result.stdout)
+
+    def test_operation_metrics_rejects_invalid_shape_and_time_order(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260716-090002-invalid-metrics",
+            selection_version="3",
+        )
+        state = self.read_selection_state(request_id)
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 1,
+            "review_passes": [],
+            "invalidations": [],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        state["operation_metrics"] = {
+            "version": "1",
+            "status": "active",
+            "started_at": "2026-07-16 09:00:00+09:00",
+            "spans": [
+                {
+                    "span_id": "invalid-active-span",
+                    "kind": "writer",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-1",
+                    "status": "active",
+                    "started_at": "2026-07-16T09:10:00+09:00",
+                    "finished_at": "2026-07-16T09:09:00+09:00",
+                    "outcome": "PASS",
+                    "rerun_of": "missing-span",
+                },
+                {
+                    "span_id": "reversed-finished-span",
+                    "kind": "writer",
+                    "scope": "domain",
+                    "attempt_id": "domain-attempt-2",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:12:00+09:00",
+                    "finished_at": "2026-07-16T09:11:00+09:00",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "instrumented-terminal-check",
+                    "kind": "validation",
+                    "scope": "metrics-preterminal",
+                    "attempt_id": "terminal-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-16T09:13:00+09:00",
+                    "finished_at": "2026-07-16T09:14:00+09:00",
+                    "outcome": "PASS",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must be RFC 3339 with a timezone", result.stdout)
+        self.assertIn("must omit `finished_at` and `outcome`", result.stdout)
+        self.assertIn("`finished_at` must not precede `started_at`", result.stdout)
+        self.assertIn("must set `rerun_of` and `rerun_reason` together", result.stdout)
+        self.assertIn("must reference an earlier span", result.stdout)
+        self.assertIn("must not instrument a terminal metrics check", result.stdout)
+
+    def test_operation_metrics_snapshot_progression_is_append_only(self) -> None:
+        snapshot = {
+            "accepted_scope": ["domain"],
+            "source_commit_observed": self.commit,
+            "context_selection": {
+                "version": "3",
+                "candidates": [
+                    {
+                        "candidate_id": "domain-context",
+                        "domain": "domain",
+                        "candidate": "도메인 맥락",
+                        "disposition": "write",
+                        "selection_basis": "도메인 소유권을 설명한다.",
+                        "candidate_atom_keys": ["domain-context"],
+                    }
+                ],
+            },
+            "bundle_queue": [
+                {"domain": "domain", "expected_atom_keys": ["domain-context"]}
+            ],
+            "risk_triggers": [],
+            "semantic_review_closure": {
+                "version": "1",
+                "basis_revision": 1,
+                "review_passes": [],
+                "invalidations": [],
+                "final_gate": {"required": False, "review_history": []},
+            },
+            "operation_metrics": {
+                "version": "1",
+                "status": "active",
+                "started_at": "2026-07-16T09:00:00+09:00",
+                "spans": [
+                    {
+                        "span_id": "domain-writer-1",
+                        "kind": "writer",
+                        "scope": "domain",
+                        "attempt_id": "domain-attempt-1",
+                        "status": "finished",
+                        "started_at": "2026-07-16T09:01:00+09:00",
+                        "finished_at": "2026-07-16T09:02:00+09:00",
+                        "outcome": "completed",
+                    }
+                ],
+            },
+        }
+        current = copy.deepcopy(snapshot)
+        current["operation_metrics"]["spans"].append(
+            {
+                "span_id": "domain-development-1",
+                "kind": "development-review",
+                "scope": "domain",
+                "attempt_id": "domain-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-16T09:03:00+09:00",
+                "finished_at": "2026-07-16T09:04:00+09:00",
+                "outcome": "PASS",
+            }
+        )
+        errors: list[str] = []
+        validate_state_snapshot_completeness(snapshot, current, "snapshot", errors)
+        self.assertEqual([], errors)
+
+        changed = copy.deepcopy(current)
+        changed["operation_metrics"]["spans"][0]["outcome"] = "FAIL"
+        errors = []
+        validate_state_snapshot_completeness(snapshot, changed, "snapshot", errors)
+        self.assertTrue(
+            any("rewrites finished operation metric span" in error for error in errors),
+            errors,
+        )
+
+        shortened = copy.deepcopy(snapshot)
+        shortened["operation_metrics"]["spans"] = []
+        errors = []
+        validate_state_snapshot_completeness(snapshot, shortened, "snapshot", errors)
+        self.assertTrue(
+            any("removes or reorders operation metric spans" in error for error in errors),
+            errors,
         )
 
     def test_semantic_review_closure_blocks_final_until_affected_reviews_pass(self) -> None:
@@ -2395,6 +3008,133 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         self.write_selection_data(request_id, state)
         baseline = self.run_validator("baseline", request_id=request_id)
         self.assertEqual(0, baseline.returncode, baseline.stdout + baseline.stderr)
+
+    def test_semantic_closure_supports_provisional_risk_impact_routing(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "공유 계약의 변경 영향을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            risk_triggers=[
+                {
+                    "candidate_id": "domain-context",
+                    "atom_key": "domain-context",
+                    "triggers": ["shared policy contract"],
+                    "basis": "선택된 공유 계약이 변경 영향에 중요하다.",
+                }
+            ],
+            request_id="20260716-090004-provisional-risk-routing",
+            selection_version="2",
+        )
+        state = self.read_selection_state(request_id)
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "domain-development-1",
+                    "reviewer_role": "development",
+                    "scope": "domain",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                },
+                {
+                    "review_id": "domain-risk-1",
+                    "reviewer_role": "risk",
+                    "scope": "domain",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "domain-generalization-1",
+                    "trigger": "documented-meaning",
+                    "cause": "참조 문구를 일반화해 위험 영향 확인이 필요하다.",
+                    "opened_revision": 2,
+                    "affected_artifacts": [
+                        {
+                            "location": "managed-docs",
+                            "path": "domain/domain-context-atom.md",
+                        }
+                    ],
+                    "affected_bundles": ["domain"],
+                    "stale_review_ids": ["domain-development-1"],
+                    "required_reviews": [
+                        {"reviewer_role": "development", "scope": "domain"}
+                    ],
+                    "status": "open",
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        risk_neutral = copy.deepcopy(state)
+        neutral_closure = risk_neutral["semantic_review_closure"]
+        neutral_closure["review_passes"][0]["status"] = "superseded"
+        neutral_closure["review_passes"].append(
+            {
+                "review_id": "domain-development-2",
+                "reviewer_role": "development",
+                "scope": "domain",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        neutral_closure["invalidations"][0].update(
+            {"status": "resolved", "resolved_revision": 2}
+        )
+        self.write_selection_data(request_id, risk_neutral)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        risk_changed = copy.deepcopy(state)
+        changed_closure = risk_changed["semantic_review_closure"]
+        changed_closure["basis_revision"] = 3
+        changed_closure["review_passes"][0]["status"] = "superseded"
+        changed_closure["review_passes"][1]["status"] = "superseded"
+        changed_closure["review_passes"].extend(
+            [
+                {
+                    "review_id": "domain-development-3",
+                    "reviewer_role": "development",
+                    "scope": "domain",
+                    "basis_revision": 3,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "domain-risk-3",
+                    "reviewer_role": "risk",
+                    "scope": "domain",
+                    "basis_revision": 3,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ]
+        )
+        changed_invalidation = changed_closure["invalidations"][0]
+        changed_invalidation["stale_review_ids"].append("domain-risk-1")
+        changed_invalidation["required_reviews"].append(
+            {"reviewer_role": "risk", "scope": "domain"}
+        )
+        changed_invalidation.update({"status": "resolved", "resolved_revision": 3})
+        self.write_selection_data(request_id, risk_changed)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
     def test_semantic_review_closure_rejects_false_resolution_and_bad_paths(self) -> None:
         request_id = self.write_selection_state(
@@ -2571,7 +3311,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         wrong_phase = self.run_validator("bootstrap", request_id=request_id)
         self.assertEqual(1, wrong_phase.returncode)
         self.assertIn(
-            "`--request-id` requires `--phase selection`, `docs`, or `baseline`",
+            "`--request-id` requires `--phase selection`, `docs`, `baseline`, "
+            "`metrics-preterminal`, or `metrics-final`",
             wrong_phase.stdout,
         )
 

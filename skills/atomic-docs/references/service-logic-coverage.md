@@ -37,7 +37,7 @@ An approved domain may need only its domain context atom and no separate behavio
 
 Reapply this admission decision when later source inspection reveals another fact. A reviewer must not turn an unselected fact into required managed-doc detail merely to make source coverage more complete.
 
-Before a required final integration/baseline review, reapply admission to the operation's retained selected candidates, or only the affected candidate closure for a non-baseline operation. Confirm each still has a current durable selection basis. Existing file length, AID count, risky code, destructive names, or prior reviewer PASS cannot preserve a dormant/unreachable candidate by themselves. In version 2, a late `write→merge|drop` correction follows `semantic-review-closure.md` before its prior PASS is reused; a legacy operation uses its recorded correction/review flow without adding closure state.
+Before a required final integration/baseline review, reapply admission to the operation's retained selected candidates, or only the affected candidate closure for a non-baseline operation. Confirm each still has a current durable selection basis. Existing file length, AID count, risky code, destructive names, or prior reviewer PASS cannot preserve a dormant/unreachable candidate by themselves. In version 3 or 2, a late `write→merge|drop` correction follows `semantic-review-closure.md` before its prior PASS is reused; a legacy operation uses its recorded correction/review flow without adding closure state.
 
 ## Current Contract Evidence
 
@@ -102,6 +102,8 @@ Apply the independent risk/contract reviewer when a selected context candidate o
 Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. Source presence alone does not start a risk audit. For a triggered context, record the high-impact owner, contract, or non-obvious constraint that matters to change impact and verify claims actually made. Require an adverse outcome and verification target only for an approved implementation-basis requirement that specifies them. Do not discover or preserve every adverse branch, actor/input/state/failure combination, or attack path. Add a matrix only when the alternatives themselves are durable contract context that prose would make misleading.
 
 For an external contract, use authoritative local or user-approved provider evidence such as a versioned schema/specification, SDK contract, fixture, or contract test when available. Record `confirmation_needed` only when the unavailable or conflicting external guarantee prevents the accepted implementation or review judgment; do not create a Gap merely because the remote implementation is outside the repository.
+
+Do not cross into another repository or provider to build a general defect inventory. Expand beyond accepted local evidence only when a retained claim's owner, shared/external contract, or change impact cannot otherwise be judged reliably. A field-level UX improvement, display fallback, incidental exception possibility, or source asymmetry that does not block trustworthy context remains source-level observation or a concise user report, not a managed Gap.
 
 ## Source Fact Fidelity
 

@@ -21,6 +21,8 @@ Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom 
 
 A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` from domain proposal through writer/reviewer cycles. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final implementation-context index.
 
+Keep queue-time relationship availability operation-local. When an approved later bundle will own a consumer, owner, or graph target, managed prose describes the accepted durable relationship without saying that its Atom is "not created yet". If the relationship is not stable enough to state, retain the pending owner/consumer note in inventory or `work-state.json` and reconcile it after the target bundle; do not turn operation progress into durable product context.
+
 A retained inventory is a selected implementation-context index, not a behavior-coverage proof, progress log, or second copy of every atom. Each selected context entry records:
 
 - concise reason the context is useful before source inspection or change
@@ -33,7 +35,7 @@ Do not require every inventory row to contain fields for validation, state, pers
 
 Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, or when `project-goal.md` treats docs config, baseline/cache paths, reset/delete notes, reviewer logs, or operation status as the service or product goal. A retained project inventory must also FAIL when it is only a source identifier list, lacks the selection reason or important owner/contract context required by this reference, claims exhaustive behavior coverage, or is not synchronized to real `atom_key` and existing AID references. Do not create or advance baseline metadata while the retained inventory is in that state. Source-convention-specific failures come only from `source-convention-and-domain-policy.md`.
 
-One root unresolved decision has one canonical owner in the narrowest shared project/context or domain Atom that can resolve it. A consumer points to that owner by `atom_key` and AID or owning heading; it creates a local Gap only for a distinct consumer-specific decision or consequence. In version 2, when glossary, inventory, context, or an Atom changes that owner after a review PASS, treat every changed owner/consumer projection as an affected artifact under `semantic-review-closure.md`. Legacy operations route the same correction through their recorded review flow without adding closure state.
+One root unresolved decision has one canonical owner in the narrowest shared project/context or domain Atom that can resolve it. A consumer points to that owner by `atom_key` and AID or owning heading; it creates a local Gap only for a distinct consumer-specific decision or consequence. In version 3 or 2, when glossary, inventory, context, or an Atom changes that owner after a review PASS, treat every changed owner/consumer projection as an affected artifact under `semantic-review-closure.md`. Legacy operations route the same correction through their recorded review flow without adding closure state.
 
 ## Pre-Approval Domain Proposal
 

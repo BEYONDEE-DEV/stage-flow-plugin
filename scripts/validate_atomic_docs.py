@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,14 @@ try:
 except ImportError:  # pragma: no cover - exercised only in incomplete runtimes
     yaml = None
 
-PHASES = ("bootstrap", "selection", "docs", "baseline")
+PHASES = (
+    "bootstrap",
+    "selection",
+    "docs",
+    "baseline",
+    "metrics-preterminal",
+    "metrics-final",
+)
 REQUIRED_CONFIG = ("storage_mode", "docs_root", "source_root", "baseline_metadata_path")
 REQUIRED_SECTIONS = (
     "Intent",
@@ -47,8 +55,28 @@ AID_RE = re.compile(
 )
 COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+RFC3339_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?"
+    r"(?:[Zz]|[+-]\d{2}:\d{2})$"
+)
 SEMANTIC_REVIEW_ROLES = {"development", "risk", "integration", "baseline"}
 SEMANTIC_REVIEW_STATUSES = {"current", "stale", "superseded"}
+OPERATION_METRIC_KINDS = {
+    "bundle",
+    "writer",
+    "development-review",
+    "risk-review",
+    "integration-review",
+    "baseline-review",
+    "validation",
+}
+OPERATION_METRIC_OUTCOMES = {"PASS", "FAIL", "completed"}
+REVIEW_METRIC_KINDS = {
+    "development": "development-review",
+    "risk": "risk-review",
+    "integration": "integration-review",
+    "baseline": "baseline-review",
+}
 SEMANTIC_INVALIDATION_TRIGGERS = {
     "candidate-disposition",
     "atom-merge",
@@ -153,10 +181,21 @@ def main(argv: list[str] | None = None) -> int:
     errors: list[str] = []
     if args.expect_atom_key and args.phase != "docs":
         errors.append("`--expect-atom-key` requires `--phase docs`")
-    if args.phase == "selection" and not args.request_id:
-        errors.append("`--phase selection` requires `--request-id`")
-    if args.request_id and args.phase not in {"selection", "docs", "baseline"}:
-        errors.append("`--request-id` requires `--phase selection`, `docs`, or `baseline`")
+    request_required_phases = {"selection", "metrics-preterminal", "metrics-final"}
+    if args.phase in request_required_phases and not args.request_id:
+        errors.append(f"`--phase {args.phase}` requires `--request-id`")
+    request_phases = {
+        "selection",
+        "docs",
+        "baseline",
+        "metrics-preterminal",
+        "metrics-final",
+    }
+    if args.request_id and args.phase not in request_phases:
+        errors.append(
+            "`--request-id` requires `--phase selection`, `docs`, `baseline`, "
+            "`metrics-preterminal`, or `metrics-final`"
+        )
     if args.require_actions_final and args.phase != "selection":
         errors.append("`--require-actions-final` requires `--phase selection`")
     config = load_config(Path(args.root).resolve(), errors)
@@ -182,8 +221,37 @@ def main(argv: list[str] | None = None) -> int:
                     require_final=args.phase == "baseline" or not args.expect_atom_key,
                     required_final_role="baseline" if args.phase == "baseline" else None,
                 )
+                validate_request_operation_metrics(
+                    config,
+                    args.request_id,
+                    errors,
+                    mode=(
+                        "final-validation"
+                        if args.phase == "baseline" or not args.expect_atom_key
+                        else "active"
+                    ),
+                    validation_scope=args.phase,
+                )
         if args.phase == "baseline":
             validate_baseline(config, errors)
+        if args.phase in {"metrics-preterminal", "metrics-final"} and args.request_id:
+            if args.phase == "metrics-preterminal":
+                validate_request_preterminal_artifacts(
+                    config,
+                    args.request_id,
+                    errors,
+                )
+            validate_request_operation_metrics(
+                config,
+                args.request_id,
+                errors,
+                mode=(
+                    "preterminal"
+                    if args.phase == "metrics-preterminal"
+                    else "final"
+                ),
+                validation_scope=None,
+            )
 
     if errors:
         print(f"FAIL {args.phase}:")
@@ -277,6 +345,12 @@ def validate_selection(
     validate_semantic_review_closure(
         state, errors, require_final=require_actions_final, required_final_role=None
     )
+    validate_operation_metrics(
+        state,
+        errors,
+        mode="active",
+        validation_scope=None,
+    )
 
     accepted_scope = string_list(
         state.get("accepted_scope"), "work-state `accepted_scope`", errors
@@ -306,8 +380,8 @@ def validate_selection(
     if not isinstance(context_selection, dict):
         errors.append("work-state must contain a `context_selection` object")
         return
-    if context_selection.get("version") not in {"1", "2"}:
-        errors.append("work-state `context_selection.version` must be `1` or `2`")
+    if context_selection.get("version") not in {"1", "2", "3"}:
+        errors.append("work-state `context_selection.version` must be `1`, `2`, or `3`")
     raw_candidates = context_selection.get("candidates")
     if not isinstance(raw_candidates, list):
         errors.append("work-state `context_selection.candidates` must be a list")
@@ -458,6 +532,460 @@ def validate_request_semantic_review_closure(
     )
 
 
+def validate_request_operation_metrics(
+    config: Config,
+    request_id: str,
+    errors: list[str],
+    *,
+    mode: str,
+    validation_scope: str | None,
+) -> None:
+    request_root = atomic_docs_request_root(config, request_id, errors)
+    if request_root is None:
+        return
+    state_path = request_root / "work-state.json"
+    state = read_json(state_path, rel(config.project_root, state_path), errors)
+    if state is None:
+        return
+    validate_operation_metrics(
+        state,
+        errors,
+        mode=mode,
+        validation_scope=validation_scope,
+    )
+
+
+def validate_request_preterminal_artifacts(
+    config: Config,
+    request_id: str,
+    errors: list[str],
+) -> None:
+    request_root = atomic_docs_request_root(config, request_id, errors)
+    if request_root is None:
+        return
+    state_path = request_root / "work-state.json"
+    state = read_json(state_path, rel(config.project_root, state_path), errors)
+    if state is None:
+        return
+    metrics = state.get("operation_metrics")
+    spans = metrics.get("spans") if isinstance(metrics, dict) else None
+    if not isinstance(spans, list):
+        return
+    final_validations = [
+        span
+        for span in spans
+        if isinstance(span, dict)
+        and span.get("kind") == "validation"
+        and span.get("scope") in {"docs", "baseline"}
+        and span.get("status") == "finished"
+    ]
+    if not final_validations:
+        return
+    validation_scope = final_validations[-1].get("scope")
+    required_scope = required_final_validation_scope(state)
+    if validation_scope != required_scope:
+        errors.append(
+            f"operation requires final `{required_scope}` validation, not "
+            f"`{validation_scope}`"
+        )
+    validate_docs(config, errors, [])
+    validate_semantic_review_closure(
+        state,
+        errors,
+        require_final=True,
+        required_final_role="baseline" if required_scope == "baseline" else None,
+    )
+    if required_scope == "baseline":
+        validate_baseline(config, errors)
+
+
+def required_final_validation_scope(state: dict[str, Any]) -> str:
+    if state.get("operation_profile") in {"initial-baseline", "baseline-diff-refresh"}:
+        return "baseline"
+    closure = state.get("semantic_review_closure")
+    if not isinstance(closure, dict):
+        return "docs"
+    final_gate = closure.get("final_gate")
+    review_id = final_gate.get("review_id") if isinstance(final_gate, dict) else None
+    reviews = closure.get("review_passes")
+    if isinstance(reviews, list):
+        for review in reviews:
+            if (
+                isinstance(review, dict)
+                and review.get("review_id") == review_id
+                and review.get("status") == "current"
+                and review.get("reviewer_role") == "baseline"
+                and review.get("scope") == "project-wide"
+            ):
+                return "baseline"
+    return "docs"
+
+
+def validate_operation_metrics(
+    state: dict[str, Any],
+    errors: list[str],
+    *,
+    mode: str,
+    validation_scope: str | None,
+) -> None:
+    selection = state.get("context_selection")
+    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    metrics = state.get("operation_metrics")
+    if selection_version != "3":
+        if "operation_metrics" in state:
+            errors.append(
+                "work-state `operation_metrics` requires `context_selection.version` `3`"
+            )
+        if mode in {"preterminal", "final"}:
+            errors.append(
+                f"operation metrics `{mode}` validation requires `context_selection.version` `3`"
+            )
+        return
+    if not isinstance(metrics, dict):
+        errors.append(
+            "work-state with `context_selection.version` `3` must contain "
+            "`operation_metrics`"
+        )
+        return
+
+    required = {"version", "status", "started_at", "spans"}
+    validate_object_keys(
+        metrics,
+        required | {"finished_at"},
+        required,
+        "operation metrics",
+        errors,
+    )
+    if metrics.get("version") != "1":
+        errors.append("operation metrics `version` must be `1`")
+    operation_status = metrics.get("status")
+    if operation_status not in {"active", "finished"}:
+        errors.append("operation metrics `status` must be `active` or `finished`")
+    if mode in {"active", "final-validation", "preterminal"} and operation_status != "active":
+        errors.append(f"operation metrics `{mode}` validation requires an active operation")
+    operation_started = rfc3339_value(
+        metrics.get("started_at"), "operation metrics `started_at`", errors
+    )
+    operation_finished: datetime | None = None
+    if operation_status == "active":
+        if "finished_at" in metrics:
+            errors.append("active operation metrics must omit `finished_at`")
+    elif operation_status == "finished":
+        operation_finished = rfc3339_value(
+            metrics.get("finished_at"), "operation metrics `finished_at`", errors
+        )
+        if (
+            operation_started is not None
+            and operation_finished is not None
+            and operation_finished < operation_started
+        ):
+            errors.append("operation metrics `finished_at` must not precede `started_at`")
+
+    spans = metrics.get("spans")
+    if not isinstance(spans, list):
+        errors.append("operation metrics `spans` must be a list")
+        spans = []
+    parsed_spans: list[dict[str, Any]] = []
+    spans_by_id: dict[str, dict[str, Any]] = {}
+    active_spans: list[dict[str, Any]] = []
+    for index, span in enumerate(spans, start=1):
+        label = f"operation metric span {index}"
+        if not isinstance(span, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        required_span = {
+            "span_id",
+            "kind",
+            "scope",
+            "attempt_id",
+            "status",
+            "started_at",
+        }
+        validate_object_keys(
+            span,
+            required_span
+            | {"finished_at", "outcome", "rerun_of", "rerun_reason"},
+            required_span,
+            label,
+            errors,
+        )
+        span_id = lower_kebab_value(span.get("span_id"), f"{label} `span_id`", errors)
+        if span_id is not None:
+            if span_id in spans_by_id:
+                errors.append(f"operation metric span id `{span_id}` appears more than once")
+            else:
+                spans_by_id[span_id] = span
+        kind = span.get("kind")
+        if kind not in OPERATION_METRIC_KINDS:
+            errors.append(f"{label} has unsupported `kind`")
+            kind = None
+        scope = single_line_string(span.get("scope"), f"{label} `scope`", errors)
+        if kind == "validation" and scope in {"metrics-preterminal", "metrics-final"}:
+            errors.append(f"{label} must not instrument a terminal metrics check")
+        attempt_id = lower_kebab_value(
+            span.get("attempt_id"), f"{label} `attempt_id`", errors
+        )
+        span_status = span.get("status")
+        if span_status not in {"active", "finished"}:
+            errors.append(f"{label} `status` must be `active` or `finished`")
+        started = rfc3339_value(span.get("started_at"), f"{label} `started_at`", errors)
+        finished: datetime | None = None
+        if span_status == "active":
+            if "finished_at" in span or "outcome" in span:
+                errors.append(f"active {label} must omit `finished_at` and `outcome`")
+            active_spans.append(span)
+        elif span_status == "finished":
+            finished = rfc3339_value(
+                span.get("finished_at"), f"{label} `finished_at`", errors
+            )
+            if span.get("outcome") not in OPERATION_METRIC_OUTCOMES:
+                errors.append(f"finished {label} has unsupported `outcome`")
+            if started is not None and finished is not None and finished < started:
+                errors.append(f"{label} `finished_at` must not precede `started_at`")
+
+        rerun_of = span.get("rerun_of")
+        rerun_reason = span.get("rerun_reason")
+        if (rerun_of is None) != (rerun_reason is None):
+            errors.append(f"{label} must set `rerun_of` and `rerun_reason` together")
+        parsed_rerun = None
+        if rerun_of is not None:
+            parsed_rerun = lower_kebab_value(
+                rerun_of, f"{label} `rerun_of`", errors
+            )
+            single_line_string(rerun_reason, f"{label} `rerun_reason`", errors)
+
+        if operation_started is not None and started is not None and started < operation_started:
+            errors.append(f"{label} starts before the operation")
+        if operation_finished is not None:
+            if started is not None and started > operation_finished:
+                errors.append(f"{label} starts after the operation finished")
+            if finished is not None and finished > operation_finished:
+                errors.append(f"{label} finishes after the operation")
+        parsed_spans.append(
+            {
+                "span_id": span_id,
+                "kind": kind,
+                "scope": scope,
+                "attempt_id": attempt_id,
+                "rerun_of": parsed_rerun,
+            }
+        )
+
+    seen_ids: set[str] = set()
+    for span in parsed_spans:
+        span_id = span["span_id"]
+        rerun_of = span["rerun_of"]
+        if rerun_of is not None:
+            prior = spans_by_id.get(rerun_of)
+            if rerun_of not in seen_ids or not isinstance(prior, dict):
+                errors.append(
+                    f"operation metric span `{span_id or '<unknown>'}` `rerun_of` "
+                    "must reference an earlier span"
+                )
+            elif prior.get("kind") != span["kind"] or prior.get("scope") != span["scope"]:
+                errors.append(
+                    f"operation metric span `{span_id or '<unknown>'}` rerun must keep "
+                    "the prior kind and scope"
+                )
+        if span_id is not None:
+            seen_ids.add(span_id)
+
+    if operation_status == "finished" and active_spans:
+        errors.append("finished operation metrics must not contain active spans")
+    final_validation_spans = [
+        span
+        for span in spans
+        if isinstance(span, dict)
+        and span.get("kind") == "validation"
+        and span.get("scope") in {"docs", "baseline"}
+        and span.get("status") == "finished"
+    ]
+    latest_final_is_last = bool(
+        final_validation_spans
+        and spans
+        and final_validation_spans[-1] is spans[-1]
+    )
+    required_final_scope = required_final_validation_scope(state)
+    if mode in {"final-validation", "preterminal", "final"}:
+        validate_operation_metric_completion_coverage(state, spans, errors)
+    if mode == "final-validation":
+        if validation_scope != required_final_scope:
+            errors.append(
+                f"operation requires final `{required_final_scope}` validation, not "
+                f"`{validation_scope}`"
+            )
+        if len(active_spans) != 1:
+            errors.append(
+                "final docs/baseline validation requires exactly one active validation span"
+            )
+        elif (
+            active_spans[0].get("kind") != "validation"
+            or active_spans[0].get("scope") != validation_scope
+        ):
+            errors.append(
+                "final docs/baseline active span must be the current validation phase"
+            )
+        elif not spans or active_spans[0] is not spans[-1]:
+            errors.append("final docs/baseline validation span must be the last recorded span")
+    elif mode == "preterminal":
+        if active_spans:
+            errors.append("metrics preterminal validation requires every span to be finished")
+        if not final_validation_spans or final_validation_spans[-1].get("outcome") != "PASS":
+            errors.append(
+                "metrics preterminal validation requires the latest final validation "
+                "span to have outcome `PASS`"
+            )
+        elif not latest_final_is_last:
+            errors.append(
+                "metrics preterminal validation requires the latest final validation "
+                "span to be the last recorded span"
+            )
+        if (
+            final_validation_spans
+            and final_validation_spans[-1].get("scope") != required_final_scope
+        ):
+            errors.append(
+                f"metrics preterminal validation requires final "
+                f"`{required_final_scope}` validation"
+            )
+    elif mode == "final":
+        if operation_status != "finished":
+            errors.append("metrics final validation requires a finished operation")
+        if active_spans:
+            errors.append("metrics final validation requires no active spans")
+        if not final_validation_spans or final_validation_spans[-1].get("outcome") != "PASS":
+            errors.append(
+                "metrics final validation requires the latest final validation span "
+                "to have outcome `PASS`"
+            )
+        elif not latest_final_is_last:
+            errors.append(
+                "metrics final validation requires the latest final validation span "
+                "to be the last recorded span"
+            )
+        if (
+            final_validation_spans
+            and final_validation_spans[-1].get("scope") != required_final_scope
+        ):
+            errors.append(
+                f"metrics final validation requires final `{required_final_scope}` "
+                "validation"
+            )
+
+
+def validate_operation_metric_completion_coverage(
+    state: dict[str, Any],
+    spans: list[Any],
+    errors: list[str],
+) -> None:
+    successful_spans = [
+        span
+        for span in spans
+        if isinstance(span, dict)
+        and span.get("status") == "finished"
+        and span.get("outcome") in {"PASS", "completed"}
+    ]
+    queue = state.get("bundle_queue")
+    required_bundle_counts: dict[str, int] = {}
+    if isinstance(queue, list):
+        for item in queue:
+            domain = item.get("domain") if isinstance(item, dict) else None
+            if isinstance(domain, str) and domain:
+                required_bundle_counts[domain] = required_bundle_counts.get(domain, 0) + 1
+    for domain, required_count in sorted(required_bundle_counts.items()):
+        bundle_attempts = {
+            span.get("attempt_id")
+            for span in successful_spans
+            if span.get("kind") == "bundle" and span.get("scope") == domain
+        }
+        writer_attempts = {
+            span.get("attempt_id")
+            for span in successful_spans
+            if span.get("kind") == "writer" and span.get("scope") == domain
+        }
+        completed_attempts = bundle_attempts & writer_attempts
+        if len(completed_attempts) < required_count:
+            errors.append(
+                f"operation metrics need {required_count} completed bundle/writer "
+                f"attempt(s) for queue scope `{domain}`"
+            )
+
+    closure = state.get("semantic_review_closure")
+    closure_basis = closure.get("basis_revision") if isinstance(closure, dict) else None
+    reviews = closure.get("review_passes") if isinstance(closure, dict) else None
+    spans_by_id = {
+        span.get("span_id"): span
+        for span in successful_spans
+        if isinstance(span.get("span_id"), str)
+    }
+    if isinstance(reviews, list) and type(closure_basis) is int:
+        for review in reviews:
+            if (
+                not isinstance(review, dict)
+                or review.get("status") != "current"
+                or review.get("basis_revision") != closure_basis
+            ):
+                continue
+            review_id = review.get("review_id")
+            reviewer_role = review.get("reviewer_role")
+            expected_kind = REVIEW_METRIC_KINDS.get(reviewer_role)
+            metric = spans_by_id.get(review_id)
+            if (
+                not isinstance(metric, dict)
+                or metric.get("kind") != expected_kind
+                or metric.get("scope") != review.get("scope")
+                or metric.get("outcome") != "PASS"
+            ):
+                errors.append(
+                    f"current semantic review PASS `{review_id}` at the latest basis "
+                    "needs a matching finished operation metric span"
+                )
+
+    selection = state.get("context_selection")
+    candidates = selection.get("candidates") if isinstance(selection, dict) else None
+    candidate_domains = {
+        candidate.get("candidate_id"): candidate.get("domain")
+        for candidate in candidates or []
+        if isinstance(candidate, dict)
+        and isinstance(candidate.get("candidate_id"), str)
+        and isinstance(candidate.get("domain"), str)
+    }
+    risk_domains = {
+        candidate_domains.get(trigger.get("candidate_id"))
+        for trigger in state.get("risk_triggers") or []
+        if isinstance(trigger, dict)
+        and candidate_domains.get(trigger.get("candidate_id")) is not None
+        and candidate_domains.get(trigger.get("candidate_id")) in required_bundle_counts
+    }
+    for domain in sorted(risk_domains):
+        if not any(
+            span.get("kind") == "risk-review" and span.get("scope") == domain
+            for span in successful_spans
+        ):
+            errors.append(
+                f"risk-triggered scope `{domain}` needs a finished risk-review metric span"
+            )
+
+
+def rfc3339_value(value: Any, label: str, errors: list[str]) -> datetime | None:
+    text = single_line_string(value, label, errors)
+    if text is None:
+        return None
+    if not RFC3339_RE.fullmatch(text):
+        errors.append(f"{label} must be RFC 3339 with a timezone")
+        return None
+    normalized = text[:-1] + "+00:00" if text[-1] in {"Z", "z"} else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        errors.append(f"{label} must be RFC 3339 with a timezone")
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        errors.append(f"{label} must be RFC 3339 with a timezone")
+        return None
+    return parsed
+
+
 def validate_semantic_review_closure(
     state: dict[str, Any],
     errors: list[str],
@@ -468,9 +996,9 @@ def validate_semantic_review_closure(
     selection = state.get("context_selection")
     selection_version = selection.get("version") if isinstance(selection, dict) else None
     if "semantic_review_closure" not in state:
-        if selection_version == "2":
+        if selection_version in {"2", "3"}:
             errors.append(
-                "work-state with `context_selection.version` `2` must contain "
+                f"work-state with `context_selection.version` `{selection_version}` must contain "
                 "`semantic_review_closure`"
             )
         return
@@ -478,9 +1006,9 @@ def validate_semantic_review_closure(
     if not isinstance(closure, dict):
         errors.append("work-state `semantic_review_closure` must be an object")
         return
-    if selection_version != "2":
+    if selection_version not in {"2", "3"}:
         errors.append(
-            "work-state `semantic_review_closure` requires `context_selection.version` `2`"
+            "work-state `semantic_review_closure` requires `context_selection.version` `2` or `3`"
         )
     validate_object_keys(
         closure,
@@ -2282,6 +2810,7 @@ def validate_state_snapshot_completeness(
         "approved_existing_actions",
         "action_execution",
         "semantic_review_closure",
+        "operation_metrics",
     }
     for field in sorted((set(snapshot) | set(current_state)) - active_state_owners):
         if (
@@ -2388,6 +2917,15 @@ def validate_state_snapshot_completeness(
         validate_semantic_closure_progression(
             snapshot_closure,
             current_closure,
+            label,
+            errors,
+        )
+    snapshot_metrics = snapshot.get("operation_metrics")
+    current_metrics = current_state.get("operation_metrics")
+    if isinstance(snapshot_metrics, dict) and isinstance(current_metrics, dict):
+        validate_operation_metrics_progression(
+            snapshot_metrics,
+            current_metrics,
             label,
             errors,
         )
@@ -2644,6 +3182,88 @@ def validate_semantic_closure_progression(
                 )
 
 
+def validate_operation_metrics_progression(
+    snapshot: dict[str, Any],
+    current: dict[str, Any],
+    label: str,
+    errors: list[str],
+) -> None:
+    if snapshot.get("version") != current.get("version"):
+        errors.append(f"{label} operation-state rollback changes operation metrics version")
+    for field in ("started_at",):
+        if snapshot.get(field) != current.get(field):
+            errors.append(
+                f"{label} operation-state rollback rewrites operation metrics `{field}`"
+            )
+    snapshot_status = snapshot.get("status")
+    current_status = current.get("status")
+    if snapshot_status == "finished" and current != snapshot:
+        errors.append(f"{label} operation-state rollback rewrites finished operation metrics")
+    elif snapshot_status == "active" and current_status not in {"active", "finished"}:
+        errors.append(f"{label} operation-state rollback reverses operation metrics status")
+
+    snapshot_spans = snapshot.get("spans")
+    current_spans = current.get("spans")
+    if not isinstance(snapshot_spans, list) or not isinstance(current_spans, list):
+        return
+    snapshot_ids = [
+        span.get("span_id") if isinstance(span, dict) else None
+        for span in snapshot_spans
+    ]
+    current_ids = [
+        span.get("span_id") if isinstance(span, dict) else None
+        for span in current_spans
+    ]
+    if current_ids[: len(snapshot_ids)] != snapshot_ids:
+        errors.append(
+            f"{label} operation-state rollback removes or reorders operation metric spans"
+        )
+    current_by_id = {
+        span.get("span_id"): span
+        for span in current_spans
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    immutable_fields = (
+        "span_id",
+        "kind",
+        "scope",
+        "attempt_id",
+        "started_at",
+        "rerun_of",
+        "rerun_reason",
+    )
+    for prior in snapshot_spans:
+        if not isinstance(prior, dict) or not isinstance(prior.get("span_id"), str):
+            continue
+        span_id = prior["span_id"]
+        span = current_by_id.get(span_id)
+        if span is None:
+            errors.append(
+                f"{label} operation-state rollback drops operation metric span `{span_id}`"
+            )
+            continue
+        for field in immutable_fields:
+            if span.get(field) != prior.get(field) or (field in span) != (field in prior):
+                errors.append(
+                    f"{label} operation-state rollback rewrites operation metric span "
+                    f"`{span_id}` field `{field}`"
+                )
+        if prior.get("status") == "finished":
+            if span != prior:
+                errors.append(
+                    f"{label} operation-state rollback rewrites finished operation metric "
+                    f"span `{span_id}`"
+                )
+        elif prior.get("status") == "active" and span.get("status") not in {
+            "active",
+            "finished",
+        }:
+            errors.append(
+                f"{label} operation-state rollback reverses operation metric span "
+                f"`{span_id}` status"
+            )
+
+
 def semantic_objects_by_id(value: Any, identity: str) -> dict[str, dict[str, Any]]:
     if not isinstance(value, list):
         return {}
@@ -2704,7 +3324,7 @@ def validate_snapshot_semantic_mutation_guard(
     if not active_paths:
         return
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or selection.get("version") != "2":
+    if not isinstance(selection, dict) or selection.get("version") not in {"2", "3"}:
         return
     snapshot_closure = snapshot.get("semantic_review_closure")
     current_closure = current_state.get("semantic_review_closure")
@@ -2857,8 +3477,8 @@ def validate_snapshot_selection_routing(
         )
     )
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or selection.get("version") not in {"1", "2"}:
-        local.append("snapshot context_selection must use version `1` or `2`")
+    if not isinstance(selection, dict) or selection.get("version") not in {"1", "2", "3"}:
+        local.append("snapshot context_selection must use version `1`, `2`, or `3`")
         candidates: Any = None
     else:
         candidates = selection.get("candidates")
@@ -2955,6 +3575,12 @@ def validate_snapshot_selection_routing(
         local,
         require_final=False,
         required_final_role=None,
+    )
+    validate_operation_metrics(
+        snapshot,
+        local,
+        mode="active",
+        validation_scope=None,
     )
     snapshot_artifacts = snapshot.get("operation_created_artifacts")
     if snapshot_artifacts is not None and not isinstance(snapshot_artifacts, list):

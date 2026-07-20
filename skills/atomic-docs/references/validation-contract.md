@@ -26,6 +26,8 @@ python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root
 python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase docs --expect-atom-key <key> [--expect-atom-key <key> ...]
 python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase docs --request-id <request-id>
 python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase baseline --request-id <request-id>
+python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase metrics-preterminal --request-id <request-id>
+python <plugin-root>/scripts/validate_atomic_docs.py --root <target-project-root> --phase metrics-final --request-id <request-id>
 ```
 
 Never search for or invoke `scripts/validate_atomic_docs.py` relative to the target project. The target project contains atomic-docs config and output, not the plugin validator.
@@ -36,14 +38,14 @@ Run selection phase after candidate evidence anchors and `write|merge|drop` deci
 
 ## Selection State Shape
 
-New operations use this version-2 machine shape. `domain` is the exact approved tentative domain path, while `candidate` is its user-language display description. Version 2 requires the semantic review closure field shown below; existing version-1 selection operations remain valid without it and are not migrated.
+New operations use version 3. It keeps the version-2 candidate and semantic closure shape below, changes only `context_selection.version` to `"3"`, and adds the sibling metrics contract from `operation-metrics.md`. Existing version-2 and version-1 operations remain valid without metrics and are not migrated.
 
 ```json
 {
   "accepted_scope": ["domain/path"],
   "source_commit_observed": "<40-or-64-character-git-hash>",
   "context_selection": {
-    "version": "2",
+    "version": "3",
     "candidates": [
       {
         "candidate_id": "domain-context",
@@ -97,17 +99,17 @@ These fields are optional for compatibility. Their absence keeps an existing ope
 
 `approved_existing_actions` is immutable. Each record has `action_id`, `action: delete|merge`, `source`, optional merge `target`, `reference_owners`, and `approved_action_fingerprint`. Every member has `atom_key`, managed-docs-relative `path`, and `preimage_sha256`; member paths are unique and stay below accepted domain paths. A delete omits `target`, while a merge requires it. Existing-action members and `operation_created_artifacts` must have disjoint paths and keys, so neither provenance contract can impersonate the other. Fingerprint the record without `approved_action_fingerprint`: sort `reference_owners` by path, serialize UTF-8 JSON with sorted keys and separators `,` and `:`, then SHA-256 the bytes.
 
-`action_execution` has exactly one record per approved action: matching `action_id` and fingerprint, `status: approved|applying|rolling_back|applied`, and one runtime member for every immutable member. Each member repeats `role: source|target|reference_owner`, `atom_key`, and `path`, then records `expected_state: present|absent`; present requires `last_operation_sha256`, absent forbids it. Every non-`approved` state retains each member `rollback_path` plus `state_rollback_path` and `state_rollback_sha256`. The complete state snapshot must retain core scope/revision/selection/queue/risk fields, exactly match every unrelated top-level owner's key presence and value, keep unique candidate/artifact/action identities and unchanged artifact provenance/action manifests/execution members, provide a restorable versioned routing contract, and obey the same status-specific allowed/forbidden keys for the pre-mutation `present` artifact or `approved` execution; a forbidden key is invalid even when its JSON value is `null`, and current-created snapshots also match `created_attempt_id`. A version-2 snapshot preserves a structurally valid pre-mutation semantic closure at the same contract version and no later basis revision than current state. When a guarded path has a current affected development PASS or final-gate PASS, the snapshot must already contain the open invalidation affecting that path and the stale prior PASS; unrelated risk PASSes remain current. A later resolved invalidation cannot retroactively authorize the mutation. Review PASS and invalidation records from the snapshot remain in current state; open records may expand only at a newer basis or resolve, while resolved records cannot be rewritten. Ordinary correction may make current closure progress beyond a valid open snapshot. Every member rollback matches its preimage. Runtime membership never expands the approved manifest.
+`action_execution` has exactly one record per approved action: matching `action_id` and fingerprint, `status: approved|applying|rolling_back|applied`, and one runtime member for every immutable member. Each member repeats `role: source|target|reference_owner`, `atom_key`, and `path`, then records `expected_state: present|absent`; present requires `last_operation_sha256`, absent forbids it. Every non-`approved` state retains each member `rollback_path` plus `state_rollback_path` and `state_rollback_sha256`. The complete state snapshot must retain core scope/revision/selection/queue/risk fields, exactly match every unrelated top-level owner's key presence and value, keep unique candidate/artifact/action identities and unchanged artifact provenance/action manifests/execution members, provide a restorable versioned routing contract, and obey the same status-specific allowed/forbidden keys for the pre-mutation `present` artifact or `approved` execution; a forbidden key is invalid even when its JSON value is `null`, and current-created snapshots also match `created_attempt_id`. A version-3 or version-2 snapshot preserves structurally valid pre-mutation closure at the same contract version and no later basis revision; version 3 also preserves append-only operation metrics under `operation-metrics.md`. When a guarded path has a current affected development PASS or final-gate PASS, the snapshot must already contain the open invalidation affecting that path and the stale prior PASS; unrelated risk PASSes remain current. A later resolved invalidation cannot retroactively authorize the mutation. Review PASS and invalidation records from the snapshot remain in current state; open records may expand only at a newer basis or resolve, while resolved records cannot be rewritten. Ordinary correction may make current closure progress beyond a valid open snapshot. Every member rollback matches its preimage. Runtime membership never expands the approved manifest.
 
 At `approved`, every member is present at its preimage hash. Every later present/absent expectation must match disk. At `applied`, delete requires source absence and every reference owner at its postimage; merge additionally requires the approved target identity and postimage. Both require no selected route or graph edge to the removed source. A mismatch, recreated source, unapproved incoming owner, bad rollback copy/snapshot, changed fingerprint, or accepted-scope violation is structural FAIL; the validator never repairs it. Only `--require-actions-final` requires every current-operation removal to be `removed` and every existing action to be `applied`.
 
 ## Semantic Review Closure Checks
 
-Selection version 2 requires `semantic_review_closure`; version 1 must omit it. Validate the closure version-1 shape and transitions owned by `semantic-review-closure.md`. Check unique IDs, controlled roles/status/triggers, positive revisions, safe affected-artifact paths, accepted affected bundles, role-specific review scopes, valid stale review references, unique required role/scope pairs, and status-specific fields.
+Selection versions 3 and 2 require `semantic_review_closure`; version 1 must omit it. Version 3 additionally requires metrics under `operation-metrics.md`. Validate the unchanged closure version-1 shape and transitions. Check unique IDs, controlled roles/status/triggers, positive revisions, safe affected-artifact paths, accepted affected bundles, role-specific review scopes, valid stale review references, unique required role/scope pairs, and status-specific fields.
 
 An open invalidation must reference `stale` prior PASSes and omit `resolved_revision`. A resolved invalidation must reference `superseded` prior PASSes and have a `current` exact-`PASS` record at or after `resolved_revision` for every required role/scope pair. The same stale PASS cannot belong to two invalidations. Final-gate review history is append-only; its pointer equals the latest history ID while that PASS remains current and is cleared only after the latest entry becomes stale. A request-bound final selection/docs/baseline check rejects open invalidations and remaining `stale` PASSes. A request-bound baseline additionally requires `final_gate.required: true` and a current `baseline`/`project-wide` PASS at the latest `basis_revision`.
 
-The field is forward-only through selection version 2. Existing version-1 or unversioned operations remain structurally compatible and gain no semantic-closure guarantee. The validator does not infer creation time or migrate old state.
+The closure is forward-only through selection versions 3 and 2. Existing version-1 or unversioned operations remain compatible and gain no closure guarantee. The validator does not infer creation time or migrate old state.
 
 ## Phase Checks
 
@@ -122,18 +124,18 @@ The field is forward-only through selection version 2. Existing version-1 or unv
 `selection` includes bootstrap checks and reads the explicit operation request under `.stageflow/atomic-docs/requests/<request-id>/`:
 
 - `inventory.md`, `evidence.md`, and `work-state.json` exist
-- selection version 1 or 2, a reachable `source_commit_observed`, non-empty accepted scope, and candidate/evidence structures are well formed without duplicate JSON keys
+- selection version 1, 2, or 3, a reachable `source_commit_observed`, non-empty accepted scope, and candidate/evidence structures are well formed without duplicate JSON keys
 - every candidate has a unique ID, exact accepted domain path, `write|merge|drop`, non-empty selection basis, and a locator/relevance evidence section
 - evidence revision, candidate headings, and locator rows use constrained plain Markdown: no tab characters, fenced or indented code (including inside blockquote or list containers), multiline inline code, or raw HTML-like syntax
 - `write` owns valid planned Atom keys, `merge` resolves to a `write` key, and `drop` creates no key
 - bundle expected keys equal the `write` keys and stay under each key owner's approved domain
 - every risk trigger resolves its candidate and output/merge target, names at least one trigger, and has a non-empty selected-contract basis
 - optional operation-created and approved-existing-action state satisfies the removal/merge contract, including accepted scope, exclusive source provenance, current hashes, immutable membership, runtime progress, member/state rollback copies, source/target identity, retained drop inventory, selected-route closure, and incoming graph closure
-- version 2 has mandatory forward-only semantic review closure satisfying its structure and transition checks; version 1 omits it
+- versions 3 and 2 have mandatory forward-only semantic review closure; version 3 also has mandatory operation metrics, while version 1 omits both
 
 Selection validation is the request-bound structural postcondition when a valid drop/delete leaves no managed Atom. If managed Atoms remain after an applied action, run unscoped docs validation too.
 
-Selection validation applies to version-1 and version-2 operations; newly created operations use version 2. An existing version-1 request keeps its original selection contract without semantic closure. An unversioned active request continues its recorded state, queue, and in-scope correction/review rules without invoking selection validation. Neither legacy form claims version-2 closure guarantees; scope expansion still follows its normal approval and Goal boundary. Bootstrap/docs/baseline remain compatible without selection fields when no request-bound closure check is requested.
+Selection validation applies to versions 1, 2, and 3; newly created operations use version 3. Version 2 keeps closure without metrics, version 1 keeps selection without closure, and an unversioned active request continues without selection validation. No legacy form gains newer guarantees, and scope expansion still follows its normal approval and Goal boundary. Request-bound final docs/baseline validation checks the applicable closure and metrics. A baseline profile or current baseline final-gate PASS requires baseline phase regardless of a recorded span's scope. Preterminal validation reruns current unscoped docs/closure and applicable baseline structure before root close; both terminal metrics phases reject later spans and exclude their own execution from spans.
 
 `docs` includes bootstrap checks. Without `--expect-atom-key`, it checks every `*-atom.md` under the managed docs root. With expected keys, it strictly checks those atoms and their references into the global identity/AID/graph index:
 
@@ -176,6 +178,7 @@ The validator must not decide:
 - whether user intent or a judgment label is correct
 - whether a global baseline is semantically authorized by reviewer PASS results
 - whether a recorded semantic invalidation found every affected artifact, bundle, or required reviewer
+- whether a correction is risk-neutral or a measured span/rerun was necessary or efficient
 - whether the final integration/baseline reviewer actually reconciled glossary, context, inventory, graph, root Gap ownership, and candidate economy correctly
 - whether a delete/merge action was actually approved by the user; the validator checks only the recorded immutable fingerprint and runtime state
 

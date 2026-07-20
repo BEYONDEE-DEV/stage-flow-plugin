@@ -124,7 +124,7 @@ For `initial-baseline`, verify the latest selection preflight matches the final 
 
 For `baseline-diff-refresh`, verify the complete old-to-new diff and ownership/graph/criteria impact expansion, impacted bundle reviews at the new commit, and the recorded rationale for carrying each unaffected bundle class from the trusted prior baseline. Do not claim carried reviews ran at the new commit.
 
-Do not repeat unchanged domain detail. If the current-corpus comparison exposes a local defect, a version-2 operation opens semantic invalidation when prior PASS basis changes; legacy operations use their recorded correction/review flow. Reopen the affected bundle and apply the rerun table below. Rerun its writer only when selected output or documented meaning changes, rerun the affected reviewers, resolve version-2 closure, and then rerun this reviewer against the corrected current corpus.
+Do not mechanically repeat every unchanged domain checklist or rediscover its source. If the current-corpus comparison exposes a local admission, depth, fidelity, or risk-routing defect, reopen that affected bundle; final review remains a safety net rather than ignoring a real defect because it is local. Apply the rerun table below, rerun the writer only when selected output or documented meaning changes, run only impact-selected reviewers, resolve closure, and then rerun this reviewer against the corrected current corpus.
 
 Use a cross-domain decision table only when ownership, contracts, or baseline carry-forward alternatives cannot be judged reliably in concise findings. The ordinary PASS report remains findings-only.
 
@@ -154,8 +154,12 @@ Only the project-wide form of this reviewer can approve global baseline creation
 
 Graph `reason` wording or inventory count alone does not trigger semantic review when relationship meaning and ownership are unchanged. If either changes meaning, route it as a shared-contract/ownership change.
 
+A reference stabilization, queue-time wording removal, or `generalize` correction is not automatically risk-neutral. Reuse an existing risk PASS only when the development reviewer independently confirms that every candidate-linked trigger, risky contract meaning, owner/route, adverse behavior, and evidence basis is unchanged. Record that concise finding basis with the correction. If any dimension changed or remains uncertain, include the risk reviewer. The correction mode alone never decides rerun scope.
+
+When that impact is knowable only from the corrected result, use the provisional development-gate transition in `semantic-review-closure.md`. A development FAIL or uncertainty expands the still-open invalidation before any corrected-basis PASS is recorded; it does not retroactively treat the old risk PASS as sufficient.
+
 - After a FAIL, revise the affected bundle and run only the checks selected above.
-- In version 2, a post-PASS meaning change first opens `semantic-review-closure.md`; record only affected PASSes as stale and do not reuse them until their required rerun succeeds at the corrected basis. Existing version-1 or unversioned operations use their recorded correction/review flow without adding closure state.
+- In version 3 or 2, a post-PASS meaning change first opens `semantic-review-closure.md`; record only affected PASSes as stale and do not reuse them until their required rerun succeeds at the corrected basis. Existing version-1 or unversioned operations use their recorded correction/review flow without adding closure state.
 - For versioned operations, when `remove` or `merge` changes candidate disposition, expected Atom keys, or risk references, rerun selection preflight before the writer or semantic rerun. Unversioned operations use their recorded correction/preflight contract.
 - Do not rerun unaffected PASS results or a complete domain review for evidence-only correction.
 - Do not start the next sequential bundle until every reviewer applicable to the active bundle PASSes or a user decision is required.
