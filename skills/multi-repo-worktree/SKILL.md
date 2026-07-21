@@ -20,7 +20,7 @@ Support only these keywords:
 - `help`: explain the workflow, inputs, and safety gates.
 - `status`: inspect repositories, worktrees, branches, slots, and blockers.
 - `create`: create a bundle or safely reuse a released fixed slot.
-- `submit`: push committed task branches, create or update regular PRs, and release the slot.
+- `submit`: commit approved intended changes when needed, push task branches, create or update regular PRs, and release the slot.
 - `pull`: fast-forward confirmed original branches from their remotes.
 - `sync`: merge confirmed remote source branches into development worktrees.
 
@@ -55,7 +55,7 @@ create -> develop and validate -> submit -> user merges on GitHub
 ```
 
 - `create` owns new bundle creation, safe released-slot reuse, and explicit recovery of an existing PR branch.
-- `submit` owns push, Korean PR title/body, minimal branch/PR manifest identity, and release after complete success.
+- `submit` owns conditional commit, push, Korean PR title/body, minimal branch/PR manifest identity, and release after complete success.
 - GitHub PR merge is manual and outside this skill. Never enable auto-merge or run a PR merge command.
 - `pull` runs only in confirmed original/source worktrees.
 - `sync` runs only in development worktrees and never updates an original worktree.
@@ -75,11 +75,11 @@ The workspace-root `.stageflow-worktrees/slots.json` is authoritative for fixed-
 - **help**: Explain the six keywords and the normal flow. Do not inspect unless the user requests an operation.
 - **status**: Keep output read-only. For an identifiable bundle, show `대상 묶음`, `원본 브랜치`, and `기준 폴더` once, then one repo per line as `<repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>`. Do not use a Markdown table.
 - **create**: Confirm every source branch, task branch, target path, and whether the operation creates an empty-path worktree, switches an existing released clean slot to a new branch, or explicitly recovers a manifest-recorded PR branch. A normal reuse clears prior repository identity; explicit correction recovery preserves confirmed branch/PR identity while claiming the slot. Claim before the first approved add/switch, keep partial failures active for recovery, and never overwrite or steal an active, dirty, ambiguous, or differently owned slot.
-- **submit**: Require committed intended changes and user-confirmed validation. Show exact pushes and Korean PR titles/bodies before approval. Create or update regular non-Draft PRs, record only repository branch/PR identity, and release only after every repo succeeds. Never enable auto-merge or merge a PR.
+- **submit**: Inspect staged, unstaged, and untracked changes. If a repo is dirty, require every changed path to be an intended submission change, show the exact paths and commit message, then stage only those approved paths and commit before any push. Skip the commit for clean repos. Complete the local commit phase for every repo, re-inspect for clean worktrees and unchanged scope, then show and execute exact pushes and Korean PR titles/bodies. If a commit or hook fails or leaves new dirt, keep the slot active and do not start remote writes. Create or update regular non-Draft PRs, record only repository branch/PR identity, and release only after every repo succeeds. Never amend, create an empty commit, enable auto-merge, or merge a PR.
 - **pull**: Run only where each confirmed original/source branch is checked out. Preflight all roots, fetch each confirmed remote, pin each `origin/<source>` SHA, reject divergence, then fast-forward each source branch to its pinned SHA. Do not use configuration-dependent plain `git pull`, create merge commits, rebase, or touch development worktrees.
 - **sync**: Run only in the requested development worktree bundle. Require clean derived worktrees, fetch each confirmed remote, pin each `origin/<source>` SHA, then merge it into the current derived branch. Fetch may update shared remote-tracking refs, but never switch or update an original worktree's branch, HEAD, index, or files.
 
-Run complete-batch preflight before the first write. Block on ambiguous mappings, unexpected branches, dirty operation-relevant worktrees, detached required worktrees, in-progress Git operations, unsafe locked/prunable paths, or missing or ambiguous remotes. Process one repository at a time and stop on the first failure or conflict.
+Run complete-batch preflight before the first write. Block on ambiguous mappings, unexpected branches, dirty operation-relevant worktrees except an approved `submit` commit candidate, detached required worktrees, in-progress Git operations, unsafe locked/prunable paths, or missing or ambiguous remotes. Process one repository at a time and stop on the first failure or conflict.
 
 Multi-repo writes are not atomic. Report `completed`, `failed`, and `untouched` repositories with overall `recovery-required`; never claim rollback or undo successful remote work automatically.
 

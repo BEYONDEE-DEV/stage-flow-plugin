@@ -126,12 +126,20 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertNotIn("scripts/inspect_pr_submission.py", skill)
 
-    def test_submit_stops_at_regular_pr_and_releases_after_complete_success(self) -> None:
+    def test_submit_commits_when_needed_then_stops_at_regular_pr(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
 
         for phrase in [
             "Write the PR title and explanatory prose in Korean",
+            "Inspect every repo's staged, unstaged, and untracked paths",
+            "Stage only the approved literal paths and commit",
+            'add -A -- "<approved-path-1>" "<approved-path-2>"',
+            'commit -m "<approved-commit-message>"',
+            "Skip the commit for a repo that is already clean",
+            "Complete the local commit phase for every repo before the first push",
+            "a commit diff matching the approved content",
+            "If a commit fails, a hook changes files, the committed diff differs, or the scope changes",
             "Record only branch and PR identity",
             "After every repo succeeds, release the slot",
             "partial push, PR, or record failure keeps the slot active",
@@ -140,10 +148,15 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, reference)
 
-        self.assertIn("Show exact pushes and Korean PR titles/bodies before approval", skill)
+        self.assertIn("show and execute exact pushes and Korean PR titles/bodies", skill)
+        self.assertIn("commit approved intended changes when needed", skill)
+        self.assertIn("stage only those approved paths and commit before any push", skill)
+        self.assertIn("Skip the commit for clean repos", skill)
         self.assertIn("record only repository branch/PR identity", skill)
-        self.assertIn("Never enable auto-merge or merge a PR", skill)
+        self.assertIn("Never enable auto-merge or run a PR merge command", skill)
+        self.assertIn("Never amend, create an empty commit, enable auto-merge, or merge a PR", skill)
         self.assertNotIn("submitted SHA", skill)
+        self.assertNotIn('git -C "<development-worktree>" add .', reference)
 
     def test_create_has_actionable_empty_reuse_and_correction_flows(self) -> None:
         skill = read(SKILL)

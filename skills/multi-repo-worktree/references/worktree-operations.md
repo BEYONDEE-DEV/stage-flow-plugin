@@ -100,7 +100,7 @@ Before any write, block the whole plan on:
 - ambiguous or inferred-only branch mappings
 - unexpected current branches or detached required worktrees
 - an in-progress merge, rebase, cherry-pick, revert, or bisect
-- operation-relevant dirty state
+- operation-relevant dirty state, except paths explicitly approved for a `submit` commit
 - unsafe locked/prunable paths or missing required paths
 - branches checked out in unexpected worktrees
 - missing or ambiguous remotes/upstreams required by the operation
@@ -159,9 +159,21 @@ Claim the manifest inside the approved batch after all repos and paths pass pref
 
 ## Submit
 
-Only the exact active development owner may submit its committed task branches.
+Only the exact active development owner may submit its task branches. `submit` may first commit intended working-tree changes under the rules below.
 
-Preflight the complete batch. Require user-confirmed validation, explicit push remote/refspec, and explicit PR base/head. Compose the exact title and body before the write plan. Write the PR title and explanatory prose in Korean while preserving literal identifiers, paths, commands, URLs, quoted text, and repository-required fixed template text. For an existing PR, show any title/body rewrite instead of silently replacing user-authored content.
+Preflight the complete batch. Inspect every repo's staged, unstaged, and untracked paths. A dirty repo is eligible only when every changed path is clearly part of the intended submission and the user-confirmed validation covers that content. Any unrelated, generated, secret-bearing, or ambiguous change blocks the whole batch before staging. Do not stage ignored paths; an intended change that is ignored requires a new explicit plan rather than silent force-add. Existing staged changes must also be confirmed as intended; do not silently unstage or include them.
+
+For each eligible dirty repo, show the exact approved path list and commit message in the write plan. Use a user-provided message when available; otherwise propose a concise message for approval. Stage only the approved literal paths and commit:
+
+```bash
+git -C "<development-worktree>" add -A -- "<approved-path-1>" "<approved-path-2>"
+git -C "<development-worktree>" diff --cached --check
+git -C "<development-worktree>" commit -m "<approved-commit-message>"
+```
+
+Never use broad `git add .`, amend an existing commit, create an empty commit, stash, reset, clean, force-add ignored content, or bypass hooks. Skip the commit for a repo that is already clean. Complete the local commit phase for every repo before the first push. Then re-inspect every repo: require the expected task branch, the planned commit at HEAD where a commit was needed, a commit diff matching the approved content, and a clean index and worktree. If a commit fails, a hook changes files, the committed diff differs, or the scope changes, stop before remote writes, keep the slot active, and report completed local commits, the failed repo, untouched repos, and `recovery-required`. Do not undo successful local commits automatically.
+
+After the local commit phase passes, require explicit push remote/refspec and explicit PR base/head. Compose the exact title and body before the write plan. Write the PR title and explanatory prose in Korean while preserving literal identifiers, paths, commands, URLs, quoted text, and repository-required fixed template text. For an existing PR, show any title/body rewrite instead of silently replacing user-authored content.
 
 For each repo:
 
@@ -169,7 +181,7 @@ For each repo:
 2. Create or update a regular non-Draft PR with the approved Korean title/body.
 3. Record only branch and PR identity in the manifest.
 
-After every repo succeeds, release the slot as the exact owner. A partial push, PR, or record failure keeps the slot active and reports completed/failed/untouched repos as `recovery-required`.
+After every repo succeeds, release the slot as the exact owner. A partial push, PR, or record failure keeps the slot active and reports completed/failed/untouched repos as `recovery-required`. Local commits created earlier remain intact for an approved retry.
 
 Do not pass `--draft`, run `gh pr ready`, create submitted-SHA comments, enable auto-merge, or run a remote PR merge command. The user merges on GitHub outside this skill.
 
