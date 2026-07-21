@@ -220,6 +220,300 @@ class AtomicDocsValidatorTests(unittest.TestCase):
     def write_selection_data(self, request_id: str, state: dict[str, object]) -> None:
         self.selection_state_path(request_id).write_text(json.dumps(state), encoding="utf-8")
 
+    def write_v4_owner_readiness_state(
+        self,
+        request_id: str = "20260720-170000-owner-readiness-v4",
+    ) -> tuple[str, dict[str, object]]:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "access-policy",
+                    "domain": "accounts",
+                    "candidate": "공유 접근 정책",
+                    "disposition": "write",
+                    "selection_basis": "여러 도메인이 소비하는 권한 계약이다.",
+                    "candidate_atom_keys": ["access-policy"],
+                },
+                {
+                    "candidate_id": "program-access",
+                    "domain": "programs",
+                    "candidate": "프로그램 접근 소비자",
+                    "disposition": "write",
+                    "selection_basis": "공유 접근 정책을 직접 소비한다.",
+                    "candidate_atom_keys": ["program-access"],
+                },
+            ],
+            bundle_keys=["access-policy"],
+            risk_triggers=[],
+            request_id=request_id,
+            accepted_scope=["accounts", "programs"],
+            bundle_domain="accounts",
+            selection_version="4",
+        )
+        state = self.read_selection_state(request_id)
+        state.update(
+            {
+                "bundle_queue": [
+                    {
+                        "bundle_id": "accounts-owner",
+                        "domain": "accounts",
+                        "expected_atom_keys": ["access-policy"],
+                        "depends_on_contract_ids": [],
+                    },
+                    {
+                        "bundle_id": "programs-consumer",
+                        "domain": "programs",
+                        "expected_atom_keys": ["program-access"],
+                        "depends_on_contract_ids": ["access-policy-contract"],
+                    },
+                ],
+                "risk_triggers": [
+                    {
+                        "candidate_id": "access-policy",
+                        "atom_key": "access-policy",
+                        "triggers": ["shared permission contract"],
+                        "basis": "프로그램 도메인이 직접 소비한다.",
+                        "route": "shared-contract",
+                        "shared_contract_id": "access-policy-contract",
+                    },
+                    {
+                        "candidate_id": "program-access",
+                        "atom_key": "program-access",
+                        "triggers": ["shared permission consumer"],
+                        "basis": "공유 접근 정책을 직접 소비한다.",
+                        "route": "shared-contract",
+                        "shared_contract_id": "access-policy-contract",
+                    },
+                    {
+                        "candidate_id": "program-access",
+                        "atom_key": "program-access",
+                        "triggers": ["local authorization branch"],
+                        "basis": "소비자 내부의 추가 분기는 로컬 검토로 충분하다.",
+                        "route": "local",
+                    },
+                ],
+                "shared_contracts": [
+                    {
+                        "contract_id": "access-policy-contract",
+                        "kind": "permission",
+                        "owner_candidate_id": "access-policy",
+                        "owner_atom_key": "access-policy",
+                        "direct_consumer_candidate_ids": ["program-access"],
+                        "evidence_routes": ["source.txt:1"],
+                        "owner_bundle_id": "accounts-owner",
+                        "consumer_bundle_ids": ["programs-consumer"],
+                    }
+                ],
+                "persistent_agent_ids": {
+                    "writer": "writer-1",
+                    "reviewer": "reviewer-1",
+                },
+                "selection_readiness": {
+                    "version": "1",
+                    "basis_revision": 1,
+                    "reviews": [
+                        {
+                            "review_id": "selection-readiness-1",
+                            "reviewer_role": "development",
+                            "reviewer_agent_id": "reviewer-1",
+                            "basis_revision": 1,
+                            "verdict": "PASS",
+                            "status": "current",
+                        }
+                    ],
+                },
+                "late_shared_contract_discoveries": [],
+                "semantic_fail_diagnostics": [],
+                "selection_retirements": {
+                    "version": "1",
+                    "retired_bundles": [],
+                    "retired_contracts": [],
+                },
+                "dispatch_control": {
+                    "version": "1",
+                    "status": "ready",
+                    "episodes": [],
+                },
+                "semantic_review_closure": {
+                    "version": "1",
+                    "basis_revision": 1,
+                    "review_passes": [],
+                    "invalidations": [],
+                    "final_gate": {"required": False, "review_history": []},
+                },
+                "operation_metrics": {
+                    "version": "1",
+                    "status": "active",
+                    "started_at": "2026-07-20T08:00:00Z",
+                    "spans": [
+                        {
+                            "span_id": "selection-readiness-1",
+                            "kind": "development-review",
+                            "scope": "selection-readiness",
+                            "attempt_id": "readiness-attempt-1",
+                            "status": "finished",
+                            "started_at": "2026-07-20T08:00:01Z",
+                            "finished_at": "2026-07-20T08:00:02Z",
+                            "outcome": "PASS",
+                        }
+                    ],
+                },
+            }
+        )
+        self.write_selection_data(request_id, state)
+        return request_id, state
+
+    def write_v4_final_state(
+        self,
+        request_id: str,
+        *,
+        validation_scope: str = "docs",
+        terminal_stage: str = "active-validation",
+    ) -> tuple[str, dict[str, object]]:
+        request_id, state = self.write_v4_owner_readiness_state(request_id)
+        self.write_atom("accounts/access-policy-atom.md", "access-policy")
+        self.write_atom("programs/program-access-atom.md", "program-access")
+        spans = state["operation_metrics"]["spans"]
+        spans.extend(
+            [
+                {
+                    "span_id": "accounts-bundle-1",
+                    "kind": "bundle",
+                    "scope": "accounts",
+                    "attempt_id": "accounts-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:03Z",
+                    "finished_at": "2026-07-20T08:00:04Z",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "accounts-writer-1",
+                    "kind": "writer",
+                    "scope": "accounts",
+                    "attempt_id": "accounts-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:05Z",
+                    "finished_at": "2026-07-20T08:00:06Z",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "accounts-risk-1",
+                    "kind": "risk-review",
+                    "scope": "accounts-owner",
+                    "attempt_id": "accounts-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:07Z",
+                    "finished_at": "2026-07-20T08:00:08Z",
+                    "outcome": "PASS",
+                },
+                {
+                    "span_id": "programs-bundle-1",
+                    "kind": "bundle",
+                    "scope": "programs",
+                    "attempt_id": "programs-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:09Z",
+                    "finished_at": "2026-07-20T08:00:10Z",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "programs-writer-1",
+                    "kind": "writer",
+                    "scope": "programs",
+                    "attempt_id": "programs-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:11Z",
+                    "finished_at": "2026-07-20T08:00:12Z",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "programs-risk-1",
+                    "kind": "risk-review",
+                    "scope": "programs-consumer",
+                    "attempt_id": "programs-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:13Z",
+                    "finished_at": "2026-07-20T08:00:14Z",
+                    "outcome": "PASS",
+                },
+            ]
+        )
+        if validation_scope == "baseline":
+            state["operation_profile"] = "initial-baseline"
+            state["semantic_review_closure"] = {
+                "version": "1",
+                "basis_revision": 1,
+                "review_passes": [
+                    {
+                        "review_id": "baseline-review-1",
+                        "reviewer_role": "baseline",
+                        "scope": "project-wide",
+                        "basis_revision": 1,
+                        "verdict": "PASS",
+                        "status": "current",
+                    }
+                ],
+                "invalidations": [],
+                "final_gate": {
+                    "required": True,
+                    "review_id": "baseline-review-1",
+                    "review_history": ["baseline-review-1"],
+                },
+            }
+            spans.append(
+                {
+                    "span_id": "baseline-review-1",
+                    "kind": "baseline-review",
+                    "scope": "project-wide",
+                    "attempt_id": "baseline-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:15Z",
+                    "finished_at": "2026-07-20T08:00:16Z",
+                    "outcome": "PASS",
+                }
+            )
+            self.write_baseline()
+        validation_start = (
+            "2026-07-20T08:00:17Z"
+            if validation_scope == "baseline"
+            else "2026-07-20T08:00:15Z"
+        )
+        validation_finish = (
+            "2026-07-20T08:00:18Z"
+            if validation_scope == "baseline"
+            else "2026-07-20T08:00:16Z"
+        )
+        validation_span = {
+            "span_id": f"{validation_scope}-final-1",
+            "kind": "validation",
+            "scope": validation_scope,
+            "attempt_id": f"{validation_scope}-final-attempt-1",
+            "status": "active",
+            "started_at": validation_start,
+        }
+        if terminal_stage != "active-validation":
+            validation_span.update(
+                {
+                    "status": "finished",
+                    "finished_at": validation_finish,
+                    "outcome": "PASS",
+                }
+            )
+        spans.append(validation_span)
+        if terminal_stage == "finished":
+            state["operation_metrics"].update(
+                {
+                    "status": "finished",
+                    "finished_at": (
+                        "2026-07-20T08:00:19Z"
+                        if validation_scope == "baseline"
+                        else "2026-07-20T08:00:17Z"
+                    ),
+                }
+            )
+        self.write_selection_data(request_id, state)
+        return request_id, state
+
     def write_state_rollback(
         self,
         request_id: str,
@@ -2274,7 +2568,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(1, result.returncode)
         self.assertIn(
-            "`semantic_review_closure` requires `context_selection.version` `2` or `3`",
+            "`semantic_review_closure` requires `context_selection.version` `2`, `3`, or `4`",
             result.stdout,
         )
 
@@ -2339,7 +2633,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(1, result.returncode)
         self.assertIn(
-            "`operation_metrics` requires `context_selection.version` `3`",
+            "`operation_metrics` requires `context_selection.version` `3` or `4`",
             result.stdout,
         )
 
@@ -2348,7 +2642,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(1, result.returncode)
         self.assertIn(
-            "`operation_metrics` requires `context_selection.version` `3`",
+            "`operation_metrics` requires `context_selection.version` `3` or `4`",
             result.stdout,
         )
 
@@ -2356,6 +2650,1194 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         self.write_selection_data(request_id, state)
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_selection_version_four_validates_bounded_contract_routing_and_readiness(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state()
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        cases = []
+        invalid = copy.deepcopy(state)
+        invalid["risk_triggers"][2]["shared_contract_id"] = "access-policy-contract"
+        cases.append((invalid, "local route must omit"))
+
+        invalid = copy.deepcopy(state)
+        invalid["risk_triggers"].pop(1)
+        cases.append((invalid, "is missing its shared risk route"))
+
+        invalid = copy.deepcopy(state)
+        invalid["shared_contracts"][0]["owner_candidate_id"] = "unknown-owner"
+        cases.append((invalid, "owner candidate does not resolve"))
+
+        invalid = copy.deepcopy(state)
+        invalid["shared_contracts"][0]["evidence_routes"] = []
+        cases.append((invalid, "at least one evidence route"))
+
+        invalid = copy.deepcopy(state)
+        invalid["bundle_queue"].reverse()
+        cases.append((invalid, "owner bundle must precede consumer bundle"))
+
+        invalid = copy.deepcopy(state)
+        invalid["selection_readiness"]["reviews"][0]["reviewer_agent_id"] = (
+            "new-reviewer"
+        )
+        cases.append((invalid, "must reuse `persistent_agent_ids.reviewer`"))
+
+        invalid = copy.deepcopy(state)
+        del invalid["selection_retirements"]
+        cases.append((invalid, "`selection_retirements` must be an object"))
+
+        invalid = copy.deepcopy(state)
+        invalid["selection_readiness"]["basis_revision"] = 2
+        invalid["selection_readiness"]["reviews"][0]["status"] = "stale"
+        invalid["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        invalid["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:05Z",
+                "finished_at": "2026-07-20T08:00:06Z",
+                "outcome": "PASS",
+            }
+        )
+        cases.append((invalid, "must not retain stale readiness PASSes"))
+
+        invalid = copy.deepcopy(state)
+        invalid["operation_metrics"]["spans"].insert(
+            0,
+            {
+                "span_id": "programs-writer-1",
+                "kind": "writer",
+                "scope": "programs",
+                "attempt_id": "programs-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:00Z",
+                "finished_at": "2026-07-20T08:00:01Z",
+                "outcome": "completed",
+            },
+        )
+        cases.append((invalid, "must precede the first writer span"))
+
+        invalid = copy.deepcopy(state)
+        invalid["operation_metrics"]["spans"].append(
+            {
+                "span_id": "programs-writer-before-readiness",
+                "kind": "writer",
+                "scope": "programs",
+                "attempt_id": "programs-attempt-before-readiness",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:01Z",
+                "finished_at": "2026-07-20T08:00:01.500Z",
+                "outcome": "completed",
+            }
+        )
+        cases.append((invalid, "must finish before the first writer starts"))
+
+        for index, (invalid_state, expected) in enumerate(cases, start=1):
+            with self.subTest(case=index):
+                self.write_selection_data(request_id, invalid_state)
+                result = self.run_validator("selection", request_id=request_id)
+                self.assertEqual(1, result.returncode)
+                self.assertIn(expected, result.stdout)
+
+    def test_version_four_final_phases_revalidate_current_owner_readiness(self) -> None:
+        phase_cases = [
+            ("docs", "docs", "active-validation"),
+            ("baseline", "baseline", "active-validation"),
+            ("metrics-preterminal", "docs", "preterminal"),
+            ("metrics-final", "docs", "finished"),
+        ]
+        for phase, validation_scope, terminal_stage in phase_cases:
+            with self.subTest(phase=phase, state="valid"):
+                request_id, valid = self.write_v4_final_state(
+                    f"20260720-v4-final-{phase}",
+                    validation_scope=validation_scope,
+                    terminal_stage=terminal_stage,
+                )
+                result = self.run_validator(phase, request_id=request_id)
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+            invalid_cases: list[tuple[str, dict[str, object], str]] = []
+            missing_readiness = copy.deepcopy(valid)
+            del missing_readiness["selection_readiness"]
+            invalid_cases.append(
+                (
+                    "missing-readiness",
+                    missing_readiness,
+                    "`selection_readiness` must be an object",
+                )
+            )
+
+            stale_readiness = copy.deepcopy(valid)
+            stale_readiness["selection_readiness"]["basis_revision"] = 2
+            stale_readiness["selection_readiness"]["reviews"][0]["status"] = "stale"
+            invalid_cases.append(
+                (
+                    "stale-readiness",
+                    stale_readiness,
+                    "ready dispatch requires exactly one current readiness PASS",
+                )
+            )
+
+            open_pause = copy.deepcopy(valid)
+            open_pause["selection_readiness"]["basis_revision"] = 2
+            open_pause["selection_readiness"]["reviews"][0]["status"] = "stale"
+            open_pause["late_shared_contract_discoveries"] = [
+                {
+                    "discovery_id": "late-before-semantic-pass",
+                    "contract_id": "access-policy-contract",
+                    "stage": "post-readiness",
+                    "basis_revision": 2,
+                    "affected_bundle_ids": ["accounts-owner"],
+                    "status": "open",
+                    "stale_readiness_review_id": "selection-readiness-1",
+                    "semantic_invalidation_ids": [],
+                }
+            ]
+            open_pause["dispatch_control"] = {
+                "version": "1",
+                "status": "paused",
+                "episodes": [
+                    {
+                        "episode_id": "late-before-semantic-pause",
+                        "cause": "late-shared-contract",
+                        "trigger_ids": ["late-before-semantic-pass"],
+                        "pause_after_span_id": next(
+                            span["span_id"]
+                            for span in reversed(
+                                open_pause["operation_metrics"]["spans"]
+                            )
+                            if span["status"] == "finished"
+                        ),
+                        "paused_at": next(
+                            span["finished_at"]
+                            for span in reversed(
+                                open_pause["operation_metrics"]["spans"]
+                            )
+                            if span["status"] == "finished"
+                        ),
+                        "basis_revision": 2,
+                        "status": "open",
+                    }
+                ],
+            }
+            invalid_cases.append(
+                (
+                    "open-pause",
+                    open_pause,
+                    "requires ready dispatch with no open pause",
+                )
+            )
+
+            broken_route = copy.deepcopy(valid)
+            broken_route["risk_triggers"][0]["shared_contract_id"] = (
+                "missing-contract"
+            )
+            invalid_cases.append(
+                (
+                    "broken-route",
+                    broken_route,
+                    "shared_contract_id `missing-contract` does not resolve",
+                )
+            )
+
+            for name, invalid, expected in invalid_cases:
+                with self.subTest(phase=phase, state=name):
+                    self.write_selection_data(request_id, invalid)
+                    result = self.run_validator(phase, request_id=request_id)
+                    self.assertEqual(1, result.returncode)
+                    self.assertIn(expected, result.stdout)
+
+    def test_selection_version_four_reports_malformed_nested_state_without_traceback(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170004-v4-malformed"
+        )
+        mutations = [
+            lambda value: value["bundle_queue"][0].update(
+                {"expected_atom_keys": None}
+            ),
+            lambda value: value["bundle_queue"][0].update(
+                {"depends_on_contract_ids": None}
+            ),
+            lambda value: value["shared_contracts"][0].update(
+                {"direct_consumer_candidate_ids": None}
+            ),
+            lambda value: value["shared_contracts"][0].update(
+                {"consumer_bundle_ids": None}
+            ),
+            lambda value: value["shared_contracts"][0].update(
+                {"consumer_bundle_ids": [{}]}
+            ),
+            lambda value: (
+                value["shared_contracts"][0].update({"owner_bundle_id": {}}),
+                value["late_shared_contract_discoveries"].append(
+                    {
+                        "discovery_id": "malformed-owner-discovery",
+                        "contract_id": "access-policy-contract",
+                        "stage": "pre-readiness",
+                        "basis_revision": 1,
+                        "affected_bundle_ids": ["accounts-owner"],
+                        "status": "resolved",
+                    }
+                ),
+            ),
+            lambda value: (
+                value["bundle_queue"][0].update({"domain": {}}),
+                value["late_shared_contract_discoveries"].append(
+                    {
+                        "discovery_id": "malformed-domain-discovery",
+                        "contract_id": "access-policy-contract",
+                        "stage": "post-readiness",
+                        "basis_revision": 1,
+                        "affected_bundle_ids": ["accounts-owner"],
+                        "status": "open",
+                        "stale_readiness_review_id": "selection-readiness-1",
+                        "semantic_invalidation_ids": ["missing-invalidation"],
+                    }
+                ),
+            ),
+            lambda value: value["operation_metrics"].update({"spans": None}),
+            lambda value: value.update({"selection_retirements": None}),
+            lambda value: value["selection_retirements"].update(
+                {"retired_bundles": [{"bundle_id": {}}]}
+            ),
+            lambda value: value["dispatch_control"].update(
+                {
+                    "status": "paused",
+                    "episodes": [
+                        {
+                            "episode_id": "malformed-pause",
+                            "cause": "shared-root-semantic-fail",
+                            "trigger_ids": None,
+                            "basis_revision": 1,
+                            "status": "open",
+                        }
+                    ],
+                }
+            ),
+        ]
+        for index, mutate in enumerate(mutations, start=1):
+            with self.subTest(case=index):
+                malformed = copy.deepcopy(state)
+                mutate(malformed)
+                self.write_selection_data(request_id, malformed)
+                result = self.run_validator("selection", request_id=request_id)
+                self.assertEqual(1, result.returncode)
+                self.assertNotIn("Traceback", result.stderr)
+
+    def test_selection_version_four_common_root_pause_and_unrelated_fail_continue(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170001-v4-diagnostics"
+        )
+        state["operation_metrics"]["spans"].extend(
+            [
+                {
+                    "span_id": "accounts-risk-fail-1",
+                    "kind": "risk-review",
+                    "scope": "accounts-owner",
+                    "attempt_id": "accounts-risk-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:03Z",
+                    "finished_at": "2026-07-20T08:00:04Z",
+                    "outcome": "FAIL",
+                },
+                {
+                    "span_id": "programs-risk-fail-1",
+                    "kind": "risk-review",
+                    "scope": "programs-consumer",
+                    "attempt_id": "programs-risk-attempt-1",
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:05Z",
+                    "finished_at": "2026-07-20T08:00:06Z",
+                    "outcome": "FAIL",
+                },
+            ]
+        )
+        state["semantic_fail_diagnostics"] = [
+            {
+                "diagnostic_id": "accounts-owner-evidence-fail",
+                "review_span_id": "accounts-risk-fail-1",
+                "first_attempt": True,
+                "root_category": "owner-evidence",
+                "candidate_ids": ["access-policy"],
+                "contract_ids": ["access-policy-contract"],
+                "basis_revision": 1,
+            },
+            {
+                "diagnostic_id": "programs-owner-evidence-fail",
+                "review_span_id": "programs-risk-fail-1",
+                "first_attempt": True,
+                "root_category": "owner-evidence",
+                "candidate_ids": ["program-access"],
+                "contract_ids": ["access-policy-contract"],
+                "basis_revision": 1,
+            },
+        ]
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("require a dispatch pause/diagnosis episode", result.stdout)
+
+        legacy_domain_review_scope = copy.deepcopy(state)
+        legacy_domain_review_scope["operation_metrics"]["spans"][1]["scope"] = (
+            "accounts"
+        )
+        self.write_selection_data(request_id, legacy_domain_review_scope)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "v4 risk-review scope must be an active/retired stable bundle_id",
+            result.stdout,
+        )
+
+        unknown_review_scope = copy.deepcopy(state)
+        unknown_review_scope["operation_metrics"]["spans"][2]["scope"] = (
+            "unknown-bundle"
+        )
+        self.write_selection_data(request_id, unknown_review_scope)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "v4 risk-review scope must be an active/retired stable bundle_id",
+            result.stdout,
+        )
+
+        missing_diagnostic = copy.deepcopy(state)
+        missing_diagnostic["semantic_fail_diagnostics"].pop()
+        self.write_selection_data(request_id, missing_diagnostic)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("needs a bounded diagnostic", result.stdout)
+
+        duplicate_diagnostic = copy.deepcopy(state)
+        duplicate = copy.deepcopy(duplicate_diagnostic["semantic_fail_diagnostics"][1])
+        duplicate["diagnostic_id"] = "programs-owner-evidence-duplicate"
+        duplicate_diagnostic["semantic_fail_diagnostics"].append(duplicate)
+        self.write_selection_data(request_id, duplicate_diagnostic)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is diagnosed more than once", result.stdout)
+
+        trailing_unrelated = copy.deepcopy(state)
+        trailing_unrelated["operation_metrics"]["spans"].append(
+            {
+                "span_id": "programs-development-fail-1",
+                "kind": "development-review",
+                "scope": "programs-consumer",
+                "attempt_id": "programs-development-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:07Z",
+                "finished_at": "2026-07-20T08:00:08Z",
+                "outcome": "FAIL",
+            }
+        )
+        trailing_unrelated["semantic_fail_diagnostics"].append(
+            {
+                "diagnostic_id": "programs-fidelity-fail",
+                "review_span_id": "programs-development-fail-1",
+                "first_attempt": True,
+                "root_category": "selected-claim-fidelity",
+                "candidate_ids": ["program-access"],
+                "contract_ids": [],
+                "basis_revision": 1,
+            }
+        )
+        self.write_selection_data(request_id, trailing_unrelated)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("require a dispatch pause/diagnosis episode", result.stdout)
+
+        legacy_development_scope = copy.deepcopy(trailing_unrelated)
+        legacy_development_scope["operation_metrics"]["spans"][-1]["scope"] = (
+            "programs"
+        )
+        self.write_selection_data(request_id, legacy_development_scope)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "v4 development-review scope must be `selection-readiness` or an "
+            "active/retired stable bundle_id",
+            result.stdout,
+        )
+
+        state["dispatch_control"] = {
+            "version": "1",
+            "status": "paused",
+            "episodes": [
+                {
+                    "episode_id": "owner-evidence-pause-1",
+                    "cause": "shared-root-semantic-fail",
+                    "trigger_ids": [
+                        "accounts-owner-evidence-fail",
+                        "programs-owner-evidence-fail",
+                    ],
+                    "basis_revision": 1,
+                    "status": "open",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("requires ready dispatch with no open pause", result.stdout)
+
+        dispatch_after_open_pause = copy.deepcopy(state)
+        dispatch_after_open_pause["operation_metrics"]["spans"].append(
+            {
+                "span_id": "accounts-bundle-after-pause",
+                "kind": "bundle",
+                "scope": "accounts",
+                "attempt_id": "accounts-after-pause",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:07Z",
+                "finished_at": "2026-07-20T08:00:08Z",
+                "outcome": "completed",
+            }
+        )
+        self.write_selection_data(request_id, dispatch_after_open_pause)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must not dispatch bundle/writer work", result.stdout)
+
+        cross_basis = copy.deepcopy(state)
+        cross_basis["selection_readiness"]["basis_revision"] = 2
+        cross_basis["selection_readiness"]["reviews"][0]["status"] = "stale"
+        cross_basis["semantic_fail_diagnostics"][1]["basis_revision"] = 2
+        cross_basis["dispatch_control"]["episodes"][0]["basis_revision"] = 2
+        self.write_selection_data(request_id, cross_basis)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        overlapping = copy.deepcopy(state)
+        overlapping["selection_readiness"]["basis_revision"] = 2
+        overlapping["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        overlapping["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        overlapping["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:07Z",
+                "finished_at": "2026-07-20T08:00:08Z",
+                "outcome": "PASS",
+            }
+        )
+        overlapping["operation_metrics"]["spans"].append(
+            {
+                "span_id": "accounts-risk-fail-2",
+                "kind": "risk-review",
+                "scope": "accounts-owner",
+                "attempt_id": "accounts-risk-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:09Z",
+                "finished_at": "2026-07-20T08:00:10Z",
+                "outcome": "FAIL",
+            }
+        )
+        overlapping["semantic_fail_diagnostics"].append(
+            {
+                "diagnostic_id": "accounts-owner-evidence-fail-2",
+                "review_span_id": "accounts-risk-fail-2",
+                "first_attempt": True,
+                "root_category": "owner-evidence",
+                "candidate_ids": ["access-policy"],
+                "contract_ids": ["access-policy-contract"],
+                "basis_revision": 2,
+            }
+        )
+        first_episode = overlapping["dispatch_control"]["episodes"][0]
+        first_episode.update(
+            {
+                "status": "resolved",
+                "diagnosis": "첫 공통 원인을 진단했다.",
+                "action": "owner evidence를 갱신했다.",
+                "resume_basis_revision": 2,
+                "readiness_review_id": "selection-readiness-2",
+            }
+        )
+        overlapping["dispatch_control"]["episodes"].append(
+            {
+                "episode_id": "owner-evidence-pause-2",
+                "cause": "shared-root-semantic-fail",
+                "trigger_ids": [
+                    "programs-owner-evidence-fail",
+                    "accounts-owner-evidence-fail-2",
+                ],
+                "basis_revision": 2,
+                "status": "open",
+            }
+        )
+        self.write_selection_data(request_id, overlapping)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        unrelated = copy.deepcopy(state)
+        unrelated["semantic_fail_diagnostics"][1]["root_category"] = (
+            "selected-claim-fidelity"
+        )
+        unrelated["dispatch_control"] = {
+            "version": "1",
+            "status": "ready",
+            "episodes": [],
+        }
+        self.write_selection_data(request_id, unrelated)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        different_root = copy.deepcopy(state)
+        different_root["semantic_fail_diagnostics"][1]["contract_ids"] = []
+        different_root["dispatch_control"] = {
+            "version": "1",
+            "status": "ready",
+            "episodes": [],
+        }
+        self.write_selection_data(request_id, different_root)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        namespace_collision = copy.deepcopy(state)
+        namespace_collision["shared_contracts"][0]["contract_id"] = "program-access"
+        namespace_collision["bundle_queue"][1]["depends_on_contract_ids"] = [
+            "program-access"
+        ]
+        for trigger in namespace_collision["risk_triggers"][:2]:
+            trigger["shared_contract_id"] = "program-access"
+        namespace_collision["semantic_fail_diagnostics"][0].update(
+            {"candidate_ids": ["program-access"], "contract_ids": []}
+        )
+        namespace_collision["semantic_fail_diagnostics"][1].update(
+            {"candidate_ids": [], "contract_ids": ["program-access"]}
+        )
+        namespace_collision["dispatch_control"] = {
+            "version": "1",
+            "status": "ready",
+            "episodes": [],
+        }
+        self.write_selection_data(request_id, namespace_collision)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        unchanged_basis = copy.deepcopy(state)
+        unchanged_episode = unchanged_basis["dispatch_control"]["episodes"][0]
+        unchanged_episode.update(
+            {
+                "status": "resolved",
+                "diagnosis": "공통 원인을 진단했다.",
+                "action": "근거를 다시 확인했다.",
+                "resume_basis_revision": 1,
+                "readiness_review_id": "selection-readiness-1",
+            }
+        )
+        unchanged_basis["dispatch_control"]["status"] = "ready"
+        self.write_selection_data(request_id, unchanged_basis)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must advance beyond its pause/trigger basis", result.stdout)
+
+        resolved = copy.deepcopy(state)
+        resolved["selection_readiness"]["basis_revision"] = 2
+        resolved["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        resolved["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        resolved["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:07Z",
+                "finished_at": "2026-07-20T08:00:08Z",
+                "outcome": "PASS",
+            }
+        )
+        episode = resolved["dispatch_control"]["episodes"][0]
+        episode.update(
+            {
+                "status": "resolved",
+                "diagnosis": "공통 owner evidence route가 readiness에서 누락됐다.",
+                "action": "공유 계약 evidence route를 갱신하고 다시 검토했다.",
+                "resume_basis_revision": 2,
+                "readiness_review_id": "selection-readiness-2",
+            }
+        )
+        resolved["dispatch_control"]["status"] = "ready"
+        self.write_selection_data(request_id, resolved)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        dispatch_before_resume = copy.deepcopy(resolved)
+        dispatch_before_resume["operation_metrics"]["spans"].insert(
+            -1,
+            {
+                "span_id": "programs-writer-before-resume",
+                "kind": "writer",
+                "scope": "programs",
+                "attempt_id": "programs-before-resume",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:06.100Z",
+                "finished_at": "2026-07-20T08:00:06.900Z",
+                "outcome": "completed",
+            },
+        )
+        self.write_selection_data(request_id, dispatch_before_resume)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must not dispatch bundle/writer work", result.stdout)
+
+        del episode["diagnosis"]
+        self.write_selection_data(request_id, resolved)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("missing required field `diagnosis`", result.stdout)
+
+    def test_selection_version_four_late_discovery_pauses_and_limits_invalidation(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170002-v4-late-discovery"
+        )
+        state["selection_readiness"]["basis_revision"] = 2
+        state["selection_readiness"]["reviews"][0]["status"] = "stale"
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "accounts-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                }
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "late-access-contract-1",
+                    "trigger": "ownership",
+                    "cause": "직접 consumer가 readiness 뒤에 발견됐다.",
+                    "opened_revision": 2,
+                    "affected_artifacts": [
+                        {"location": "request", "path": "inventory.md"}
+                    ],
+                    "affected_bundles": ["accounts-owner", "programs-consumer"],
+                    "stale_review_ids": ["accounts-development-1"],
+                    "required_reviews": [
+                        {
+                            "reviewer_role": "development",
+                            "scope": "accounts-owner",
+                        },
+                        {
+                            "reviewer_role": "development",
+                            "scope": "programs-consumer",
+                        },
+                    ],
+                    "status": "open",
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        state["late_shared_contract_discoveries"] = [
+            {
+                "discovery_id": "late-access-consumer",
+                "contract_id": "access-policy-contract",
+                "stage": "post-readiness",
+                "basis_revision": 2,
+                "affected_bundle_ids": ["accounts-owner", "programs-consumer"],
+                "status": "open",
+                "stale_readiness_review_id": "selection-readiness-1",
+                "semantic_invalidation_ids": ["late-access-contract-1"],
+            }
+        ]
+        state["dispatch_control"] = {
+            "version": "1",
+            "status": "paused",
+            "episodes": [
+                {
+                    "episode_id": "late-access-pause-1",
+                    "cause": "late-shared-contract",
+                    "trigger_ids": ["late-access-consumer"],
+                    "pause_after_span_id": "selection-readiness-1",
+                    "paused_at": "2026-07-20T08:00:02Z",
+                    "basis_revision": 2,
+                    "status": "open",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        current_risk_reuse = copy.deepcopy(state)
+        current_risk_reuse["semantic_review_closure"]["review_passes"].append(
+            {
+                "review_id": "programs-risk-1",
+                "reviewer_role": "risk",
+                "scope": "programs-consumer",
+                "basis_revision": 1,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        self.write_selection_data(request_id, current_risk_reuse)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        missing_open_risk_pair = copy.deepcopy(current_risk_reuse)
+        missing_open_risk_pair["semantic_review_closure"]["review_passes"][-1][
+            "status"
+        ] = "stale"
+        missing_open_risk_pair["semantic_review_closure"]["invalidations"][0][
+            "stale_review_ids"
+        ].append("programs-risk-1")
+        self.write_selection_data(request_id, missing_open_risk_pair)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "stale v4 PASS `programs-risk-1` must include exact required review "
+            "`risk`/`programs-consumer`",
+            result.stdout,
+        )
+
+        unrelated = copy.deepcopy(state)
+        unrelated["late_shared_contract_discoveries"][0]["affected_bundle_ids"] = [
+            "accounts-owner"
+        ]
+        self.write_selection_data(request_id, unrelated)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must cover only its affected bundles", result.stdout)
+
+        readiness_review = {
+            "review_id": "selection-readiness-2",
+            "reviewer_role": "development",
+            "reviewer_agent_id": "reviewer-1",
+            "basis_revision": 2,
+            "verdict": "PASS",
+            "status": "current",
+        }
+        state["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        state["selection_readiness"]["reviews"].append(readiness_review)
+        state["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "PASS",
+            }
+        )
+        closure = state["semantic_review_closure"]
+        closure["review_passes"][0]["status"] = "superseded"
+        closure["review_passes"].extend(
+            [
+                {
+                    "review_id": "accounts-development-2",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 2,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "programs-development-2",
+                    "reviewer_role": "development",
+                    "scope": "programs-consumer",
+                    "basis_revision": 2,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ]
+        )
+        closure["invalidations"][0].update(
+            {"status": "resolved", "resolved_revision": 2}
+        )
+        discovery = state["late_shared_contract_discoveries"][0]
+        discovery.update(
+            {
+                "status": "resolved",
+                "resolved_revision": 2,
+                "resolution_readiness_review_id": "selection-readiness-2",
+            }
+        )
+        episode = state["dispatch_control"]["episodes"][0]
+        episode.update(
+            {
+                "status": "resolved",
+                "diagnosis": "공유 권한 consumer 누락으로 queue closure가 불완전했다.",
+                "action": "owner와 직접 consumer bundle만 무효화하고 재검토했다.",
+                "resume_basis_revision": 2,
+                "readiness_review_id": "selection-readiness-2",
+            }
+        )
+        state["dispatch_control"]["status"] = "ready"
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        resolved_without_risk_rerun = copy.deepcopy(state)
+        resolved_closure = resolved_without_risk_rerun["semantic_review_closure"]
+        resolved_closure["review_passes"].append(
+            {
+                "review_id": "programs-risk-1",
+                "reviewer_role": "risk",
+                "scope": "programs-consumer",
+                "basis_revision": 1,
+                "verdict": "PASS",
+                "status": "superseded",
+            }
+        )
+        resolved_closure["invalidations"][0]["stale_review_ids"].append(
+            "programs-risk-1"
+        )
+        resolved_closure["invalidations"][0]["required_reviews"].append(
+            {"reviewer_role": "risk", "scope": "programs-consumer"}
+        )
+        self.write_selection_data(request_id, resolved_without_risk_rerun)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "is missing current PASS for `risk`/`programs-consumer`",
+            result.stdout,
+        )
+
+        reversed_resolution = copy.deepcopy(state)
+        reversed_resolution["semantic_review_closure"]["basis_revision"] = 3
+        reversed_resolution["semantic_review_closure"]["invalidations"][0][
+            "resolved_revision"
+        ] = 3
+        self.write_selection_data(request_id, reversed_resolution)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("resolves before linked semantic invalidation", result.stdout)
+
+        state["selection_readiness"]["basis_revision"] = 3
+        state["selection_readiness"]["reviews"][1]["status"] = "superseded"
+        state["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-3",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 3,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        state["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-3",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-3",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:05Z",
+                "finished_at": "2026-07-20T08:00:06Z",
+                "outcome": "PASS",
+            }
+        )
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        reversed_discoveries = copy.deepcopy(state)
+        reversed_discoveries["late_shared_contract_discoveries"].append(
+            {
+                "discovery_id": "earlier-pre-readiness-discovery",
+                "contract_id": "access-policy-contract",
+                "stage": "pre-readiness",
+                "basis_revision": 1,
+                "affected_bundle_ids": ["accounts-owner"],
+                "status": "resolved",
+            }
+        )
+        self.write_selection_data(request_id, reversed_discoveries)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("discoveries must follow basis revision order", result.stdout)
+
+        duplicate_episode = copy.deepcopy(state)
+        repeated = copy.deepcopy(duplicate_episode["dispatch_control"]["episodes"][0])
+        repeated["episode_id"] = "late-access-pause-duplicate"
+        duplicate_episode["dispatch_control"]["episodes"].append(repeated)
+        self.write_selection_data(request_id, duplicate_episode)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("reuses `late-access-consumer`", result.stdout)
+
+    def test_version_four_late_discovery_before_semantic_pass_needs_no_invalidation(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170005-v4-late-before-semantic-pass"
+        )
+        state["selection_readiness"]["basis_revision"] = 2
+        state["selection_readiness"]["reviews"][0]["status"] = "stale"
+        state["semantic_review_closure"]["basis_revision"] = 2
+        state["late_shared_contract_discoveries"] = [
+            {
+                "discovery_id": "late-access-before-semantic-pass",
+                "contract_id": "access-policy-contract",
+                "stage": "post-readiness",
+                "basis_revision": 2,
+                "affected_bundle_ids": ["accounts-owner", "programs-consumer"],
+                "status": "open",
+                "stale_readiness_review_id": "selection-readiness-1",
+                "semantic_invalidation_ids": [],
+            }
+        ]
+        state["dispatch_control"] = {
+            "version": "1",
+            "status": "paused",
+            "episodes": [
+                {
+                    "episode_id": "late-access-before-semantic-pause",
+                    "cause": "late-shared-contract",
+                    "trigger_ids": ["late-access-before-semantic-pass"],
+                    "pause_after_span_id": "selection-readiness-1",
+                    "paused_at": "2026-07-20T08:00:02Z",
+                    "basis_revision": 2,
+                    "status": "open",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        open_dispatch = copy.deepcopy(state)
+        open_dispatch["operation_metrics"]["spans"].append(
+            {
+                "span_id": "programs-bundle-after-late-cutoff",
+                "kind": "bundle",
+                "scope": "programs",
+                "attempt_id": "programs-after-late-cutoff",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "completed",
+            }
+        )
+        self.write_selection_data(request_id, open_dispatch)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("after its pause cutoff", result.stdout)
+
+        moved_cutoff = copy.deepcopy(open_dispatch)
+        moved_cutoff["dispatch_control"]["episodes"][0][
+            "pause_after_span_id"
+        ] = "programs-bundle-after-late-cutoff"
+        self.write_selection_data(request_id, moved_cutoff)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("after immutable `paused_at`", result.stdout)
+
+        unknown_cutoff = copy.deepcopy(state)
+        unknown_cutoff["dispatch_control"]["episodes"][0][
+            "pause_after_span_id"
+        ] = "missing-cutoff-span"
+        self.write_selection_data(request_id, unknown_cutoff)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("dispatch cutoff metric span does not resolve", result.stdout)
+
+        resolved = copy.deepcopy(state)
+        resolved["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        resolved["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        resolved["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "PASS",
+            }
+        )
+        resolved["late_shared_contract_discoveries"][0].update(
+            {
+                "status": "resolved",
+                "resolved_revision": 2,
+                "resolution_readiness_review_id": "selection-readiness-2",
+            }
+        )
+        resolved["dispatch_control"]["episodes"][0].update(
+            {
+                "status": "resolved",
+                "diagnosis": "writer 전에 직접 consumer를 발견했다.",
+                "action": "prepass와 queue를 갱신했다.",
+                "resume_basis_revision": 2,
+                "readiness_review_id": "selection-readiness-2",
+            }
+        )
+        resolved["dispatch_control"]["status"] = "ready"
+        self.write_selection_data(request_id, resolved)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        resolved_dispatch = copy.deepcopy(resolved)
+        resolved_dispatch["operation_metrics"]["spans"].insert(
+            -1,
+            {
+                "span_id": "programs-writer-before-late-resume",
+                "kind": "writer",
+                "scope": "programs",
+                "attempt_id": "programs-before-late-resume",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:02.100Z",
+                "finished_at": "2026-07-20T08:00:02.900Z",
+                "outcome": "completed",
+            },
+        )
+        self.write_selection_data(request_id, resolved_dispatch)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("after its pause cutoff", result.stdout)
+
+        prior_pass = copy.deepcopy(state)
+        prior_pass["semantic_review_closure"]["review_passes"] = [
+            {
+                "review_id": "accounts-development-1",
+                "reviewer_role": "development",
+                "scope": "accounts-owner",
+                "basis_revision": 1,
+                "verdict": "PASS",
+                "status": "stale",
+            }
+        ]
+        self.write_selection_data(request_id, prior_pass)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("because an affected prior PASS exists", result.stdout)
+
+    def test_version_four_late_invalidation_preserves_same_domain_bundle_identity(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170006-v4-same-domain-shards"
+        )
+        state["accepted_scope"] = ["accounts"]
+        state["context_selection"]["candidates"][1]["domain"] = "accounts"
+        state["bundle_queue"][1]["domain"] = "accounts"
+        state["selection_readiness"]["basis_revision"] = 2
+        state["selection_readiness"]["reviews"][0]["status"] = "stale"
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                }
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "late-owner-only-1",
+                    "trigger": "ownership",
+                    "cause": "같은 domain의 owner shard 근거만 바뀌었다.",
+                    "opened_revision": 2,
+                    "affected_artifacts": [
+                        {"location": "request", "path": "inventory.md"}
+                    ],
+                    "affected_bundles": ["accounts-owner"],
+                    "stale_review_ids": ["accounts-owner-development-1"],
+                    "required_reviews": [
+                        {
+                            "reviewer_role": "development",
+                            "scope": "accounts-owner",
+                        }
+                    ],
+                    "status": "open",
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        state["late_shared_contract_discoveries"] = [
+            {
+                "discovery_id": "late-owner-only",
+                "contract_id": "access-policy-contract",
+                "stage": "post-readiness",
+                "basis_revision": 2,
+                "affected_bundle_ids": ["accounts-owner"],
+                "status": "open",
+                "stale_readiness_review_id": "selection-readiness-1",
+                "semantic_invalidation_ids": ["late-owner-only-1"],
+            }
+        ]
+        state["dispatch_control"] = {
+            "version": "1",
+            "status": "paused",
+            "episodes": [
+                {
+                    "episode_id": "late-owner-only-pause",
+                    "cause": "late-shared-contract",
+                    "trigger_ids": ["late-owner-only"],
+                    "pause_after_span_id": "selection-readiness-1",
+                    "paused_at": "2026-07-20T08:00:02Z",
+                    "basis_revision": 2,
+                    "status": "open",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        sibling_included = copy.deepcopy(state)
+        sibling_included["semantic_review_closure"]["invalidations"][0][
+            "affected_bundles"
+        ].append("programs-consumer")
+        self.write_selection_data(request_id, sibling_included)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must cover only its affected bundles", result.stdout)
 
     def test_request_bound_docs_preserve_version_one_and_unversioned_compatibility(self) -> None:
         self.write_atom("domain/domain-context-atom.md", "domain-context")
@@ -2870,6 +4352,811 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             errors,
         )
 
+    def test_version_four_snapshot_keeps_owner_readiness_history_complete(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170003-v4-snapshot"
+        )
+        errors: list[str] = []
+        validate_state_snapshot_completeness(
+            copy.deepcopy(state), state, "snapshot", errors
+        )
+        self.assertEqual([], errors)
+
+        incomplete = copy.deepcopy(state)
+        del incomplete["shared_contracts"]
+        errors = []
+        validate_state_snapshot_completeness(incomplete, state, "snapshot", errors)
+        self.assertTrue(
+            any("missing current field(s): shared_contracts" in error for error in errors)
+        )
+
+        reversed_history = copy.deepcopy(state)
+        reversed_history["selection_readiness"]["reviews"][0]["status"] = (
+            "superseded"
+        )
+        errors = []
+        validate_state_snapshot_completeness(
+            reversed_history, state, "snapshot", errors
+        )
+        self.assertTrue(
+            any("reverses readiness review" in error for error in errors), errors
+        )
+
+        reordered = copy.deepcopy(state)
+        reordered["selection_readiness"]["basis_revision"] = 2
+        reordered["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        reordered["selection_readiness"]["reviews"].insert(
+            0,
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            },
+        )
+        reordered["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "PASS",
+            }
+        )
+        errors = []
+        validate_state_snapshot_completeness(state, reordered, "snapshot", errors)
+        self.assertTrue(any("readiness reviews must be append-only" in error for error in errors))
+        self.write_selection_data(request_id, reordered)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must follow basis revision order", result.stdout)
+        self.assertIn("must follow metric span order", result.stdout)
+
+        v3_snapshot = copy.deepcopy(state)
+        v3_snapshot["context_selection"]["version"] = "3"
+        v3_current = copy.deepcopy(v3_snapshot)
+        v3_current["shared_contracts"] = []
+        errors = []
+        validate_state_snapshot_completeness(
+            v3_snapshot, v3_current, "snapshot", errors
+        )
+        self.assertTrue(
+            any("unrelated top-level owner `shared_contracts`" in error for error in errors),
+            errors,
+        )
+
+    def test_version_four_snapshot_guard_maps_path_to_exact_same_domain_bundle(self) -> None:
+        _, state = self.write_v4_owner_readiness_state(
+            "20260720-170007-v4-snapshot-bundle-guard"
+        )
+        state["accepted_scope"] = ["accounts"]
+        state["context_selection"]["candidates"][1]["domain"] = "accounts"
+        state["bundle_queue"][1]["domain"] = "accounts"
+        guarded_path = "accounts/access-policy-atom.md"
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "access-policy",
+                "atom_key": "access-policy",
+                "path": guarded_path,
+                "created_attempt_id": "accounts-attempt-1",
+                "last_operation_sha256": "a" * 64,
+                "status": "present",
+            }
+        ]
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 1,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "accounts-sibling-development-1",
+                    "reviewer_role": "development",
+                    "scope": "programs-consumer",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        errors: list[str] = []
+        validate_state_snapshot_completeness(
+            state,
+            state,
+            "snapshot",
+            errors,
+            active_semantic_paths={guarded_path},
+        )
+        joined = "\n".join(errors)
+        self.assertIn("accounts-owner-development-1", joined)
+        self.assertNotIn("accounts-sibling-development-1", joined)
+
+        risk_only = copy.deepcopy(state)
+        risk_only["semantic_review_closure"]["review_passes"][0].update(
+            {
+                "review_id": "accounts-owner-risk-1",
+                "reviewer_role": "risk",
+            }
+        )
+        errors = []
+        validate_state_snapshot_completeness(
+            risk_only,
+            risk_only,
+            "snapshot",
+            errors,
+            active_semantic_paths={guarded_path},
+        )
+        joined = "\n".join(errors)
+        self.assertIn("accounts-owner-risk-1", joined)
+        self.assertNotIn("accounts-sibling-development-1", joined)
+
+        approved_source = copy.deepcopy(state)
+        approved_source["operation_created_artifacts"] = []
+        legacy_path = "accounts/legacy-access-policy-atom.md"
+        approved_source["approved_existing_actions"] = [
+            {
+                "source": {
+                    "atom_key": "legacy-access-policy",
+                    "path": legacy_path,
+                }
+            }
+        ]
+        errors = []
+        validate_state_snapshot_completeness(
+            approved_source,
+            approved_source,
+            "snapshot",
+            errors,
+            active_semantic_paths={legacy_path},
+        )
+        self.assertFalse(
+            any("cannot map guarded v4 path" in error for error in errors), errors
+        )
+
+        guarded = copy.deepcopy(state)
+        guarded["semantic_review_closure"]["basis_revision"] = 2
+        guarded["semantic_review_closure"]["review_passes"][0]["status"] = "stale"
+        guarded["semantic_review_closure"]["invalidations"] = [
+            {
+                "invalidation_id": "accounts-owner-drop-1",
+                "trigger": "ownership",
+                "cause": "owner bundle drop 전에 PASS를 무효화했다.",
+                "opened_revision": 2,
+                "affected_artifacts": [
+                    {"location": "managed-docs", "path": guarded_path}
+                ],
+                "affected_bundles": ["accounts-owner"],
+                "stale_review_ids": ["accounts-owner-development-1"],
+                "required_reviews": [
+                    {"reviewer_role": "development", "scope": "accounts-owner"}
+                ],
+                "status": "open",
+            }
+        ]
+        errors = []
+        validate_state_snapshot_completeness(
+            guarded,
+            guarded,
+            "snapshot",
+            errors,
+            active_semantic_paths={guarded_path},
+        )
+        self.assertEqual([], errors)
+
+        wrong_shard = copy.deepcopy(guarded)
+        invalidation = wrong_shard["semantic_review_closure"]["invalidations"][0]
+        invalidation["affected_bundles"] = ["programs-consumer"]
+        invalidation["required_reviews"][0]["scope"] = "programs-consumer"
+        errors = []
+        validate_state_snapshot_completeness(
+            wrong_shard,
+            wrong_shard,
+            "snapshot",
+            errors,
+            active_semantic_paths={guarded_path},
+        )
+        self.assertTrue(
+            any("lacks an open pre-mutation invalidation" in error for error in errors),
+            errors,
+        )
+
+    def test_version_four_local_bundle_drop_retires_identity_through_final(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170008-v4-local-retirement"
+        )
+        atom = self.write_atom("accounts/access-policy-atom.md", "access-policy")
+        state["accepted_scope"] = ["accounts"]
+        state["context_selection"]["candidates"][1]["domain"] = "accounts"
+        active_bundle = copy.deepcopy(state["bundle_queue"][0])
+        state["bundle_queue"][1]["domain"] = "accounts"
+        state["bundle_queue"][1]["depends_on_contract_ids"] = []
+        sibling_bundle = copy.deepcopy(state["bundle_queue"][1])
+        state["risk_triggers"] = [
+            {
+                "candidate_id": "access-policy",
+                "atom_key": "access-policy",
+                "triggers": ["local permission decision"],
+                "basis": "단일 bundle 안에서 판단한다.",
+                "route": "local",
+            },
+            {
+                "candidate_id": "program-access",
+                "atom_key": "program-access",
+                "triggers": ["local sibling decision"],
+                "basis": "같은 domain의 별도 shard 안에서 판단한다.",
+                "route": "local",
+            },
+        ]
+        state["shared_contracts"] = []
+        guarded_path = "accounts/access-policy-atom.md"
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "access-policy",
+                "atom_key": "access-policy",
+                "path": guarded_path,
+                "created_attempt_id": "accounts-attempt-1",
+                "last_operation_sha256": self.file_sha256(atom),
+                "status": "present",
+            }
+        ]
+        state["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                },
+                {
+                    "review_id": "accounts-sibling-development-1",
+                    "reviewer_role": "development",
+                    "scope": "programs-consumer",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "accounts-owner-drop-1",
+                    "trigger": "candidate-disposition",
+                    "cause": "local 후보를 drop하기 전에 기존 PASS를 무효화했다.",
+                    "opened_revision": 2,
+                    "affected_artifacts": [
+                        {"location": "managed-docs", "path": guarded_path},
+                        {"location": "request", "path": "inventory.md"},
+                    ],
+                    "affected_bundles": ["accounts-owner"],
+                    "stale_review_ids": ["accounts-owner-development-1"],
+                    "required_reviews": [
+                        {
+                            "reviewer_role": "development",
+                            "scope": "accounts-owner",
+                        }
+                    ],
+                    "status": "open",
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        self.write_selection_data(request_id, state)
+        rollback = self.selection_request_root(request_id) / "rollback" / "access-policy.md"
+        rollback.parent.mkdir(parents=True)
+        rollback.write_bytes(atom.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/access-policy-work-state.json",
+            state,
+        )
+
+        current = copy.deepcopy(state)
+        current["context_selection"]["candidates"][0] = {
+            "candidate_id": "access-policy",
+            "domain": "accounts",
+            "candidate": "공유 접근 정책",
+            "disposition": "drop",
+            "selection_basis": "검토 결과 source-local detail로 재분류했다.",
+        }
+        current["bundle_queue"] = [sibling_bundle]
+        current["risk_triggers"] = [copy.deepcopy(state["risk_triggers"][1])]
+        current["selection_retirements"]["retired_bundles"] = [
+            {
+                **active_bundle,
+                "retired_basis_revision": 2,
+                "reason": "candidate drop removed the bundle's last write key",
+            }
+        ]
+        current["selection_readiness"]["basis_revision"] = 2
+        current["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        current["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        current["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "PASS",
+            }
+        )
+        current["operation_created_artifacts"][0].update(
+            {
+                "status": "removal_pending",
+                "rollback_path": "rollback/access-policy.md",
+                "state_rollback_path": "rollback/access-policy-work-state.json",
+                "state_rollback_sha256": state_backup_hash,
+            }
+        )
+        (self.selection_request_root(request_id) / "inventory.md").write_text(
+            "# 후보\n\n- `access-policy`: 검토 결과 drop\n", encoding="utf-8"
+        )
+        self.write_selection_data(request_id, current)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        same_basis_retirement = copy.deepcopy(current)
+        same_basis_retirement["selection_retirements"]["retired_bundles"][0][
+            "retired_basis_revision"
+        ] = 1
+        self.write_selection_data(request_id, same_basis_retirement)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must advance beyond the snapshot readiness basis", result.stdout)
+
+        mismatched_invalidation_basis = copy.deepcopy(current)
+        retirement = mismatched_invalidation_basis["selection_retirements"][
+            "retired_bundles"
+        ][0]
+        retirement["retired_basis_revision"] = 3
+        readiness = mismatched_invalidation_basis["selection_readiness"]
+        readiness["basis_revision"] = 3
+        readiness["reviews"][1]["review_id"] = "selection-readiness-3"
+        readiness["reviews"][1]["basis_revision"] = 3
+        readiness_metric = mismatched_invalidation_basis["operation_metrics"]["spans"][-1]
+        readiness_metric["span_id"] = "selection-readiness-3"
+        self.write_selection_data(request_id, mismatched_invalidation_basis)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "needs snapshot open invalidation for prior PASS "
+            "`accounts-owner-development-1`",
+            result.stdout,
+        )
+
+        missing_retirement = copy.deepcopy(current)
+        missing_retirement["selection_retirements"]["retired_bundles"] = []
+        self.write_selection_data(request_id, missing_retirement)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("without an append-only retirement record", result.stdout)
+
+        forged_retirement = copy.deepcopy(current)
+        forged_retirement["selection_retirements"]["retired_bundles"][0][
+            "domain"
+        ] = "forged-domain"
+        self.write_selection_data(request_id, forged_retirement)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("forged retired bundle", result.stdout)
+
+        atom.unlink()
+        current["operation_created_artifacts"][0]["status"] = "removed"
+        current["semantic_review_closure"]["review_passes"][0]["status"] = (
+            "superseded"
+        )
+        current["semantic_review_closure"]["review_passes"].append(
+            {
+                "review_id": "accounts-owner-development-2",
+                "reviewer_role": "development",
+                "scope": "accounts-owner",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        current["semantic_review_closure"]["invalidations"][0].update(
+            {"status": "resolved", "resolved_revision": 2}
+        )
+        self.write_selection_data(request_id, current)
+        result = self.run_validator(
+            "selection", request_id=request_id, require_actions_final=True
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        rewritten_snapshot = copy.deepcopy(current)
+        rewritten_snapshot["selection_retirements"]["retired_bundles"][0][
+            "reason"
+        ] = "rewritten"
+        errors: list[str] = []
+        validate_state_snapshot_completeness(
+            current,
+            rewritten_snapshot,
+            "snapshot",
+            errors,
+        )
+        self.assertTrue(
+            any("rewrites retired bundle" in error for error in errors), errors
+        )
+
+    def test_version_four_shared_contract_retirement_preserves_history_only(self) -> None:
+        request_id, state = self.write_v4_owner_readiness_state(
+            "20260720-170009-v4-contract-retirement"
+        )
+        atom = self.write_atom("accounts/access-policy-atom.md", "access-policy")
+        active_owner_bundle = copy.deepcopy(state["bundle_queue"][0])
+        active_contract = copy.deepcopy(state["shared_contracts"][0])
+        guarded_path = "accounts/access-policy-atom.md"
+        state["operation_created_artifacts"] = [
+            {
+                "candidate_id": "access-policy",
+                "atom_key": "access-policy",
+                "path": guarded_path,
+                "created_attempt_id": "accounts-attempt-1",
+                "last_operation_sha256": self.file_sha256(atom),
+                "status": "present",
+            }
+        ]
+        state["operation_metrics"]["spans"].append(
+            {
+                "span_id": "accounts-risk-history-fail-1",
+                "kind": "risk-review",
+                "scope": "accounts-owner",
+                "attempt_id": "accounts-risk-history-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:03Z",
+                "finished_at": "2026-07-20T08:00:04Z",
+                "outcome": "FAIL",
+            }
+        )
+        state["semantic_fail_diagnostics"] = [
+            {
+                "diagnostic_id": "accounts-contract-history-fail",
+                "review_span_id": "accounts-risk-history-fail-1",
+                "first_attempt": True,
+                "root_category": "owner-evidence",
+                "candidate_ids": ["access-policy"],
+                "contract_ids": ["access-policy-contract"],
+                "basis_revision": 1,
+            }
+        ]
+        state["late_shared_contract_discoveries"] = [
+            {
+                "discovery_id": "historical-access-prepass",
+                "contract_id": "access-policy-contract",
+                "stage": "pre-readiness",
+                "basis_revision": 1,
+                "affected_bundle_ids": ["accounts-owner"],
+                "status": "resolved",
+            }
+        ]
+        self.write_selection_data(request_id, state)
+        rollback = self.selection_request_root(request_id) / "rollback" / "shared-access.md"
+        rollback.parent.mkdir(parents=True)
+        rollback.write_bytes(atom.read_bytes())
+        _, state_backup_hash = self.write_state_rollback(
+            request_id,
+            "rollback/shared-access-work-state.json",
+            state,
+        )
+
+        current = copy.deepcopy(state)
+        current["context_selection"]["candidates"][0] = {
+            "candidate_id": "access-policy",
+            "domain": "accounts",
+            "candidate": "공유 접근 정책",
+            "disposition": "drop",
+            "selection_basis": "공유 owner 후보를 제거하기로 검토했다.",
+        }
+        current["bundle_queue"] = [copy.deepcopy(current["bundle_queue"][1])]
+        current["bundle_queue"][0]["depends_on_contract_ids"] = []
+        current["risk_triggers"] = [copy.deepcopy(state["risk_triggers"][2])]
+        current["shared_contracts"] = []
+        current["selection_retirements"]["retired_bundles"] = [
+            {
+                **active_owner_bundle,
+                "retired_basis_revision": 2,
+                "reason": "owner candidate drop retired its last-key bundle",
+            }
+        ]
+        current["selection_retirements"]["retired_contracts"] = [
+            {
+                **active_contract,
+                "retired_basis_revision": 2,
+                "reason": "owner candidate drop retired the shared contract",
+            }
+        ]
+        current["selection_readiness"]["basis_revision"] = 2
+        current["selection_readiness"]["reviews"][0]["status"] = "superseded"
+        current["selection_readiness"]["reviews"].append(
+            {
+                "review_id": "selection-readiness-2",
+                "reviewer_role": "development",
+                "reviewer_agent_id": "reviewer-1",
+                "basis_revision": 2,
+                "verdict": "PASS",
+                "status": "current",
+            }
+        )
+        current["operation_metrics"]["spans"].append(
+            {
+                "span_id": "selection-readiness-2",
+                "kind": "development-review",
+                "scope": "selection-readiness",
+                "attempt_id": "readiness-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:05Z",
+                "finished_at": "2026-07-20T08:00:06Z",
+                "outcome": "PASS",
+            }
+        )
+        current["semantic_review_closure"]["basis_revision"] = 2
+        current["operation_created_artifacts"][0].update(
+            {
+                "status": "removal_pending",
+                "rollback_path": "rollback/shared-access.md",
+                "state_rollback_path": "rollback/shared-access-work-state.json",
+                "state_rollback_sha256": state_backup_hash,
+            }
+        )
+        (self.selection_request_root(request_id) / "inventory.md").write_text(
+            "# 후보\n\n- `access-policy`: 검토 결과 drop\n", encoding="utf-8"
+        )
+        self.write_selection_data(request_id, current)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        uninvalidated_history = copy.deepcopy(current)
+        uninvalidated_history["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+                {
+                    "review_id": "programs-consumer-risk-1",
+                    "reviewer_role": "risk",
+                    "scope": "programs-consumer",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        self.write_selection_data(request_id, uninvalidated_history)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("needs invalidation opened at retirement basis 2", result.stdout)
+        self.assertIn("`accounts-owner-development-1`", result.stdout)
+        self.assertIn("`programs-consumer-risk-1`", result.stdout)
+
+        later_superseded_history = copy.deepcopy(current)
+        later_superseded_history["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 3,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "superseded",
+                },
+                {
+                    "review_id": "accounts-owner-development-3",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 3,
+                    "verdict": "PASS",
+                    "status": "current",
+                },
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "unrelated-later-correction-3",
+                    "trigger": "documented-meaning",
+                    "cause": "retirement 뒤의 별도 변경으로 이전 PASS를 교체했다.",
+                    "opened_revision": 3,
+                    "affected_artifacts": [
+                        {"location": "request", "path": "inventory.md"}
+                    ],
+                    "affected_bundles": ["accounts-owner"],
+                    "stale_review_ids": ["accounts-owner-development-1"],
+                    "required_reviews": [
+                        {"reviewer_role": "development", "scope": "accounts-owner"}
+                    ],
+                    "status": "resolved",
+                    "resolved_revision": 3,
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        later_readiness = later_superseded_history["selection_readiness"]
+        later_readiness["basis_revision"] = 3
+        later_readiness["reviews"][1]["review_id"] = "selection-readiness-3"
+        later_readiness["reviews"][1]["basis_revision"] = 3
+        later_metric = later_superseded_history["operation_metrics"]["spans"][-1]
+        later_metric["span_id"] = "selection-readiness-3"
+        self.write_selection_data(request_id, later_superseded_history)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("needs invalidation opened at retirement basis 2", result.stdout)
+        self.assertIn("`accounts-owner-development-1`", result.stdout)
+
+        reviewed_snapshot = copy.deepcopy(state)
+        reviewed_snapshot["semantic_review_closure"] = {
+            "version": "1",
+            "basis_revision": 2,
+            "review_passes": [
+                {
+                    "review_id": "accounts-owner-development-1",
+                    "reviewer_role": "development",
+                    "scope": "accounts-owner",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                },
+                {
+                    "review_id": "programs-consumer-risk-1",
+                    "reviewer_role": "risk",
+                    "scope": "programs-consumer",
+                    "basis_revision": 1,
+                    "verdict": "PASS",
+                    "status": "stale",
+                },
+            ],
+            "invalidations": [
+                {
+                    "invalidation_id": "contract-retirement-2",
+                    "trigger": "candidate-disposition",
+                    "cause": "공유 계약 retirement 전에 영향 PASS를 무효화했다.",
+                    "opened_revision": 2,
+                    "affected_artifacts": [
+                        {"location": "request", "path": "inventory.md"}
+                    ],
+                    "affected_bundles": ["accounts-owner", "programs-consumer"],
+                    "stale_review_ids": [
+                        "accounts-owner-development-1",
+                        "programs-consumer-risk-1",
+                    ],
+                    "required_reviews": [
+                        {"reviewer_role": "development", "scope": "accounts-owner"},
+                        {"reviewer_role": "risk", "scope": "programs-consumer"},
+                    ],
+                    "status": "open",
+                }
+            ],
+            "final_gate": {"required": False, "review_history": []},
+        }
+        reviewed_current = copy.deepcopy(current)
+        reviewed_current["semantic_review_closure"] = copy.deepcopy(
+            reviewed_snapshot["semantic_review_closure"]
+        )
+        errors: list[str] = []
+        validate_state_snapshot_completeness(
+            reviewed_snapshot,
+            reviewed_current,
+            "snapshot",
+            errors,
+            active_created_path=guarded_path,
+            active_candidate_id="access-policy",
+            active_atom_key="access-policy",
+        )
+        self.assertEqual([], errors)
+
+        missing_risk_requirement_snapshot = copy.deepcopy(reviewed_snapshot)
+        missing_risk_requirement_current = copy.deepcopy(reviewed_current)
+        for value in (
+            missing_risk_requirement_snapshot,
+            missing_risk_requirement_current,
+        ):
+            value["semantic_review_closure"]["invalidations"][0][
+                "required_reviews"
+            ] = [
+                {"reviewer_role": "development", "scope": "accounts-owner"}
+            ]
+        errors = []
+        validate_state_snapshot_completeness(
+            missing_risk_requirement_snapshot,
+            missing_risk_requirement_current,
+            "snapshot",
+            errors,
+            active_created_path=guarded_path,
+            active_candidate_id="access-policy",
+            active_atom_key="access-policy",
+        )
+        self.assertTrue(
+            any(
+                "must include required review `risk`/`programs-consumer`" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+        reviewed_current["selection_readiness"]["basis_revision"] = 3
+        reviewed_current["selection_retirements"]["retired_bundles"][0][
+            "retired_basis_revision"
+        ] = 3
+        reviewed_current["selection_retirements"]["retired_contracts"][0][
+            "retired_basis_revision"
+        ] = 3
+        errors = []
+        validate_state_snapshot_completeness(
+            reviewed_snapshot,
+            reviewed_current,
+            "snapshot",
+            errors,
+            active_created_path=guarded_path,
+            active_candidate_id="access-policy",
+            active_atom_key="access-policy",
+        )
+        joined = "\n".join(errors)
+        self.assertIn("`accounts-owner-development-1`", joined)
+        self.assertIn("`programs-consumer-risk-1`", joined)
+        self.assertIn("at retirement basis 3", joined)
+
+        missing_unrelated_local_route = copy.deepcopy(current)
+        missing_unrelated_local_route["risk_triggers"] = []
+        self.write_selection_data(request_id, missing_unrelated_local_route)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("changes unrelated risk routing", result.stdout)
+
+        active_retired_collision = copy.deepcopy(current)
+        active_retired_collision["shared_contracts"] = [active_contract]
+        self.write_selection_data(request_id, active_retired_collision)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("cannot be active and retired", result.stdout)
+
+        retired_route = copy.deepcopy(current)
+        retired_route["risk_triggers"][0].update(
+            {
+                "route": "shared-contract",
+                "shared_contract_id": "access-policy-contract",
+            }
+        )
+        self.write_selection_data(request_id, retired_route)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn("does not resolve", result.stdout)
+
     def test_semantic_review_closure_blocks_final_until_affected_reviews_pass(self) -> None:
         self.write_atom("domain/domain-context-atom.md", "domain-context")
         request_id = self.write_selection_state(
@@ -3078,6 +5365,18 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             "final_gate": {"required": False, "review_history": []},
         }
         self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        legacy_stale_risk_without_required_pair = copy.deepcopy(state)
+        legacy_closure = legacy_stale_risk_without_required_pair[
+            "semantic_review_closure"
+        ]
+        legacy_closure["review_passes"][1]["status"] = "stale"
+        legacy_closure["invalidations"][0]["stale_review_ids"].append(
+            "domain-risk-1"
+        )
+        self.write_selection_data(request_id, legacy_stale_risk_without_required_pair)
         result = self.run_validator("selection", request_id=request_id)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 

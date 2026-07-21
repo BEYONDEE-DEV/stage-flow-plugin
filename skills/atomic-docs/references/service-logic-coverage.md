@@ -13,7 +13,7 @@
 
 ## Responsibility
 
-This reference is the normative owner of implementation-context selection, proportional documentation depth, accepted-scope source exploration, risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing.
+This reference is the normative owner of implementation-context selection, proportional documentation depth, accepted-scope source exploration, semantic risk triggers, and source fact fidelity. `atom-format-and-judgment.md` owns atom shape and AIDs; `change-judgment-policy.md` owns judgment labels and finding evidence; `docs-generation-flow.md` owns Goal sequencing; `shared-contract-readiness.md` owns version-4 local/shared routing and bounded closure state.
 
 ## Implementation Context Selection
 
@@ -37,7 +37,7 @@ An approved domain may need only its domain context atom and no separate behavio
 
 Reapply this admission decision when later source inspection reveals another fact. A reviewer must not turn an unselected fact into required managed-doc detail merely to make source coverage more complete.
 
-Before a required final integration/baseline review, reapply admission to the operation's retained selected candidates, or only the affected candidate closure for a non-baseline operation. Confirm each still has a current durable selection basis. Existing file length, AID count, risky code, destructive names, or prior reviewer PASS cannot preserve a dormant/unreachable candidate by themselves. In version 3 or 2, a late `write→merge|drop` correction follows `semantic-review-closure.md` before its prior PASS is reused; a legacy operation uses its recorded correction/review flow without adding closure state.
+Before a required final integration/baseline review, reapply admission to the operation's retained selected candidates, or only the affected candidate closure for a non-baseline operation. Confirm each still has a current durable selection basis. Existing file length, AID count, risky code, destructive names, or prior reviewer PASS cannot preserve a dormant/unreachable candidate by themselves. In version 4, 3, or 2, a late `write→merge|drop` correction follows `semantic-review-closure.md` before its prior PASS is reused; a legacy operation uses its recorded correction/review flow without adding closure state.
 
 ## Current Contract Evidence
 
@@ -98,6 +98,8 @@ Apply the independent risk/contract reviewer when a selected context candidate o
 - external integration, webhook, event delivery, or third-party dependency
 - irreversible, high-impact, or concurrency-sensitive state transition; transaction boundary; idempotency; retry; or recovery
 - shared payload, storage, permission, integration, or policy contract used by another domain
+
+For version 4, give every selected trigger the local/shared disposition from `shared-contract-readiness.md`. A risk trigger remains `local` unless changing its owner or meaning can invalidate a direct consumer bundle. Only that reference's five bounded high-fan-out kinds enter shared-contract closure; transaction order, retry details, projection fields, and dangerous-looking source do not become shared contracts merely because this list triggered risk review.
 
 Ordinary CRUD, reversible preference persistence, or a routine state field is not a trigger by itself. Source presence alone does not start a risk audit. For a triggered context, record the high-impact owner, contract, or non-obvious constraint that matters to change impact and verify claims actually made. Require an adverse outcome and verification target only for an approved implementation-basis requirement that specifies them. Do not discover or preserve every adverse branch, actor/input/state/failure combination, or attack path. Add a matrix only when the alternatives themselves are durable contract context that prose would make misleading.
 

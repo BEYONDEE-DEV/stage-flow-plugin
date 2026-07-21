@@ -86,6 +86,21 @@ SEMANTIC_INVALIDATION_TRIGGERS = {
     "graph-relationship",
     "documented-meaning",
 }
+SHARED_CONTRACT_KINDS = {
+    "permission",
+    "shared-identifier",
+    "money-entitlement",
+    "final-projection",
+    "integration",
+}
+SEMANTIC_FAIL_ROOT_CATEGORIES = {
+    "candidate-admission",
+    "contract-routing",
+    "owner-evidence",
+    "consumer-closure",
+    "evidence-depth",
+    "selected-claim-fidelity",
+}
 EVIDENCE_COMMIT_RE = re.compile(
     r"^source_commit_observed:[ ]*`([0-9a-fA-F]{40}|[0-9a-fA-F]{64})`[ ]*$",
     re.MULTILINE,
@@ -214,44 +229,78 @@ def main(argv: list[str] | None = None) -> int:
             scope_keys = args.expect_atom_key if args.phase == "docs" else []
             atoms, aid_count = validate_docs(config, errors, scope_keys)
             if args.request_id:
-                validate_request_semantic_review_closure(
-                    config,
-                    args.request_id,
-                    errors,
-                    require_final=args.phase == "baseline" or not args.expect_atom_key,
-                    required_final_role="baseline" if args.phase == "baseline" else None,
+                final_request_validation = (
+                    args.phase == "baseline" or not args.expect_atom_key
                 )
-                validate_request_operation_metrics(
-                    config,
-                    args.request_id,
-                    errors,
-                    mode=(
-                        "final-validation"
-                        if args.phase == "baseline" or not args.expect_atom_key
-                        else "active"
-                    ),
-                    validation_scope=args.phase,
-                )
+                if final_request_validation and request_uses_selection_v4(
+                    config, args.request_id, errors
+                ):
+                    validate_selection(
+                        config,
+                        args.request_id,
+                        errors,
+                        require_actions_final=True,
+                        require_final=True,
+                        metrics_mode="final-validation",
+                        validation_scope=args.phase,
+                    )
+                else:
+                    validate_request_semantic_review_closure(
+                        config,
+                        args.request_id,
+                        errors,
+                        require_final=final_request_validation,
+                        required_final_role=(
+                            "baseline" if args.phase == "baseline" else None
+                        ),
+                    )
+                    validate_request_operation_metrics(
+                        config,
+                        args.request_id,
+                        errors,
+                        mode=(
+                            "final-validation"
+                            if final_request_validation
+                            else "active"
+                        ),
+                        validation_scope=args.phase,
+                    )
         if args.phase == "baseline":
             validate_baseline(config, errors)
         if args.phase in {"metrics-preterminal", "metrics-final"} and args.request_id:
+            selection_v4 = request_uses_selection_v4(
+                config, args.request_id, errors
+            )
             if args.phase == "metrics-preterminal":
                 validate_request_preterminal_artifacts(
                     config,
                     args.request_id,
                     errors,
+                    validate_closure=not selection_v4,
                 )
-            validate_request_operation_metrics(
-                config,
-                args.request_id,
-                errors,
-                mode=(
-                    "preterminal"
-                    if args.phase == "metrics-preterminal"
-                    else "final"
-                ),
-                validation_scope=None,
+            terminal_mode = (
+                "preterminal"
+                if args.phase == "metrics-preterminal"
+                else "final"
             )
+            if selection_v4:
+                validate_selection(
+                    config,
+                    args.request_id,
+                    errors,
+                    require_actions_final=True,
+                    require_final=True,
+                    metrics_mode=terminal_mode,
+                    validation_scope=None,
+                )
+            else:
+                validate_request_operation_metrics(
+                    config,
+                    args.request_id,
+                    errors,
+                    mode=terminal_mode,
+                    validation_scope=None,
+                )
 
     if errors:
         print(f"FAIL {args.phase}:")
@@ -320,6 +369,9 @@ def validate_selection(
     errors: list[str],
     *,
     require_actions_final: bool,
+    require_final: bool | None = None,
+    metrics_mode: str = "active",
+    validation_scope: str | None = None,
 ) -> None:
     request_root = atomic_docs_request_root(config, request_id, errors)
     if request_root is None:
@@ -342,14 +394,26 @@ def validate_selection(
     if state is None:
         return
 
+    if require_final is None:
+        require_final = require_actions_final
+    required_final_role = None
+    if (
+        require_final
+        and metrics_mode in {"final-validation", "preterminal", "final"}
+        and required_final_validation_scope(state) == "baseline"
+    ):
+        required_final_role = "baseline"
     validate_semantic_review_closure(
-        state, errors, require_final=require_actions_final, required_final_role=None
+        state,
+        errors,
+        require_final=require_final,
+        required_final_role=required_final_role,
     )
     validate_operation_metrics(
         state,
         errors,
-        mode="active",
-        validation_scope=None,
+        mode=metrics_mode,
+        validation_scope=validation_scope,
     )
 
     accepted_scope = string_list(
@@ -380,8 +444,12 @@ def validate_selection(
     if not isinstance(context_selection, dict):
         errors.append("work-state must contain a `context_selection` object")
         return
-    if context_selection.get("version") not in {"1", "2", "3"}:
-        errors.append("work-state `context_selection.version` must be `1`, `2`, or `3`")
+    selection_version = nonempty_string(context_selection.get("version"))
+    if selection_version not in {"1", "2", "3", "4"}:
+        errors.append(
+            "work-state `context_selection.version` must be `1`, `2`, or `3` "
+            "(or `4` for owner readiness)"
+        )
     raw_candidates = context_selection.get("candidates")
     if not isinstance(raw_candidates, list):
         errors.append("work-state `context_selection.candidates` must be a list")
@@ -474,6 +542,15 @@ def validate_selection(
     risk_keys = validate_selection_risk_triggers(
         state.get("risk_triggers", []), candidate_targets, candidate_dispositions, errors
     )
+    if selection_version == "4":
+        validate_owner_readiness_v4(
+            state,
+            candidate_targets,
+            candidate_dispositions,
+            candidate_domains,
+            errors,
+            require_final=require_final,
+        )
     validate_operation_artifact_state(
         config,
         request_root,
@@ -507,6 +584,20 @@ def atomic_docs_request_root(
         errors.append("atomic docs `request_id` must stay inside the requests root")
         return None
     return request_root
+
+
+def request_uses_selection_v4(
+    config: Config, request_id: str, errors: list[str]
+) -> bool:
+    request_root = atomic_docs_request_root(config, request_id, errors)
+    if request_root is None:
+        return False
+    state_path = request_root / "work-state.json"
+    state = read_json(state_path, rel(config.project_root, state_path), errors)
+    if not isinstance(state, dict):
+        return False
+    selection = state.get("context_selection")
+    return isinstance(selection, dict) and selection.get("version") == "4"
 
 
 def validate_request_semantic_review_closure(
@@ -559,6 +650,8 @@ def validate_request_preterminal_artifacts(
     config: Config,
     request_id: str,
     errors: list[str],
+    *,
+    validate_closure: bool = True,
 ) -> None:
     request_root = atomic_docs_request_root(config, request_id, errors)
     if request_root is None:
@@ -589,12 +682,13 @@ def validate_request_preterminal_artifacts(
             f"`{validation_scope}`"
         )
     validate_docs(config, errors, [])
-    validate_semantic_review_closure(
-        state,
-        errors,
-        require_final=True,
-        required_final_role="baseline" if required_scope == "baseline" else None,
-    )
+    if validate_closure:
+        validate_semantic_review_closure(
+            state,
+            errors,
+            require_final=True,
+            required_final_role="baseline" if required_scope == "baseline" else None,
+        )
     if required_scope == "baseline":
         validate_baseline(config, errors)
 
@@ -629,22 +723,28 @@ def validate_operation_metrics(
     validation_scope: str | None,
 ) -> None:
     selection = state.get("context_selection")
-    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    selection_version = (
+        nonempty_string(selection.get("version"))
+        if isinstance(selection, dict)
+        else None
+    )
     metrics = state.get("operation_metrics")
-    if selection_version != "3":
+    if selection_version not in {"3", "4"}:
         if "operation_metrics" in state:
             errors.append(
-                "work-state `operation_metrics` requires `context_selection.version` `3`"
+                "work-state `operation_metrics` requires `context_selection.version` "
+                "`3` or `4`"
             )
         if mode in {"preterminal", "final"}:
             errors.append(
-                f"operation metrics `{mode}` validation requires `context_selection.version` `3`"
+                f"operation metrics `{mode}` validation requires "
+                "`context_selection.version` `3` or `4`"
             )
         return
     if not isinstance(metrics, dict):
         errors.append(
-            "work-state with `context_selection.version` `3` must contain "
-            "`operation_metrics`"
+            f"work-state with `context_selection.version` `{selection_version}` must "
+            "contain `operation_metrics`"
         )
         return
 
@@ -658,7 +758,7 @@ def validate_operation_metrics(
     )
     if metrics.get("version") != "1":
         errors.append("operation metrics `version` must be `1`")
-    operation_status = metrics.get("status")
+    operation_status = nonempty_string(metrics.get("status"))
     if operation_status not in {"active", "finished"}:
         errors.append("operation metrics `status` must be `active` or `finished`")
     if mode in {"active", "final-validation", "preterminal"} and operation_status != "active":
@@ -685,6 +785,29 @@ def validate_operation_metrics(
     if not isinstance(spans, list):
         errors.append("operation metrics `spans` must be a list")
         spans = []
+    v4_metric_bundle_scopes: set[str] = set()
+    if selection_version == "4":
+        queue = state.get("bundle_queue")
+        if isinstance(queue, list):
+            v4_metric_bundle_scopes.update(
+                bundle["bundle_id"]
+                for bundle in queue
+                if isinstance(bundle, dict)
+                and isinstance(bundle.get("bundle_id"), str)
+            )
+        registry = state.get("selection_retirements")
+        retired_bundles = (
+            registry.get("retired_bundles")
+            if isinstance(registry, dict)
+            else None
+        )
+        if isinstance(retired_bundles, list):
+            v4_metric_bundle_scopes.update(
+                bundle["bundle_id"]
+                for bundle in retired_bundles
+                if isinstance(bundle, dict)
+                and isinstance(bundle.get("bundle_id"), str)
+            )
     parsed_spans: list[dict[str, Any]] = []
     spans_by_id: dict[str, dict[str, Any]] = {}
     active_spans: list[dict[str, Any]] = []
@@ -715,17 +838,32 @@ def validate_operation_metrics(
                 errors.append(f"operation metric span id `{span_id}` appears more than once")
             else:
                 spans_by_id[span_id] = span
-        kind = span.get("kind")
+        kind = nonempty_string(span.get("kind"))
         if kind not in OPERATION_METRIC_KINDS:
             errors.append(f"{label} has unsupported `kind`")
             kind = None
         scope = single_line_string(span.get("scope"), f"{label} `scope`", errors)
         if kind == "validation" and scope in {"metrics-preterminal", "metrics-final"}:
             errors.append(f"{label} must not instrument a terminal metrics check")
+        if selection_version == "4" and kind == "development-review":
+            if scope != "selection-readiness" and scope not in v4_metric_bundle_scopes:
+                errors.append(
+                    f"{label} v4 development-review scope must be `selection-readiness` "
+                    "or an active/retired stable bundle_id"
+                )
+        if (
+            selection_version == "4"
+            and kind == "risk-review"
+            and scope not in v4_metric_bundle_scopes
+        ):
+            errors.append(
+                f"{label} v4 risk-review scope must be an active/retired stable "
+                "bundle_id"
+            )
         attempt_id = lower_kebab_value(
             span.get("attempt_id"), f"{label} `attempt_id`", errors
         )
-        span_status = span.get("status")
+        span_status = nonempty_string(span.get("status"))
         if span_status not in {"active", "finished"}:
             errors.append(f"{label} `status` must be `active` or `finished`")
         started = rfc3339_value(span.get("started_at"), f"{label} `started_at`", errors)
@@ -738,7 +876,7 @@ def validate_operation_metrics(
             finished = rfc3339_value(
                 span.get("finished_at"), f"{label} `finished_at`", errors
             )
-            if span.get("outcome") not in OPERATION_METRIC_OUTCOMES:
+            if nonempty_string(span.get("outcome")) not in OPERATION_METRIC_OUTCOMES:
                 errors.append(f"finished {label} has unsupported `outcome`")
             if started is not None and finished is not None and finished < started:
                 errors.append(f"{label} `finished_at` must not precede `started_at`")
@@ -943,21 +1081,41 @@ def validate_operation_metric_completion_coverage(
 
     selection = state.get("context_selection")
     candidates = selection.get("candidates") if isinstance(selection, dict) else None
-    candidate_domains = {
-        candidate.get("candidate_id"): candidate.get("domain")
-        for candidate in candidates or []
-        if isinstance(candidate, dict)
-        and isinstance(candidate.get("candidate_id"), str)
-        and isinstance(candidate.get("domain"), str)
-    }
-    risk_domains = {
-        candidate_domains.get(trigger.get("candidate_id"))
-        for trigger in state.get("risk_triggers") or []
-        if isinstance(trigger, dict)
-        and candidate_domains.get(trigger.get("candidate_id")) is not None
-        and candidate_domains.get(trigger.get("candidate_id")) in required_bundle_counts
-    }
-    for domain in sorted(risk_domains):
+    if isinstance(selection, dict) and selection.get("version") == "4":
+        risk_scope_by_atom = {
+            atom_key: bundle.get("bundle_id")
+            for bundle in queue or []
+            if isinstance(bundle, dict) and isinstance(bundle.get("bundle_id"), str)
+            for atom_key in (
+                bundle.get("expected_atom_keys")
+                if isinstance(bundle.get("expected_atom_keys"), list)
+                else []
+            )
+            if isinstance(atom_key, str)
+        }
+        risk_scopes = {
+            risk_scope_by_atom.get(trigger.get("atom_key"))
+            for trigger in state.get("risk_triggers") or []
+            if isinstance(trigger, dict)
+            and risk_scope_by_atom.get(trigger.get("atom_key")) is not None
+        }
+    else:
+        candidate_domains = {
+            candidate.get("candidate_id"): candidate.get("domain")
+            for candidate in candidates or []
+            if isinstance(candidate, dict)
+            and isinstance(candidate.get("candidate_id"), str)
+            and isinstance(candidate.get("domain"), str)
+        }
+        risk_scopes = {
+            candidate_domains.get(trigger.get("candidate_id"))
+            for trigger in state.get("risk_triggers") or []
+            if isinstance(trigger, dict)
+            and candidate_domains.get(trigger.get("candidate_id")) is not None
+            and candidate_domains.get(trigger.get("candidate_id"))
+            in required_bundle_counts
+        }
+    for domain in sorted(risk_scopes):
         if not any(
             span.get("kind") == "risk-review" and span.get("scope") == domain
             for span in successful_spans
@@ -994,9 +1152,13 @@ def validate_semantic_review_closure(
     required_final_role: str | None,
 ) -> None:
     selection = state.get("context_selection")
-    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    selection_version = (
+        nonempty_string(selection.get("version"))
+        if isinstance(selection, dict)
+        else None
+    )
     if "semantic_review_closure" not in state:
-        if selection_version in {"2", "3"}:
+        if selection_version in {"2", "3", "4"}:
             errors.append(
                 f"work-state with `context_selection.version` `{selection_version}` must contain "
                 "`semantic_review_closure`"
@@ -1006,9 +1168,10 @@ def validate_semantic_review_closure(
     if not isinstance(closure, dict):
         errors.append("work-state `semantic_review_closure` must be an object")
         return
-    if selection_version not in {"2", "3"}:
+    if selection_version not in {"2", "3", "4"}:
         errors.append(
-            "work-state `semantic_review_closure` requires `context_selection.version` `2` or `3`"
+            "work-state `semantic_review_closure` requires `context_selection.version` "
+            "`2`, `3`, or `4`"
         )
     validate_object_keys(
         closure,
@@ -1024,6 +1187,7 @@ def validate_semantic_review_closure(
         "semantic review closure `basis_revision`",
         errors,
     )
+    v4_bundle_scopes = selection_version == "4"
     accepted_domains = semantic_accepted_domains(state, errors)
 
     review_passes = closure.get("review_passes")
@@ -1073,7 +1237,14 @@ def validate_semantic_review_closure(
             )
             role = None
         scope = single_line_string(review.get("scope"), f"{label} `scope`", errors)
-        validate_semantic_review_scope(role, scope, accepted_domains, label, errors)
+        validate_semantic_review_scope(
+            role,
+            scope,
+            accepted_domains,
+            label,
+            errors,
+            v4_bundle_scopes=v4_bundle_scopes,
+        )
         revision = positive_integer(
             review.get("basis_revision"), f"{label} `basis_revision`", errors
         )
@@ -1166,9 +1337,15 @@ def validate_semantic_review_closure(
             errors.append(f"{label} repeats an affected bundle")
         for bundle in affected_bundles:
             if bundle not in accepted_domains:
-                errors.append(
-                    f"{label} affected bundle `{bundle}` is outside `accepted_scope`"
-                )
+                if v4_bundle_scopes:
+                    errors.append(
+                        f"{label} affected bundle `{bundle}` does not resolve to a v4 "
+                        "`bundle_queue.bundle_id`"
+                    )
+                else:
+                    errors.append(
+                        f"{label} affected bundle `{bundle}` is outside `accepted_scope`"
+                    )
 
         stale_review_ids = string_list(
             invalidation.get("stale_review_ids"),
@@ -1215,7 +1392,12 @@ def validate_semantic_review_closure(
             if scope is None:
                 continue
             validate_semantic_review_scope(
-                role, scope, accepted_domains, review_label, errors
+                role,
+                scope,
+                accepted_domains,
+                review_label,
+                errors,
+                v4_bundle_scopes=v4_bundle_scopes,
             )
             if role in {"development", "risk"} and scope not in affected_bundles:
                 errors.append(
@@ -1229,6 +1411,22 @@ def validate_semantic_review_closure(
             required_pairs.add(pair)
         if not required_pairs:
             errors.append(f"{label} must require at least one semantic review")
+        if selection_version == "4":
+            for review_id in stale_review_ids:
+                stale_review = passes_by_id.get(review_id)
+                if not isinstance(stale_review, dict):
+                    continue
+                stale_role = stale_review.get("reviewer_role")
+                stale_scope = stale_review.get("scope")
+                if (
+                    stale_role in {"development", "risk"}
+                    and isinstance(stale_scope, str)
+                    and (stale_role, stale_scope) not in required_pairs
+                ):
+                    errors.append(
+                        f"{label} stale v4 PASS `{review_id}` must include exact "
+                        f"required review `{stale_role}`/`{stale_scope}`"
+                    )
 
         if status not in {"open", "resolved"}:
             errors.append(f"{label} `status` must be `open` or `resolved`")
@@ -1415,6 +1613,36 @@ def validate_semantic_review_closure(
 def semantic_accepted_domains(
     state: dict[str, Any], errors: list[str]
 ) -> set[str]:
+    selection = state.get("context_selection")
+    if isinstance(selection, dict) and selection.get("version") == "4":
+        queue = state.get("bundle_queue")
+        if not isinstance(queue, list):
+            errors.append(
+                "v4 semantic review closure requires work-state `bundle_queue` as a list"
+            )
+            return set()
+        bundle_ids: set[str] = set()
+        for index, bundle in enumerate(queue, start=1):
+            if not isinstance(bundle, dict):
+                continue
+            bundle_id = single_line_string(
+                bundle.get("bundle_id"),
+                f"v4 semantic review bundle item {index} `bundle_id`",
+                errors,
+            )
+            if bundle_id is not None:
+                bundle_ids.add(bundle_id)
+        registry = state.get("selection_retirements")
+        retired = (
+            registry.get("retired_bundles") if isinstance(registry, dict) else None
+        )
+        if isinstance(retired, list):
+            for bundle in retired:
+                if isinstance(bundle, dict) and isinstance(
+                    bundle.get("bundle_id"), str
+                ):
+                    bundle_ids.add(bundle["bundle_id"])
+        return bundle_ids
     raw_scope = state.get("accepted_scope")
     if not isinstance(raw_scope, list):
         errors.append(
@@ -1437,11 +1665,19 @@ def validate_semantic_review_scope(
     accepted_domains: set[str],
     label: str,
     errors: list[str],
+    *,
+    v4_bundle_scopes: bool = False,
 ) -> None:
     if scope is None or role not in SEMANTIC_REVIEW_ROLES:
         return
     if role in {"development", "risk"} and scope not in accepted_domains:
-        errors.append(f"{label} scope `{scope}` is outside `accepted_scope`")
+        if v4_bundle_scopes:
+            errors.append(
+                f"{label} scope `{scope}` does not resolve to a v4 "
+                "`bundle_queue.bundle_id`"
+            )
+        else:
+            errors.append(f"{label} scope `{scope}` is outside `accepted_scope`")
     if role == "integration" and scope not in {"affected-closure", "project-wide"}:
         errors.append(
             f"{label} integration scope must be `affected-closure` or `project-wide`"
@@ -1582,6 +1818,1668 @@ def validate_selection_risk_triggers(
         if nonempty_string(item.get("basis")) is None:
             errors.append(f"{label} must include non-empty `basis`")
     return risk_keys
+
+
+def validate_owner_readiness_v4(
+    state: dict[str, Any],
+    candidate_targets: dict[str, set[str]],
+    candidate_dispositions: dict[str, str],
+    candidate_domains: dict[str, str],
+    errors: list[str],
+    *,
+    require_final: bool,
+) -> None:
+    """Validate v4 references and lifecycle without judging semantic correctness."""
+    queue = state.get("bundle_queue")
+    bundles_by_id: dict[str, dict[str, Any]] = {}
+    bundle_dependencies: dict[str, set[str]] = {}
+    atom_bundles: dict[str, str] = {}
+    if isinstance(queue, list):
+        for index, bundle in enumerate(queue, start=1):
+            label = f"v4 bundle queue item {index}"
+            if not isinstance(bundle, dict):
+                continue
+            validate_object_keys(
+                bundle,
+                {"bundle_id", "domain", "expected_atom_keys", "depends_on_contract_ids"},
+                {"bundle_id", "domain", "expected_atom_keys", "depends_on_contract_ids"},
+                label,
+                errors,
+            )
+            bundle_id = lower_kebab_value(
+                bundle.get("bundle_id"), f"{label} `bundle_id`", errors
+            )
+            if bundle_id is not None:
+                if bundle_id in bundles_by_id:
+                    errors.append(f"v4 bundle id `{bundle_id}` appears more than once")
+                else:
+                    bundles_by_id[bundle_id] = bundle
+            dependencies = string_list(
+                bundle.get("depends_on_contract_ids"),
+                f"{label} `depends_on_contract_ids`",
+                errors,
+            )
+            if len(dependencies) != len(set(dependencies)):
+                errors.append(f"{label} repeats a shared contract dependency")
+            atom_keys = atom_key_list(
+                bundle.get("expected_atom_keys"), label, errors, "expected_atom_keys"
+            )
+            if bundle_id is not None:
+                bundle_dependencies[bundle_id] = set(dependencies)
+            for atom_key in atom_keys:
+                if bundle_id is not None:
+                    atom_bundles[atom_key] = bundle_id
+    else:
+        errors.append("v4 owner readiness requires `bundle_queue` as a list")
+
+    contracts = state.get("shared_contracts")
+    contracts_by_id: dict[str, dict[str, Any]] = {}
+    contract_consumers: dict[str, set[str]] = {}
+    contract_consumer_bundles: dict[str, set[str]] = {}
+    if not isinstance(contracts, list):
+        errors.append("v4 work-state `shared_contracts` must be a list")
+        contracts = []
+    for index, contract in enumerate(contracts, start=1):
+        label = f"shared contract {index}"
+        if not isinstance(contract, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(
+            contract,
+            {
+                "contract_id",
+                "kind",
+                "owner_candidate_id",
+                "owner_atom_key",
+                "direct_consumer_candidate_ids",
+                "evidence_routes",
+                "owner_bundle_id",
+                "consumer_bundle_ids",
+            },
+            {
+                "contract_id",
+                "kind",
+                "owner_candidate_id",
+                "owner_atom_key",
+                "direct_consumer_candidate_ids",
+                "evidence_routes",
+                "owner_bundle_id",
+                "consumer_bundle_ids",
+            },
+            label,
+            errors,
+        )
+        contract_id = lower_kebab_value(
+            contract.get("contract_id"), f"{label} `contract_id`", errors
+        )
+        if contract_id is not None:
+            if contract_id in contracts_by_id:
+                errors.append(f"shared contract id `{contract_id}` appears more than once")
+            else:
+                contracts_by_id[contract_id] = contract
+        contract_kind = nonempty_string(contract.get("kind"))
+        if contract_kind not in SHARED_CONTRACT_KINDS:
+            errors.append(f"{label} has unsupported `kind`")
+        owner_candidate_id = lower_kebab_value(
+            contract.get("owner_candidate_id"),
+            f"{label} `owner_candidate_id`",
+            errors,
+        )
+        owner_atom_key = lower_kebab_value(
+            contract.get("owner_atom_key"), f"{label} `owner_atom_key`", errors
+        )
+        if owner_candidate_id not in candidate_targets:
+            errors.append(f"{label} owner candidate does not resolve")
+        elif candidate_dispositions.get(owner_candidate_id) == "drop":
+            errors.append(f"{label} owner candidate must not be dropped")
+        elif owner_atom_key not in candidate_targets.get(owner_candidate_id, set()):
+            errors.append(f"{label} owner atom is not produced by its owner candidate")
+        owner_bundle_id = lower_kebab_value(
+            contract.get("owner_bundle_id"), f"{label} `owner_bundle_id`", errors
+        )
+        if owner_bundle_id not in bundles_by_id:
+            errors.append(f"{label} owner bundle does not resolve")
+        elif atom_bundles.get(owner_atom_key or "") != owner_bundle_id:
+            errors.append(f"{label} owner atom is not queued by its owner bundle")
+
+        consumers = string_list(
+            contract.get("direct_consumer_candidate_ids"),
+            f"{label} `direct_consumer_candidate_ids`",
+            errors,
+        )
+        if not consumers:
+            errors.append(f"{label} must name at least one direct consumer candidate")
+        if len(consumers) != len(set(consumers)):
+            errors.append(f"{label} repeats a direct consumer candidate")
+        for candidate_id in consumers:
+            if candidate_id == owner_candidate_id:
+                errors.append(f"{label} owner candidate cannot also be a direct consumer")
+            elif candidate_id not in candidate_targets:
+                errors.append(f"{label} direct consumer `{candidate_id}` does not resolve")
+            elif candidate_dispositions.get(candidate_id) == "drop":
+                errors.append(f"{label} direct consumer `{candidate_id}` is dropped")
+
+        evidence_routes = string_list(
+            contract.get("evidence_routes"), f"{label} `evidence_routes`", errors
+        )
+        if not evidence_routes:
+            errors.append(f"{label} must include at least one evidence route")
+        if any("\n" in route or "\r" in route for route in evidence_routes):
+            errors.append(f"{label} evidence routes must be single-line strings")
+        consumer_bundle_ids = string_list(
+            contract.get("consumer_bundle_ids"),
+            f"{label} `consumer_bundle_ids`",
+            errors,
+        )
+        if not consumer_bundle_ids:
+            errors.append(f"{label} must name at least one consumer bundle")
+        if len(consumer_bundle_ids) != len(set(consumer_bundle_ids)):
+            errors.append(f"{label} repeats a consumer bundle")
+        if contract_id is not None:
+            contract_consumers[contract_id] = set(consumers)
+            contract_consumer_bundles[contract_id] = set(consumer_bundle_ids)
+        queue_positions = {bundle_id: index for index, bundle_id in enumerate(bundles_by_id)}
+        expected_consumer_bundles: set[str] = set()
+        for candidate_id in consumers:
+            for atom_key in candidate_targets.get(candidate_id, set()):
+                bundle_id = atom_bundles.get(atom_key)
+                if bundle_id is not None:
+                    expected_consumer_bundles.add(bundle_id)
+        if set(consumer_bundle_ids) != expected_consumer_bundles:
+            errors.append(
+                f"{label} consumer bundles must exactly cover direct consumer candidates"
+            )
+        for bundle_id in consumer_bundle_ids:
+            bundle = bundles_by_id.get(bundle_id)
+            if bundle is None:
+                errors.append(f"{label} consumer bundle `{bundle_id}` does not resolve")
+                continue
+            if contract_id not in bundle_dependencies.get(bundle_id, set()):
+                errors.append(
+                    f"{label} consumer bundle `{bundle_id}` is missing its contract dependency"
+                )
+            if (
+                owner_bundle_id in queue_positions
+                and bundle_id in queue_positions
+                and queue_positions[owner_bundle_id] >= queue_positions[bundle_id]
+            ):
+                errors.append(
+                    f"{label} owner bundle must precede consumer bundle `{bundle_id}`"
+                )
+
+    retired_bundles, retired_contracts = validate_selection_retirements_v4(
+        state,
+        bundles_by_id,
+        contracts_by_id,
+        errors,
+    )
+    validate_v4_retirement_history_obligations(
+        state,
+        retired_bundles,
+        retired_contracts,
+        errors,
+    )
+
+    referenced_contract_ids: set[str] = set()
+    routed_candidates_by_contract: dict[str, set[str]] = {}
+    risks = state.get("risk_triggers")
+    if isinstance(risks, list):
+        for index, risk in enumerate(risks, start=1):
+            label = f"v4 risk trigger {index}"
+            if not isinstance(risk, dict):
+                continue
+            validate_object_keys(
+                risk,
+                {
+                    "candidate_id",
+                    "atom_key",
+                    "triggers",
+                    "basis",
+                    "route",
+                    "shared_contract_id",
+                },
+                {"candidate_id", "atom_key", "triggers", "basis", "route"},
+                label,
+                errors,
+            )
+            route = risk.get("route")
+            contract_id = nonempty_string(risk.get("shared_contract_id"))
+            if route == "local":
+                if "shared_contract_id" in risk:
+                    errors.append(f"{label} local route must omit `shared_contract_id`")
+            elif route == "shared-contract":
+                if contract_id is None:
+                    errors.append(f"{label} shared route needs `shared_contract_id`")
+                elif contract_id not in contracts_by_id:
+                    errors.append(
+                        f"{label} shared_contract_id `{contract_id}` does not resolve"
+                    )
+                else:
+                    referenced_contract_ids.add(contract_id)
+                    candidate_id = nonempty_string(risk.get("candidate_id"))
+                    if candidate_id is not None:
+                        routed_candidates_by_contract.setdefault(contract_id, set()).add(
+                            candidate_id
+                        )
+                    contract = contracts_by_id[contract_id]
+                    owner_candidate = nonempty_string(
+                        contract.get("owner_candidate_id")
+                    )
+                    allowed_candidates = set(
+                        contract_consumers.get(contract_id, set())
+                    )
+                    if owner_candidate is not None:
+                        allowed_candidates.add(owner_candidate)
+                    if candidate_id not in allowed_candidates:
+                        errors.append(
+                            f"{label} candidate is not the owner or a direct consumer of "
+                            f"shared contract `{contract_id}`"
+                        )
+            else:
+                errors.append(f"{label} `route` must be `local` or `shared-contract`")
+    for contract_id in sorted(set(contracts_by_id) - referenced_contract_ids):
+        errors.append(f"shared contract `{contract_id}` is orphaned from risk routing")
+    for contract_id, contract in contracts_by_id.items():
+        required_routes = set(contract_consumers.get(contract_id, set()))
+        owner_candidate = nonempty_string(contract.get("owner_candidate_id"))
+        if owner_candidate is not None:
+            required_routes.add(owner_candidate)
+        missing_candidates = required_routes - (
+            routed_candidates_by_contract.get(contract_id, set())
+        )
+        for candidate_id in sorted(
+            value for value in missing_candidates if isinstance(value, str)
+        ):
+            errors.append(
+                f"shared contract `{contract_id}` candidate `{candidate_id}` is missing "
+                "its shared risk route"
+            )
+    for bundle_id in bundles_by_id:
+        for contract_id in bundle_dependencies.get(bundle_id, set()):
+            contract = contracts_by_id.get(contract_id)
+            if contract is None:
+                errors.append(
+                    f"v4 bundle `{bundle_id}` dependency `{contract_id}` does not resolve"
+                )
+            elif bundle_id not in contract_consumer_bundles.get(contract_id, set()):
+                errors.append(
+                    f"v4 bundle `{bundle_id}` has unrelated dependency `{contract_id}`"
+                )
+
+    readiness = validate_selection_readiness_v4(state, errors)
+    validate_late_discovery_and_diagnostics_v4(
+        state,
+        {**retired_contracts, **contracts_by_id},
+        {**retired_bundles, **bundles_by_id},
+        candidate_dispositions,
+        readiness,
+        errors,
+        require_final=require_final,
+    )
+
+
+def validate_selection_retirements_v4(
+    state: dict[str, Any],
+    active_bundles: dict[str, dict[str, Any]],
+    active_contracts: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    registry = state.get("selection_retirements")
+    retired_bundles: dict[str, dict[str, Any]] = {}
+    retired_contracts: dict[str, dict[str, Any]] = {}
+    if not isinstance(registry, dict):
+        errors.append("v4 work-state `selection_retirements` must be an object")
+        return retired_bundles, retired_contracts
+    validate_object_keys(
+        registry,
+        {"version", "retired_bundles", "retired_contracts"},
+        {"version", "retired_bundles", "retired_contracts"},
+        "selection retirements",
+        errors,
+    )
+    if registry.get("version") != "1":
+        errors.append("selection retirements `version` must be `1`")
+
+    raw_bundles = registry.get("retired_bundles")
+    bundle_revisions: list[int] = []
+    if not isinstance(raw_bundles, list):
+        errors.append("selection retirements `retired_bundles` must be a list")
+        raw_bundles = []
+    bundle_fields = {
+        "bundle_id",
+        "domain",
+        "expected_atom_keys",
+        "depends_on_contract_ids",
+        "retired_basis_revision",
+        "reason",
+    }
+    for index, bundle in enumerate(raw_bundles, start=1):
+        label = f"retired bundle {index}"
+        if not isinstance(bundle, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(bundle, bundle_fields, bundle_fields, label, errors)
+        bundle_id = lower_kebab_value(
+            bundle.get("bundle_id"), f"{label} `bundle_id`", errors
+        )
+        if bundle_id is not None:
+            if bundle_id in retired_bundles:
+                errors.append(f"retired bundle id `{bundle_id}` appears more than once")
+            else:
+                retired_bundles[bundle_id] = bundle
+            if bundle_id in active_bundles:
+                errors.append(f"v4 bundle id `{bundle_id}` cannot be active and retired")
+        single_line_string(bundle.get("domain"), f"{label} `domain`", errors)
+        atom_keys = atom_key_list(
+            bundle.get("expected_atom_keys"), label, errors, "expected_atom_keys"
+        )
+        if not atom_keys:
+            errors.append(f"{label} must retain at least one expected atom key")
+        dependencies = string_list(
+            bundle.get("depends_on_contract_ids"),
+            f"{label} `depends_on_contract_ids`",
+            errors,
+        )
+        if len(dependencies) != len(set(dependencies)):
+            errors.append(f"{label} repeats a shared contract dependency")
+        revision = positive_integer(
+            bundle.get("retired_basis_revision"),
+            f"{label} `retired_basis_revision`",
+            errors,
+        )
+        if revision is not None:
+            bundle_revisions.append(revision)
+        single_line_string(bundle.get("reason"), f"{label} `reason`", errors)
+    if bundle_revisions != sorted(bundle_revisions):
+        errors.append("retired bundles must follow retirement basis revision order")
+
+    raw_contracts = registry.get("retired_contracts")
+    contract_revisions: list[int] = []
+    if not isinstance(raw_contracts, list):
+        errors.append("selection retirements `retired_contracts` must be a list")
+        raw_contracts = []
+    contract_fields = {
+        "contract_id",
+        "kind",
+        "owner_candidate_id",
+        "owner_atom_key",
+        "direct_consumer_candidate_ids",
+        "evidence_routes",
+        "owner_bundle_id",
+        "consumer_bundle_ids",
+        "retired_basis_revision",
+        "reason",
+    }
+    for index, contract in enumerate(raw_contracts, start=1):
+        label = f"retired shared contract {index}"
+        if not isinstance(contract, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(contract, contract_fields, contract_fields, label, errors)
+        contract_id = lower_kebab_value(
+            contract.get("contract_id"), f"{label} `contract_id`", errors
+        )
+        if contract_id is not None:
+            if contract_id in retired_contracts:
+                errors.append(
+                    f"retired shared contract id `{contract_id}` appears more than once"
+                )
+            else:
+                retired_contracts[contract_id] = contract
+            if contract_id in active_contracts:
+                errors.append(
+                    f"shared contract id `{contract_id}` cannot be active and retired"
+                )
+        if contract.get("kind") not in SHARED_CONTRACT_KINDS:
+            errors.append(f"{label} has unsupported `kind`")
+        lower_kebab_value(
+            contract.get("owner_candidate_id"),
+            f"{label} `owner_candidate_id`",
+            errors,
+        )
+        lower_kebab_value(
+            contract.get("owner_atom_key"), f"{label} `owner_atom_key`", errors
+        )
+        consumers = string_list(
+            contract.get("direct_consumer_candidate_ids"),
+            f"{label} `direct_consumer_candidate_ids`",
+            errors,
+        )
+        if not consumers:
+            errors.append(f"{label} must retain direct consumer candidates")
+        if len(consumers) != len(set(consumers)):
+            errors.append(f"{label} repeats a direct consumer candidate")
+        evidence = string_list(
+            contract.get("evidence_routes"), f"{label} `evidence_routes`", errors
+        )
+        if not evidence:
+            errors.append(f"{label} must retain evidence routes")
+        if any("\n" in route or "\r" in route for route in evidence):
+            errors.append(f"{label} evidence routes must be single-line strings")
+        lower_kebab_value(
+            contract.get("owner_bundle_id"),
+            f"{label} `owner_bundle_id`",
+            errors,
+        )
+        consumer_bundle_ids = string_list(
+            contract.get("consumer_bundle_ids"),
+            f"{label} `consumer_bundle_ids`",
+            errors,
+        )
+        if not consumer_bundle_ids:
+            errors.append(f"{label} must retain consumer bundles")
+        if len(consumer_bundle_ids) != len(set(consumer_bundle_ids)):
+            errors.append(f"{label} repeats a consumer bundle")
+        revision = positive_integer(
+            contract.get("retired_basis_revision"),
+            f"{label} `retired_basis_revision`",
+            errors,
+        )
+        if revision is not None:
+            contract_revisions.append(revision)
+        single_line_string(contract.get("reason"), f"{label} `reason`", errors)
+    if contract_revisions != sorted(contract_revisions):
+        errors.append("retired shared contracts must follow retirement basis revision order")
+
+    all_bundles = {**retired_bundles, **active_bundles}
+    for contract_id, contract in retired_contracts.items():
+        for field in ("owner_bundle_id", "consumer_bundle_ids"):
+            raw_ids = contract.get(field)
+            bundle_ids = raw_ids if isinstance(raw_ids, list) else [raw_ids]
+            for bundle_id in bundle_ids:
+                if isinstance(bundle_id, str) and bundle_id not in all_bundles:
+                    errors.append(
+                        f"retired shared contract `{contract_id}` {field} bundle "
+                        f"`{bundle_id}` does not resolve"
+                    )
+    readiness = state.get("selection_readiness")
+    readiness_basis = (
+        readiness.get("basis_revision") if isinstance(readiness, dict) else None
+    )
+    if type(readiness_basis) is int:
+        for item in [*retired_bundles.values(), *retired_contracts.values()]:
+            revision = item.get("retired_basis_revision")
+            if type(revision) is int and revision > readiness_basis:
+                errors.append(
+                    "selection retirement basis exceeds current readiness basis"
+                )
+    return retired_bundles, retired_contracts
+
+
+def validate_v4_retirement_history_obligations(
+    state: dict[str, Any],
+    retired_bundles: dict[str, dict[str, Any]],
+    retired_contracts: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Keep retirement invalidation obligations enforceable without a rollback."""
+    obligations: dict[tuple[str, int], set[str]] = {}
+    for bundle_id, bundle in retired_bundles.items():
+        revision = bundle.get("retired_basis_revision")
+        if type(revision) is int:
+            obligations.setdefault((bundle_id, revision), set()).add(
+                f"retired bundle `{bundle_id}`"
+            )
+    for contract_id, contract in retired_contracts.items():
+        revision = contract.get("retired_basis_revision")
+        if type(revision) is not int:
+            continue
+        related_bundle_ids = [contract.get("owner_bundle_id")]
+        consumer_bundle_ids = contract.get("consumer_bundle_ids")
+        if isinstance(consumer_bundle_ids, list):
+            related_bundle_ids.extend(consumer_bundle_ids)
+        for bundle_id in related_bundle_ids:
+            if not isinstance(bundle_id, str):
+                continue
+            retired_bundle = retired_bundles.get(bundle_id)
+            retired_bundle_revision = (
+                retired_bundle.get("retired_basis_revision")
+                if isinstance(retired_bundle, dict)
+                else None
+            )
+            if (
+                type(retired_bundle_revision) is int
+                and retired_bundle_revision < revision
+            ):
+                continue
+            obligations.setdefault((bundle_id, revision), set()).add(
+                f"retired shared contract `{contract_id}`"
+            )
+
+    closure = state.get("semantic_review_closure")
+    if not isinstance(closure, dict):
+        return
+    raw_reviews = closure.get("review_passes")
+    raw_invalidations = closure.get("invalidations")
+    if not isinstance(raw_reviews, list) or not isinstance(raw_invalidations, list):
+        return
+    reviews = {
+        review.get("review_id"): review
+        for review in raw_reviews
+        if isinstance(review, dict) and isinstance(review.get("review_id"), str)
+    }
+    reported_required_pairs: set[tuple[str, str, str]] = set()
+    for (bundle_id, revision), sources in obligations.items():
+        retirement_prior_passes = [
+            review
+            for review in reviews.values()
+            if review.get("reviewer_role") in {"development", "risk"}
+            and review.get("scope") == bundle_id
+            and type(review.get("basis_revision")) is int
+            and review["basis_revision"] < revision
+            and not any(
+                isinstance(invalidation, dict)
+                and invalidation.get("status") == "resolved"
+                and review.get("review_id")
+                in semantic_string_set(invalidation.get("stale_review_ids"))
+                and type(invalidation.get("resolved_revision")) is int
+                and invalidation["resolved_revision"] < revision
+                for invalidation in raw_invalidations
+            )
+        ]
+        for review in retirement_prior_passes:
+            review_id = review["review_id"]
+            required_pair = (review.get("reviewer_role"), bundle_id)
+            matching = [
+                invalidation
+                for invalidation in raw_invalidations
+                if isinstance(invalidation, dict)
+                and invalidation.get("status") in {"open", "resolved"}
+                and invalidation.get("opened_revision") == revision
+                and bundle_id
+                in semantic_string_set(invalidation.get("affected_bundles"))
+                and review_id
+                in semantic_string_set(invalidation.get("stale_review_ids"))
+                and required_pair
+                in semantic_required_review_set(
+                    invalidation.get("required_reviews")
+                )
+            ]
+            if not matching:
+                errors.append(
+                    f"selection retirement history {' and '.join(sorted(sources))} "
+                    f"needs invalidation opened at retirement basis {revision} for "
+                    f"prior PASS `{review_id}` on bundle `{bundle_id}`, including "
+                    f"required review `{required_pair[0]}`/`{bundle_id}`"
+                )
+
+        retirement_invalidations = [
+            invalidation
+            for invalidation in raw_invalidations
+            if isinstance(invalidation, dict)
+            and invalidation.get("opened_revision") == revision
+            and bundle_id
+            in semantic_string_set(invalidation.get("affected_bundles"))
+        ]
+        for invalidation in retirement_invalidations:
+            required_pairs = semantic_required_review_set(
+                invalidation.get("required_reviews")
+            )
+            invalidation_id = invalidation.get("invalidation_id")
+            for review_id in semantic_string_set(
+                invalidation.get("stale_review_ids")
+            ):
+                review = reviews.get(review_id)
+                if (
+                    not isinstance(review, dict)
+                    or review.get("reviewer_role") not in {"development", "risk"}
+                    or review.get("scope") != bundle_id
+                    or type(review.get("basis_revision")) is not int
+                    or review["basis_revision"] >= revision
+                ):
+                    continue
+                required_pair = (review.get("reviewer_role"), bundle_id)
+                report_key = (
+                    invalidation_id if isinstance(invalidation_id, str) else "<unknown>",
+                    review_id,
+                    bundle_id,
+                )
+                if required_pair not in required_pairs and report_key not in reported_required_pairs:
+                    reported_required_pairs.add(report_key)
+                    errors.append(
+                        f"selection retirement invalidation `{report_key[0]}` for prior "
+                        f"PASS `{review_id}` must include required review "
+                        f"`{required_pair[0]}`/`{bundle_id}`"
+                    )
+
+
+def validate_selection_readiness_v4(
+    state: dict[str, Any], errors: list[str]
+) -> dict[str, dict[str, Any]]:
+    readiness = state.get("selection_readiness")
+    reviews_by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(readiness, dict):
+        errors.append("v4 work-state `selection_readiness` must be an object")
+        return reviews_by_id
+    validate_object_keys(
+        readiness,
+        {"version", "basis_revision", "reviews"},
+        {"version", "basis_revision", "reviews"},
+        "selection readiness",
+        errors,
+    )
+    if readiness.get("version") != "1":
+        errors.append("selection readiness `version` must be `1`")
+    basis_revision = positive_integer(
+        readiness.get("basis_revision"), "selection readiness `basis_revision`", errors
+    )
+    persistent = state.get("persistent_agent_ids")
+    reviewer_agent_id = (
+        nonempty_string(persistent.get("reviewer"))
+        if isinstance(persistent, dict)
+        else None
+    )
+    if reviewer_agent_id is None:
+        errors.append(
+            "v4 selection readiness requires non-empty `persistent_agent_ids.reviewer`"
+        )
+    metrics = state.get("operation_metrics")
+    spans = metrics.get("spans") if isinstance(metrics, dict) else []
+    if not isinstance(spans, list):
+        spans = []
+    spans_by_id = {
+        span.get("span_id"): span
+        for span in spans or []
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    span_positions = {
+        span.get("span_id"): index
+        for index, span in enumerate(spans or [])
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    current_reviews: list[dict[str, Any]] = []
+    review_finish_times: list[datetime] = []
+    review_revisions: list[int] = []
+    review_metric_positions: list[int] = []
+    reviews = readiness.get("reviews")
+    if not isinstance(reviews, list):
+        errors.append("selection readiness `reviews` must be a list")
+        reviews = []
+    for index, review in enumerate(reviews, start=1):
+        label = f"selection readiness review {index}"
+        if not isinstance(review, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(
+            review,
+            {
+                "review_id",
+                "reviewer_role",
+                "reviewer_agent_id",
+                "basis_revision",
+                "verdict",
+                "status",
+            },
+            {
+                "review_id",
+                "reviewer_role",
+                "reviewer_agent_id",
+                "basis_revision",
+                "verdict",
+                "status",
+            },
+            label,
+            errors,
+        )
+        review_id = lower_kebab_value(
+            review.get("review_id"), f"{label} `review_id`", errors
+        )
+        if review_id is not None:
+            if review_id in reviews_by_id:
+                errors.append(f"selection readiness review id `{review_id}` is duplicated")
+            reviews_by_id[review_id] = review
+        if review.get("reviewer_role") != "development":
+            errors.append(f"{label} `reviewer_role` must be `development`")
+        if review.get("reviewer_agent_id") != reviewer_agent_id:
+            errors.append(f"{label} must reuse `persistent_agent_ids.reviewer`")
+        revision = positive_integer(
+            review.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if revision is not None and basis_revision is not None and revision > basis_revision:
+            errors.append(f"{label} exceeds the current readiness basis")
+        if revision is not None:
+            review_revisions.append(revision)
+        if review.get("verdict") != "PASS":
+            errors.append(f"{label} `verdict` must be exact `PASS`")
+        review_status = nonempty_string(review.get("status"))
+        if review_status not in SEMANTIC_REVIEW_STATUSES:
+            errors.append(f"{label} has unsupported `status`")
+        if review_status == "current":
+            current_reviews.append(review)
+        metric = spans_by_id.get(review_id)
+        if not isinstance(metric, dict) or not (
+            metric.get("kind") == "development-review"
+            and metric.get("scope") == "selection-readiness"
+            and metric.get("status") == "finished"
+            and metric.get("outcome") == "PASS"
+        ):
+            errors.append(f"{label} needs a matching finished readiness metric PASS")
+        else:
+            metric_position = span_positions.get(review_id)
+            if metric_position is not None:
+                review_metric_positions.append(metric_position)
+            finished = rfc3339_value(
+                metric.get("finished_at"), f"{label} metric `finished_at`", errors
+            )
+            if finished is not None:
+                review_finish_times.append(finished)
+    if review_revisions != sorted(review_revisions):
+        errors.append("selection readiness reviews must follow basis revision order")
+    if review_metric_positions != sorted(review_metric_positions):
+        errors.append("selection readiness reviews must follow metric span order")
+    if len(current_reviews) > 1:
+        errors.append("selection readiness has more than one current PASS")
+    dispatch = state.get("dispatch_control")
+    dispatch_status = dispatch.get("status") if isinstance(dispatch, dict) else None
+    if dispatch_status == "ready":
+        if len(current_reviews) != 1:
+            errors.append("ready dispatch requires exactly one current readiness PASS")
+        elif current_reviews[0].get("basis_revision") != basis_revision:
+            errors.append("current readiness PASS must use the latest readiness basis")
+        stale_ids = [
+            review.get("review_id")
+            for review in reviews
+            if isinstance(review, dict) and review.get("status") == "stale"
+        ]
+        if stale_ids:
+            errors.append("ready dispatch must not retain stale readiness PASSes")
+    writer_positions = [
+        index
+        for index, span in enumerate(spans)
+        if isinstance(span, dict) and span.get("kind") == "writer"
+    ]
+    review_positions = [
+        span_positions.get(review_id)
+        for review_id in reviews_by_id
+        if span_positions.get(review_id) is not None
+    ]
+    if writer_positions and (
+        not review_positions or min(review_positions) >= min(writer_positions)
+    ):
+        errors.append("selection readiness PASS must precede the first writer span")
+    writer_start_times = [
+        parsed
+        for index, span in enumerate(spans, start=1)
+        if isinstance(span, dict) and span.get("kind") == "writer"
+        for parsed in [
+            rfc3339_value(
+                span.get("started_at"), f"writer span {index} `started_at`", errors
+            )
+        ]
+        if parsed is not None
+    ]
+    if (
+        writer_start_times
+        and review_finish_times
+        and min(review_finish_times) > min(writer_start_times)
+    ):
+        errors.append("selection readiness PASS must finish before the first writer starts")
+    return reviews_by_id
+
+
+def validate_late_discovery_and_diagnostics_v4(
+    state: dict[str, Any],
+    contracts_by_id: dict[str, dict[str, Any]],
+    bundles_by_id: dict[str, dict[str, Any]],
+    candidate_dispositions: dict[str, str],
+    readiness_reviews: dict[str, dict[str, Any]],
+    errors: list[str],
+    *,
+    require_final: bool,
+) -> None:
+    closure = state.get("semantic_review_closure")
+    closure_invalidations = (
+        closure.get("invalidations") if isinstance(closure, dict) else []
+    )
+    if not isinstance(closure_invalidations, list):
+        closure_invalidations = []
+    closure_reviews = closure.get("review_passes") if isinstance(closure, dict) else []
+    if not isinstance(closure_reviews, list):
+        closure_reviews = []
+    invalidations_by_id = {
+        item.get("invalidation_id"): item
+        for item in closure_invalidations
+        if isinstance(item, dict) and isinstance(item.get("invalidation_id"), str)
+    }
+    readiness = state.get("selection_readiness")
+    readiness_basis = (
+        readiness.get("basis_revision") if isinstance(readiness, dict) else None
+    )
+
+    discoveries = state.get("late_shared_contract_discoveries")
+    discoveries_by_id: dict[str, dict[str, Any]] = {}
+    discovery_revisions: list[int] = []
+    if not isinstance(discoveries, list):
+        errors.append("v4 work-state `late_shared_contract_discoveries` must be a list")
+        discoveries = []
+    for index, discovery in enumerate(discoveries, start=1):
+        label = f"late shared-contract discovery {index}"
+        if not isinstance(discovery, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        stage = nonempty_string(discovery.get("stage"))
+        status = nonempty_string(discovery.get("status"))
+        required = {
+            "discovery_id",
+            "contract_id",
+            "stage",
+            "basis_revision",
+            "affected_bundle_ids",
+            "status",
+        }
+        allowed = required | {
+            "stale_readiness_review_id",
+            "semantic_invalidation_ids",
+            "resolved_revision",
+            "resolution_readiness_review_id",
+        }
+        if stage == "post-readiness":
+            required |= {
+                "stale_readiness_review_id",
+                "semantic_invalidation_ids",
+            }
+        if status == "resolved" and stage == "post-readiness":
+            required |= {"resolved_revision", "resolution_readiness_review_id"}
+        validate_object_keys(discovery, allowed, required, label, errors)
+        discovery_id = lower_kebab_value(
+            discovery.get("discovery_id"), f"{label} `discovery_id`", errors
+        )
+        if discovery_id is not None:
+            if discovery_id in discoveries_by_id:
+                errors.append(f"late discovery id `{discovery_id}` appears more than once")
+            discoveries_by_id[discovery_id] = discovery
+        contract_id = lower_kebab_value(
+            discovery.get("contract_id"), f"{label} `contract_id`", errors
+        )
+        contract = contracts_by_id.get(contract_id or "")
+        if contract is None:
+            errors.append(f"{label} contract does not resolve")
+        elif (
+            type(contract.get("retired_basis_revision")) is int
+            and status == "open"
+        ):
+            errors.append(f"{label} open discovery must reference an active contract")
+        if stage not in {"pre-readiness", "post-readiness"}:
+            errors.append(f"{label} `stage` must be `pre-readiness` or `post-readiness`")
+        revision = positive_integer(
+            discovery.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if revision is not None:
+            discovery_revisions.append(revision)
+            retired_revision = (
+                contract.get("retired_basis_revision")
+                if isinstance(contract, dict)
+                else None
+            )
+            if type(retired_revision) is int and revision > retired_revision:
+                errors.append(f"{label} occurs after its shared contract retirement")
+        affected = string_list(
+            discovery.get("affected_bundle_ids"),
+            f"{label} `affected_bundle_ids`",
+            errors,
+        )
+        if not affected:
+            errors.append(f"{label} must name at least one affected bundle")
+        if len(affected) != len(set(affected)):
+            errors.append(f"{label} repeats an affected bundle")
+        related_bundles = set()
+        if contract is not None:
+            raw_consumer_bundles = contract.get("consumer_bundle_ids")
+            consumer_bundles = (
+                [value for value in raw_consumer_bundles if isinstance(value, str)]
+                if isinstance(raw_consumer_bundles, list)
+                else []
+            )
+            related_bundles = {
+                *consumer_bundles,
+            }
+            owner_bundle = nonempty_string(contract.get("owner_bundle_id"))
+            if owner_bundle is not None:
+                related_bundles.add(owner_bundle)
+        for bundle_id in affected:
+            bundle = bundles_by_id.get(bundle_id)
+            if bundle is None:
+                errors.append(f"{label} affected bundle `{bundle_id}` does not resolve")
+            elif bundle_id not in related_bundles:
+                errors.append(
+                    f"{label} affected bundle `{bundle_id}` is unrelated to its contract"
+                )
+            elif (
+                revision is not None
+                and type(bundle.get("retired_basis_revision")) is int
+                and revision > bundle["retired_basis_revision"]
+            ):
+                errors.append(
+                    f"{label} occurs after affected bundle `{bundle_id}` retirement"
+                )
+        if status not in {"open", "resolved"}:
+            errors.append(f"{label} `status` must be `open` or `resolved`")
+        if (
+            revision is not None
+            and type(readiness_basis) is int
+            and revision > readiness_basis
+        ):
+            errors.append(f"{label} exceeds the current readiness basis")
+        if stage == "pre-readiness":
+            if status != "resolved":
+                errors.append(f"{label} pre-readiness discovery must be `resolved`")
+            for field in (
+                "stale_readiness_review_id",
+                "semantic_invalidation_ids",
+                "resolved_revision",
+                "resolution_readiness_review_id",
+            ):
+                if field in discovery:
+                    errors.append(f"{label} pre-readiness discovery must omit `{field}`")
+            if (
+                revision is not None
+                and type(readiness_basis) is int
+                and revision > readiness_basis
+            ):
+                errors.append(f"{label} occurs after the current readiness basis")
+            continue
+
+        stale_id = nonempty_string(discovery.get("stale_readiness_review_id"))
+        stale_review = readiness_reviews.get(stale_id or "")
+        expected_stale_status = "stale" if status == "open" else "superseded"
+        if stale_review is None:
+            errors.append(f"{label} stale readiness review does not resolve")
+        elif stale_review.get("status") != expected_stale_status:
+            errors.append(
+                f"{label} prior readiness PASS must be `{expected_stale_status}`"
+            )
+        elif revision is not None and stale_review.get("basis_revision", revision) >= revision:
+            errors.append(f"{label} prior readiness PASS must predate discovery")
+        invalidation_ids = string_list(
+            discovery.get("semantic_invalidation_ids"),
+            f"{label} `semantic_invalidation_ids`",
+            errors,
+        )
+        if len(invalidation_ids) != len(set(invalidation_ids)):
+            errors.append(f"{label} repeats a semantic invalidation ID")
+        invalidations_at_discovery = [
+            item
+            for item in closure_invalidations
+            if isinstance(item, dict) and item.get("opened_revision") == revision
+        ]
+        invalidated_review_ids = {
+            review_id
+            for item in invalidations_at_discovery
+            for review_id in (
+                item.get("stale_review_ids")
+                if isinstance(item.get("stale_review_ids"), list)
+                else []
+            )
+            if isinstance(review_id, str)
+        }
+        affected_prior_passes = [
+            review
+            for review in closure_reviews
+            if isinstance(review, dict)
+            and review.get("scope") in set(affected)
+            and type(review.get("basis_revision")) is int
+            and revision is not None
+            and review.get("basis_revision") < revision
+            and (
+                review.get("status") in {"current", "stale"}
+                or (
+                    review.get("status") == "superseded"
+                    and review.get("review_id") in invalidated_review_ids
+                )
+            )
+        ]
+        if affected_prior_passes and not invalidation_ids:
+            errors.append(
+                f"{label} must link affected semantic invalidation(s) because an "
+                "affected prior PASS exists"
+            )
+        expected_bundle_ids = set(affected)
+        linked_bundle_ids: set[str] = set()
+        linked_invalidations: list[dict[str, Any]] = []
+        for invalidation_id in invalidation_ids:
+            invalidation = invalidations_by_id.get(invalidation_id)
+            if invalidation is None:
+                errors.append(
+                    f"{label} semantic invalidation `{invalidation_id}` does not resolve"
+                )
+                continue
+            linked_invalidations.append(invalidation)
+            expected_status = "open" if status == "open" else "resolved"
+            if invalidation.get("status") != expected_status:
+                errors.append(
+                    f"{label} semantic invalidation `{invalidation_id}` must be "
+                    f"`{expected_status}`"
+                )
+            if revision is not None and invalidation.get("opened_revision") != revision:
+                errors.append(
+                    f"{label} semantic invalidation `{invalidation_id}` must open at "
+                    "the discovery basis"
+                )
+            raw_domains = invalidation.get("affected_bundles")
+            if isinstance(raw_domains, list):
+                linked_bundle_ids.update(
+                    bundle_id
+                    for bundle_id in raw_domains
+                    if isinstance(bundle_id, str)
+                )
+        if invalidation_ids and linked_bundle_ids != expected_bundle_ids:
+            errors.append(
+                f"{label} semantic invalidations must cover only its affected bundles"
+            )
+        if status == "open":
+            for field in ("resolved_revision", "resolution_readiness_review_id"):
+                if field in discovery:
+                    errors.append(f"{label} open discovery must omit `{field}`")
+        elif status == "resolved":
+            resolved_revision = positive_integer(
+                discovery.get("resolved_revision"),
+                f"{label} `resolved_revision`",
+                errors,
+            )
+            if (
+                resolved_revision is not None
+                and revision is not None
+                and resolved_revision < revision
+            ):
+                errors.append(f"{label} resolved revision precedes discovery")
+            for invalidation in linked_invalidations:
+                invalidation_revision = invalidation.get("resolved_revision")
+                if (
+                    resolved_revision is not None
+                    and type(invalidation_revision) is int
+                    and invalidation_revision > resolved_revision
+                ):
+                    errors.append(
+                        f"{label} resolves before linked semantic invalidation "
+                        f"`{invalidation.get('invalidation_id')}`"
+                    )
+            resolution_id = nonempty_string(
+                discovery.get("resolution_readiness_review_id")
+            )
+            resolution = readiness_reviews.get(resolution_id or "")
+            if resolution is None:
+                errors.append(f"{label} resolution readiness review does not resolve")
+            elif resolution.get("basis_revision") != resolved_revision:
+                errors.append(
+                    f"{label} resolution must reference a PASS at resolved basis"
+                )
+            elif (
+                resolution.get("status") != "current"
+                and not (
+                    type(readiness_basis) is int
+                    and resolved_revision is not None
+                    and readiness_basis > resolved_revision
+                )
+            ):
+                errors.append(
+                    f"{label} non-current resolution PASS needs a later readiness basis"
+                )
+
+    if discovery_revisions != sorted(discovery_revisions):
+        errors.append("late shared-contract discoveries must follow basis revision order")
+    discovery_positions = {
+        discovery_id: index for index, discovery_id in enumerate(discoveries_by_id)
+    }
+
+    metrics = state.get("operation_metrics")
+    spans = metrics.get("spans") if isinstance(metrics, dict) else []
+    if not isinstance(spans, list):
+        spans = []
+    spans_by_id = {
+        span.get("span_id"): span
+        for span in spans
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    span_positions = {
+        span.get("span_id"): index
+        for index, span in enumerate(spans)
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    diagnostics = state.get("semantic_fail_diagnostics")
+    diagnostics_by_id: dict[str, dict[str, Any]] = {}
+    diagnostic_refs: dict[str, set[tuple[str, str]]] = {}
+    diagnostic_roots: dict[str, str] = {}
+    ordered_diagnostics: list[dict[str, Any]] = []
+    diagnostic_revisions: list[int] = []
+    if not isinstance(diagnostics, list):
+        errors.append("v4 work-state `semantic_fail_diagnostics` must be a list")
+        diagnostics = []
+    prior_position = -1
+    diagnosed_span_ids: set[str] = set()
+    for index, diagnostic in enumerate(diagnostics, start=1):
+        label = f"semantic FAIL diagnostic {index}"
+        if not isinstance(diagnostic, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(
+            diagnostic,
+            {
+                "diagnostic_id",
+                "review_span_id",
+                "first_attempt",
+                "root_category",
+                "candidate_ids",
+                "contract_ids",
+                "basis_revision",
+            },
+            {
+                "diagnostic_id",
+                "review_span_id",
+                "first_attempt",
+                "root_category",
+                "candidate_ids",
+                "contract_ids",
+                "basis_revision",
+            },
+            label,
+            errors,
+        )
+        diagnostic_id = lower_kebab_value(
+            diagnostic.get("diagnostic_id"), f"{label} `diagnostic_id`", errors
+        )
+        if diagnostic_id is not None:
+            if diagnostic_id in diagnostics_by_id:
+                errors.append(f"semantic diagnostic id `{diagnostic_id}` is duplicated")
+            diagnostics_by_id[diagnostic_id] = diagnostic
+        review_span_id = lower_kebab_value(
+            diagnostic.get("review_span_id"), f"{label} `review_span_id`", errors
+        )
+        if review_span_id is not None:
+            if review_span_id in diagnosed_span_ids:
+                errors.append(
+                    f"semantic review FAIL span `{review_span_id}` is diagnosed more than once"
+                )
+            diagnosed_span_ids.add(review_span_id)
+        metric = spans_by_id.get(review_span_id or "")
+        if not isinstance(metric, dict) or not (
+            metric.get("kind")
+            in {
+                "development-review",
+                "risk-review",
+                "integration-review",
+                "baseline-review",
+            }
+            and metric.get("status") == "finished"
+            and metric.get("outcome") == "FAIL"
+            and "rerun_of" not in metric
+        ):
+            errors.append(f"{label} must reference a first-attempt semantic review FAIL")
+        position = span_positions.get(review_span_id or "")
+        if position is not None:
+            if position <= prior_position:
+                errors.append("semantic FAIL diagnostics must follow metric span order")
+            prior_position = position
+        if diagnostic.get("first_attempt") is not True:
+            errors.append(f"{label} `first_attempt` must be exact `true`")
+        root_category = nonempty_string(diagnostic.get("root_category"))
+        if root_category not in SEMANTIC_FAIL_ROOT_CATEGORIES:
+            errors.append(f"{label} has unsupported `root_category`")
+        candidate_ids = string_list(
+            diagnostic.get("candidate_ids"), f"{label} `candidate_ids`", errors
+        )
+        contract_ids = string_list(
+            diagnostic.get("contract_ids"), f"{label} `contract_ids`", errors
+        )
+        if len(candidate_ids) != len(set(candidate_ids)):
+            errors.append(f"{label} repeats a candidate ID")
+        if len(contract_ids) != len(set(contract_ids)):
+            errors.append(f"{label} repeats a contract ID")
+        if diagnostic_id is not None:
+            diagnostic_refs[diagnostic_id] = {
+                ("candidate", value) for value in candidate_ids
+            } | {("contract", value) for value in contract_ids}
+            if root_category is not None:
+                diagnostic_roots[diagnostic_id] = root_category
+        if not candidate_ids and not contract_ids:
+            errors.append(f"{label} must reference a candidate or shared contract")
+        for candidate_id in candidate_ids:
+            if candidate_id not in candidate_dispositions:
+                errors.append(f"{label} candidate `{candidate_id}` does not resolve")
+        for contract_id in contract_ids:
+            if contract_id not in contracts_by_id:
+                errors.append(f"{label} contract `{contract_id}` does not resolve")
+        diagnostic_revision = positive_integer(
+            diagnostic.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if diagnostic_revision is not None:
+            diagnostic_revisions.append(diagnostic_revision)
+            for contract_id in contract_ids:
+                contract = contracts_by_id.get(contract_id)
+                retired_revision = (
+                    contract.get("retired_basis_revision")
+                    if isinstance(contract, dict)
+                    else None
+                )
+                if (
+                    type(retired_revision) is int
+                    and diagnostic_revision > retired_revision
+                ):
+                    errors.append(
+                        f"{label} references contract `{contract_id}` after retirement"
+                    )
+        ordered_diagnostics.append(diagnostic)
+
+    if diagnostic_revisions != sorted(diagnostic_revisions):
+        errors.append("semantic FAIL diagnostics must follow basis revision order")
+
+    undiagnosed_spans = {
+        span.get("span_id")
+        for span in spans
+        if isinstance(span, dict)
+        and isinstance(span.get("span_id"), str)
+        and span.get("kind")
+        in {
+            "development-review",
+            "risk-review",
+            "integration-review",
+            "baseline-review",
+        }
+        and span.get("status") == "finished"
+        and span.get("outcome") == "FAIL"
+        and "rerun_of" not in span
+        and span.get("span_id") not in diagnosed_span_ids
+    }
+    for span_id in sorted(value for value in undiagnosed_spans if isinstance(value, str)):
+        errors.append(
+            f"first-attempt semantic review FAIL `{span_id}` needs a bounded diagnostic"
+        )
+
+    control = state.get("dispatch_control")
+    if not isinstance(control, dict):
+        errors.append("v4 work-state `dispatch_control` must be an object")
+        return
+    validate_object_keys(
+        control,
+        {"version", "status", "episodes"},
+        {"version", "status", "episodes"},
+        "dispatch control",
+        errors,
+    )
+    if control.get("version") != "1":
+        errors.append("dispatch control `version` must be `1`")
+    control_status = nonempty_string(control.get("status"))
+    if control_status not in {"ready", "paused"}:
+        errors.append("dispatch control `status` must be `ready` or `paused`")
+    episodes = control.get("episodes")
+    parsed_episodes: list[dict[str, Any]] = []
+    if not isinstance(episodes, list):
+        errors.append("dispatch control `episodes` must be a list")
+        episodes = []
+    episode_ids: set[str] = set()
+    episode_trigger_sets: list[tuple[Any, set[str]]] = []
+    episode_revisions: list[int] = []
+    late_episode_trigger_ids: set[str] = set()
+    for index, episode in enumerate(episodes, start=1):
+        label = f"dispatch pause episode {index}"
+        if not isinstance(episode, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        status = nonempty_string(episode.get("status"))
+        episode_cause = nonempty_string(episode.get("cause"))
+        required = {
+            "episode_id",
+            "cause",
+            "trigger_ids",
+            "basis_revision",
+            "status",
+        }
+        allowed = required | {
+            "diagnosis",
+            "action",
+            "resume_basis_revision",
+            "readiness_review_id",
+        }
+        if status == "resolved":
+            required |= {
+                "diagnosis",
+                "action",
+                "resume_basis_revision",
+                "readiness_review_id",
+            }
+        if episode_cause == "late-shared-contract":
+            required.add("pause_after_span_id")
+            required.add("paused_at")
+            allowed.add("pause_after_span_id")
+            allowed.add("paused_at")
+        validate_object_keys(episode, allowed, required, label, errors)
+        episode_id = lower_kebab_value(
+            episode.get("episode_id"), f"{label} `episode_id`", errors
+        )
+        if episode_id is not None:
+            if episode_id in episode_ids:
+                errors.append(f"dispatch pause episode id `{episode_id}` is duplicated")
+            episode_ids.add(episode_id)
+        cause = episode_cause
+        latest_trigger_span_position: int | None = None
+        if cause not in {"late-shared-contract", "shared-root-semantic-fail"}:
+            errors.append(f"{label} has unsupported `cause`")
+        trigger_ids = string_list(
+            episode.get("trigger_ids"), f"{label} `trigger_ids`", errors
+        )
+        if not trigger_ids:
+            errors.append(f"{label} must include trigger IDs")
+        if len(trigger_ids) != len(set(trigger_ids)):
+            errors.append(f"{label} repeats a trigger ID")
+        for trigger_id in trigger_ids:
+            if cause == "late-shared-contract" and trigger_id in late_episode_trigger_ids:
+                errors.append(
+                    f"{label} reuses `{trigger_id}` in more than one `{cause}` episode"
+                )
+            if cause == "late-shared-contract":
+                late_episode_trigger_ids.add(trigger_id)
+        episode_trigger_sets.append((cause, set(trigger_ids)))
+        episode_revision = positive_integer(
+            episode.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if episode_revision is not None:
+            episode_revisions.append(episode_revision)
+        episode_paused_at: datetime | None = None
+        if cause == "late-shared-contract":
+            episode_paused_at = rfc3339_value(
+                episode.get("paused_at"), f"{label} `paused_at`", errors
+            )
+            pause_after_span_id = lower_kebab_value(
+                episode.get("pause_after_span_id"),
+                f"{label} `pause_after_span_id`",
+                errors,
+            )
+            pause_after_span = spans_by_id.get(pause_after_span_id or "")
+            if not isinstance(pause_after_span, dict):
+                errors.append(f"{label} dispatch cutoff metric span does not resolve")
+            elif pause_after_span.get("status") != "finished":
+                errors.append(f"{label} dispatch cutoff metric span must be finished")
+            elif episode_paused_at is not None:
+                cutoff_finished_at = rfc3339_value(
+                    pause_after_span.get("finished_at"),
+                    f"{label} dispatch cutoff metric `finished_at`",
+                    errors,
+                )
+                if (
+                    cutoff_finished_at is not None
+                    and cutoff_finished_at > episode_paused_at
+                ):
+                    errors.append(
+                        f"{label} dispatch cutoff metric finishes after immutable "
+                        "`paused_at`"
+                    )
+            pause_after_position = span_positions.get(pause_after_span_id or "")
+            if type(pause_after_position) is int:
+                latest_trigger_span_position = pause_after_position
+            linked = [discoveries_by_id.get(value) for value in trigger_ids]
+            if any(item is None or item.get("stage") != "post-readiness" for item in linked):
+                errors.append(f"{label} must reference post-readiness discoveries")
+            linked_revisions = [
+                item.get("basis_revision")
+                for item in linked
+                if isinstance(item, dict) and type(item.get("basis_revision")) is int
+            ]
+            if (
+                episode_revision is not None
+                and linked_revisions
+                and episode_revision != max(linked_revisions)
+            ):
+                errors.append(f"{label} must use its latest linked discovery basis")
+            linked_positions = [
+                discovery_positions[value]
+                for value in trigger_ids
+                if value in discovery_positions
+            ]
+            if linked_positions != sorted(linked_positions):
+                errors.append(f"{label} discovery triggers must follow discovery order")
+        elif cause == "shared-root-semantic-fail":
+            linked = [diagnostics_by_id.get(value) for value in trigger_ids]
+            if len(linked) < 2 or any(item is None for item in linked):
+                errors.append(f"{label} must reference at least two semantic diagnostics")
+            else:
+                positions = [ordered_diagnostics.index(item) for item in linked]
+                roots = {
+                    diagnostic_roots.get(item.get("diagnostic_id")) for item in linked
+                }
+                shared_refs = set(
+                    diagnostic_refs.get(linked[0].get("diagnostic_id"), set())
+                )
+                for item in linked[1:]:
+                    shared_refs &= diagnostic_refs.get(
+                        item.get("diagnostic_id"), set()
+                    )
+                if positions != list(range(positions[0], positions[0] + len(positions))):
+                    errors.append(f"{label} diagnostics must be consecutive")
+                if len(roots) != 1:
+                    errors.append(f"{label} diagnostics must share one root category")
+                if not shared_refs:
+                    errors.append(f"{label} diagnostics must share a candidate or contract root")
+                linked_revisions = [
+                    item.get("basis_revision")
+                    for item in linked
+                    if type(item.get("basis_revision")) is int
+                ]
+                if (
+                    episode_revision is not None
+                    and linked_revisions
+                    and episode_revision != max(linked_revisions)
+                ):
+                    errors.append(f"{label} must use its latest linked diagnostic basis")
+                linked_span_positions = [
+                    span_positions.get(item.get("review_span_id"))
+                    for item in linked
+                    if isinstance(item, dict)
+                ]
+                concrete_positions = [
+                    position
+                    for position in linked_span_positions
+                    if type(position) is int
+                ]
+                if concrete_positions:
+                    latest_trigger_span_position = max(concrete_positions)
+        if status == "open":
+            for field in (
+                "diagnosis",
+                "action",
+                "resume_basis_revision",
+                "readiness_review_id",
+            ):
+                if field in episode:
+                    errors.append(f"{label} open episode must omit `{field}`")
+        elif status == "resolved":
+            single_line_string(episode.get("diagnosis"), f"{label} `diagnosis`", errors)
+            single_line_string(episode.get("action"), f"{label} `action`", errors)
+            resume_revision = positive_integer(
+                episode.get("resume_basis_revision"),
+                f"{label} `resume_basis_revision`",
+                errors,
+            )
+            if (
+                cause == "shared-root-semantic-fail"
+                and resume_revision is not None
+                and episode_revision is not None
+                and resume_revision <= episode_revision
+            ):
+                errors.append(
+                    f"{label} resume basis must advance beyond its pause/trigger basis"
+                )
+            elif (
+                cause != "shared-root-semantic-fail"
+                and resume_revision is not None
+                and episode_revision is not None
+                and resume_revision < episode_revision
+            ):
+                errors.append(f"{label} resume basis precedes its pause basis")
+            if cause == "late-shared-contract" and resume_revision is not None:
+                linked_resolution_revisions = [
+                    item.get("resolved_revision")
+                    for item in linked
+                    if isinstance(item, dict)
+                    and type(item.get("resolved_revision")) is int
+                ]
+                if (
+                    linked_resolution_revisions
+                    and resume_revision < max(linked_resolution_revisions)
+                ):
+                    errors.append(
+                        f"{label} resumes before linked late discovery resolution"
+                    )
+            review_id = nonempty_string(episode.get("readiness_review_id"))
+            review = readiness_reviews.get(review_id or "")
+            resume_metric_position = span_positions.get(review_id or "")
+            if review is None:
+                errors.append(f"{label} resume readiness review does not resolve")
+            elif review.get("basis_revision") != resume_revision:
+                errors.append(
+                    f"{label} resume must reference a PASS at resume basis"
+                )
+            elif (
+                review.get("status") != "current"
+                and not (
+                    type(readiness_basis) is int
+                    and resume_revision is not None
+                    and readiness_basis > resume_revision
+                )
+            ):
+                errors.append(
+                    f"{label} non-current resume PASS needs a later readiness basis"
+                )
+            if (
+                cause == "shared-root-semantic-fail"
+                and latest_trigger_span_position is not None
+                and (
+                    type(resume_metric_position) is not int
+                    or resume_metric_position <= latest_trigger_span_position
+                )
+            ):
+                errors.append(
+                    f"{label} resume readiness PASS must be recorded after its "
+                    "triggering semantic FAILs"
+                )
+            if (
+                cause == "late-shared-contract"
+                and latest_trigger_span_position is not None
+                and (
+                    type(resume_metric_position) is not int
+                    or resume_metric_position <= latest_trigger_span_position
+                )
+            ):
+                errors.append(
+                    f"{label} resolution readiness PASS must be recorded after its "
+                    "dispatch cutoff"
+                )
+        else:
+            errors.append(f"{label} `status` must be `open` or `resolved`")
+        if (
+            cause in {"late-shared-contract", "shared-root-semantic-fail"}
+            and latest_trigger_span_position is not None
+        ):
+            resume_position = None
+            if status == "resolved":
+                resume_id = nonempty_string(episode.get("readiness_review_id"))
+                resume_position = span_positions.get(resume_id or "")
+            intervening_dispatch = [
+                span
+                for position, span in enumerate(spans)
+                if isinstance(span, dict)
+                and span.get("kind") in {"bundle", "writer"}
+                and position > latest_trigger_span_position
+                and (
+                    status == "open"
+                    or type(resume_position) is not int
+                    or position < resume_position
+                )
+            ]
+            if intervening_dispatch:
+                errors.append(
+                    f"{label} must not dispatch bundle/writer work after its pause "
+                    "cutoff and before a new readiness PASS"
+                )
+            if cause == "late-shared-contract" and episode_paused_at is not None:
+                dispatch_after_pause = []
+                for position, span in enumerate(spans):
+                    if (
+                        not isinstance(span, dict)
+                        or span.get("kind") not in {"bundle", "writer"}
+                        or (
+                            status == "resolved"
+                            and type(resume_position) is int
+                            and position >= resume_position
+                        )
+                    ):
+                        continue
+                    dispatch_started_at = rfc3339_value(
+                        span.get("started_at"),
+                        f"{label} dispatch span `started_at`",
+                        errors,
+                    )
+                    if (
+                        dispatch_started_at is not None
+                        and dispatch_started_at > episode_paused_at
+                    ):
+                        dispatch_after_pause.append(span)
+                if dispatch_after_pause:
+                    errors.append(
+                        f"{label} must not move its cutoff past bundle/writer work "
+                        "started after immutable `paused_at`"
+                    )
+        parsed_episodes.append(episode)
+
+    if episode_revisions != sorted(episode_revisions):
+        errors.append("dispatch pause episodes must follow basis revision order")
+
+    open_episodes = [episode for episode in parsed_episodes if episode.get("status") == "open"]
+    if len(open_episodes) > 1:
+        errors.append("dispatch control must not have more than one open pause episode")
+    if open_episodes and parsed_episodes[-1] is not open_episodes[0]:
+        errors.append("the open dispatch pause episode must be last")
+    expected_status = "paused" if open_episodes else "ready"
+    if control_status != expected_status:
+        errors.append(f"dispatch control status must be `{expected_status}` for its episodes")
+    if require_final and control_status != "ready":
+        errors.append("final v4 selection requires ready dispatch with no open pause")
+    if control_status == "paused":
+        active_dispatch = [
+            span
+            for span in spans
+            if isinstance(span, dict)
+            and span.get("status") == "active"
+            and span.get("kind") in {"bundle", "writer"}
+        ]
+        if active_dispatch:
+            errors.append("paused dispatch must not contain an active bundle/writer span")
+
+    for discovery_id, discovery in discoveries_by_id.items():
+        if discovery.get("stage") != "post-readiness":
+            continue
+        matches = [
+            episode
+            for episode, (cause, trigger_ids) in zip(
+                parsed_episodes, episode_trigger_sets
+            )
+            if cause == "late-shared-contract" and discovery_id in trigger_ids
+        ]
+        if len(matches) != 1 or matches[0].get("status") != discovery.get("status"):
+            errors.append(
+                f"post-readiness discovery `{discovery_id}` needs exactly one matching "
+                "pause episode"
+            )
+    for prior, latest in zip(ordered_diagnostics, ordered_diagnostics[1:]):
+        prior_id = prior.get("diagnostic_id")
+        latest_id = latest.get("diagnostic_id")
+        shared_refs = diagnostic_refs.get(prior_id, set()) & diagnostic_refs.get(
+            latest_id, set()
+        )
+        if (
+            diagnostic_roots.get(prior_id) == diagnostic_roots.get(latest_id)
+            and prior_id in diagnostic_roots
+            and shared_refs
+        ):
+            pair = {prior_id, latest_id}
+            matching_episodes = [
+                trigger_ids
+                for cause, trigger_ids in episode_trigger_sets
+                if cause == "shared-root-semantic-fail" and pair <= trigger_ids
+            ]
+            if len(matching_episodes) != 1:
+                errors.append(
+                    "consecutive first-attempt semantic FAILs with one root require "
+                    "a dispatch pause/diagnosis episode exactly once"
+                )
 
 
 def validate_operation_artifact_state(
@@ -2812,6 +4710,21 @@ def validate_state_snapshot_completeness(
         "semantic_review_closure",
         "operation_metrics",
     }
+    current_selection_for_owners = current_state.get("context_selection")
+    if (
+        isinstance(current_selection_for_owners, dict)
+        and current_selection_for_owners.get("version") == "4"
+    ):
+        active_state_owners.update(
+            {
+                "shared_contracts",
+                "selection_readiness",
+                "late_shared_contract_discoveries",
+                "semantic_fail_diagnostics",
+                "selection_retirements",
+                "dispatch_control",
+            }
+        )
     for field in sorted((set(snapshot) | set(current_state)) - active_state_owners):
         if (
             field not in snapshot
@@ -2911,6 +4824,8 @@ def validate_state_snapshot_completeness(
         errors.append(
             f"{label} operation-state rollback changes context selection version"
         )
+    if snapshot_selection_version == current_selection_version == "4":
+        validate_v4_owner_readiness_progression(snapshot, current_state, label, errors)
     current_closure = current_state.get("semantic_review_closure")
     snapshot_closure = snapshot.get("semantic_review_closure")
     if isinstance(current_closure, dict) and isinstance(snapshot_closure, dict):
@@ -2967,21 +4882,32 @@ def validate_state_snapshot_completeness(
         errors.append(
             f"{label} operation-state rollback changes an unrelated context candidate"
         )
+    retired_contract_ids = v4_retirement_delta(snapshot, current_state)
     current_queue = normalized_bundle_queue(
-        current_state.get("bundle_queue"), active_atom_key
+        current_state.get("bundle_queue"),
+        active_atom_key,
+        retired_contract_ids,
     )
     snapshot_queue = normalized_bundle_queue(
-        snapshot.get("bundle_queue"), active_atom_key
+        snapshot.get("bundle_queue"),
+        active_atom_key,
+        retired_contract_ids,
     )
     if current_queue != snapshot_queue:
         errors.append(
             f"{label} operation-state rollback changes unrelated bundle queue state"
         )
     current_risk = normalized_risk_triggers(
-        current_state.get("risk_triggers"), active_candidate_id, active_atom_key
+        current_state.get("risk_triggers"),
+        active_candidate_id,
+        active_atom_key,
+        retired_contract_ids,
     )
     snapshot_risk = normalized_risk_triggers(
-        snapshot.get("risk_triggers"), active_candidate_id, active_atom_key
+        snapshot.get("risk_triggers"),
+        active_candidate_id,
+        active_atom_key,
+        retired_contract_ids,
     )
     if current_risk != snapshot_risk:
         errors.append(
@@ -3182,6 +5108,424 @@ def validate_semantic_closure_progression(
                 )
 
 
+def validate_v4_owner_readiness_progression(
+    snapshot: dict[str, Any],
+    current: dict[str, Any],
+    label: str,
+    errors: list[str],
+) -> None:
+    snapshot_readiness = snapshot.get("selection_readiness")
+    current_readiness = current.get("selection_readiness")
+    if not isinstance(snapshot_readiness, dict) or not isinstance(current_readiness, dict):
+        return
+    snapshot_basis = snapshot_readiness.get("basis_revision")
+    current_basis = current_readiness.get("basis_revision")
+    if (
+        type(snapshot_basis) is int
+        and type(current_basis) is int
+        and snapshot_basis > current_basis
+    ):
+        errors.append(f"{label} operation-state rollback readiness basis exceeds current")
+
+    _, retired_contract_ids = validate_v4_retirement_progression(
+        snapshot, current, label, errors
+    )
+
+    snapshot_reviews = semantic_objects_by_id(snapshot_readiness.get("reviews"), "review_id")
+    current_reviews = semantic_objects_by_id(current_readiness.get("reviews"), "review_id")
+    validate_v4_append_only_records(
+        snapshot_readiness.get("reviews"),
+        current_readiness.get("reviews"),
+        "review_id",
+        {"status"},
+        f"{label} readiness reviews",
+        errors,
+    )
+    readiness_transitions = {
+        "current": {"current", "stale", "superseded"},
+        "stale": {"stale", "superseded"},
+        "superseded": {"superseded"},
+    }
+    for review_id, prior in snapshot_reviews.items():
+        review = current_reviews.get(review_id)
+        if review is None:
+            errors.append(
+                f"{label} operation-state rollback drops readiness review `{review_id}`"
+            )
+            continue
+        for field in (
+            "reviewer_role",
+            "reviewer_agent_id",
+            "basis_revision",
+            "verdict",
+        ):
+            if review.get(field) != prior.get(field):
+                errors.append(
+                    f"{label} operation-state rollback rewrites readiness review "
+                    f"`{review_id}` field `{field}`"
+                )
+        if review.get("status") not in readiness_transitions.get(
+            prior.get("status"), set()
+        ):
+            errors.append(
+                f"{label} operation-state rollback reverses readiness review `{review_id}`"
+            )
+
+    snapshot_contracts = semantic_objects_by_id(
+        snapshot.get("shared_contracts"), "contract_id"
+    )
+    current_contracts = semantic_objects_by_id(
+        current.get("shared_contracts"), "contract_id"
+    )
+    current_discoveries = current.get("late_shared_contract_discoveries")
+    if not isinstance(current_discoveries, list):
+        current_discoveries = []
+    for contract_id, prior in snapshot_contracts.items():
+        contract = current_contracts.get(contract_id)
+        if contract is None:
+            if contract_id not in retired_contract_ids:
+                errors.append(
+                    f"{label} operation-state rollback drops shared contract "
+                    f"`{contract_id}`"
+                )
+        elif contract != prior and not any(
+            isinstance(discovery, dict)
+            and discovery.get("contract_id") == contract_id
+            and type(discovery.get("basis_revision")) is int
+            and type(snapshot_basis) is int
+            and discovery["basis_revision"] > snapshot_basis
+            for discovery in current_discoveries
+        ):
+            errors.append(
+                f"{label} operation-state rollback rewrites shared contract "
+                f"`{contract_id}` without a later discovery"
+            )
+
+    validate_v4_append_only_records(
+        snapshot.get("semantic_fail_diagnostics"),
+        current.get("semantic_fail_diagnostics"),
+        "diagnostic_id",
+        set(),
+        f"{label} semantic FAIL diagnostics",
+        errors,
+    )
+    validate_v4_append_only_records(
+        snapshot.get("late_shared_contract_discoveries"),
+        current.get("late_shared_contract_discoveries"),
+        "discovery_id",
+        {"status", "resolved_revision", "resolution_readiness_review_id"},
+        f"{label} late discoveries",
+        errors,
+    )
+    snapshot_control = snapshot.get("dispatch_control")
+    current_control = current.get("dispatch_control")
+    if isinstance(snapshot_control, dict) and isinstance(current_control, dict):
+        validate_v4_append_only_records(
+            snapshot_control.get("episodes"),
+            current_control.get("episodes"),
+            "episode_id",
+            {
+                "status",
+                "diagnosis",
+                "action",
+                "resume_basis_revision",
+                "readiness_review_id",
+            },
+            f"{label} dispatch episodes",
+            errors,
+        )
+
+
+def validate_v4_retirement_progression(
+    snapshot: dict[str, Any],
+    current: dict[str, Any],
+    label: str,
+    errors: list[str],
+) -> tuple[set[str], set[str]]:
+    snapshot_registry = snapshot.get("selection_retirements")
+    current_registry = current.get("selection_retirements")
+    if not isinstance(snapshot_registry, dict) or not isinstance(current_registry, dict):
+        return set(), set()
+    if snapshot_registry.get("version") != current_registry.get("version"):
+        errors.append(f"{label} selection retirements changes version")
+    snapshot_readiness = snapshot.get("selection_readiness")
+    current_readiness = current.get("selection_readiness")
+    snapshot_basis = (
+        snapshot_readiness.get("basis_revision")
+        if isinstance(snapshot_readiness, dict)
+        else None
+    )
+    current_basis = (
+        current_readiness.get("basis_revision")
+        if isinstance(current_readiness, dict)
+        else None
+    )
+
+    specs = (
+        (
+            "retired_bundles",
+            "bundle_id",
+            "bundle_queue",
+            {"retired_basis_revision", "reason"},
+            "bundle",
+        ),
+        (
+            "retired_contracts",
+            "contract_id",
+            "shared_contracts",
+            {"retired_basis_revision", "reason"},
+            "shared contract",
+        ),
+    )
+    retired_id_sets: list[set[str]] = []
+    appended_by_field: dict[str, list[dict[str, Any]]] = {}
+    for history_field, identity_key, active_field, metadata, noun in specs:
+        prior_records = snapshot_registry.get(history_field)
+        current_records = current_registry.get(history_field)
+        if not isinstance(prior_records, list) or not isinstance(current_records, list):
+            retired_id_sets.append(set())
+            continue
+        prior_ids = [
+            item.get(identity_key) if isinstance(item, dict) else None
+            for item in prior_records
+        ]
+        current_ids = [
+            item.get(identity_key) if isinstance(item, dict) else None
+            for item in current_records
+        ]
+        if current_ids[: len(prior_ids)] != prior_ids:
+            errors.append(f"{label} {history_field} must be append-only")
+        for index, prior in enumerate(prior_records):
+            if index >= len(current_records) or current_records[index] != prior:
+                identity = (
+                    prior.get(identity_key)
+                    if isinstance(prior, dict)
+                    else "<unknown>"
+                )
+                errors.append(
+                    f"{label} {history_field} rewrites retired {noun} `{identity}`"
+                )
+        snapshot_active = semantic_objects_by_id(
+            snapshot.get(active_field), identity_key
+        )
+        current_active = semantic_objects_by_id(current.get(active_field), identity_key)
+        appended = current_records[len(prior_records) :]
+        appended_by_field[history_field] = [
+            record for record in appended if isinstance(record, dict)
+        ]
+        appended_ids: set[str] = set()
+        for record in appended:
+            if not isinstance(record, dict):
+                continue
+            identity = record.get(identity_key)
+            if not isinstance(identity, str):
+                continue
+            appended_ids.add(identity)
+            prior_active = snapshot_active.get(identity)
+            retired_identity = {
+                key: value for key, value in record.items() if key not in metadata
+            }
+            if not isinstance(prior_active, dict) or retired_identity != prior_active:
+                errors.append(
+                    f"{label} forged retired {noun} `{identity}` was not the exact "
+                    "active snapshot identity"
+                )
+            if identity in current_active:
+                errors.append(
+                    f"{label} retired {noun} `{identity}` remains active in current state"
+                )
+            retired_basis = record.get("retired_basis_revision")
+            if (
+                type(retired_basis) is int
+                and type(snapshot_basis) is int
+                and retired_basis <= snapshot_basis
+            ):
+                errors.append(
+                    f"{label} retired {noun} `{identity}` basis must advance beyond "
+                    "the snapshot readiness basis"
+                )
+            if (
+                type(retired_basis) is int
+                and type(current_basis) is int
+                and retired_basis > current_basis
+            ):
+                errors.append(
+                    f"{label} retired {noun} `{identity}` basis exceeds current "
+                    "readiness basis"
+                )
+        for identity in snapshot_active:
+            if identity not in current_active and identity not in appended_ids:
+                errors.append(
+                    f"{label} drops active snapshot {noun} `{identity}` without an "
+                    "append-only retirement record"
+                )
+        retired_id_sets.append(
+            {
+                value
+                for value in current_ids
+                if isinstance(value, str)
+            }
+        )
+    validate_v4_retirement_semantic_obligations(
+        snapshot,
+        appended_by_field.get("retired_bundles", []),
+        appended_by_field.get("retired_contracts", []),
+        label,
+        errors,
+    )
+    return retired_id_sets[0], retired_id_sets[1]
+
+
+def validate_v4_retirement_semantic_obligations(
+    snapshot: dict[str, Any],
+    retired_bundles: list[dict[str, Any]],
+    retired_contracts: list[dict[str, Any]],
+    label: str,
+    errors: list[str],
+) -> None:
+    """Bind each reviewed retirement scope to its pre-mutation invalidation basis."""
+    obligations: dict[tuple[str, int], set[str]] = {}
+    retired_bundle_revisions = {
+        record.get("bundle_id"): record.get("retired_basis_revision")
+        for record in retired_bundles
+        if isinstance(record.get("bundle_id"), str)
+        and type(record.get("retired_basis_revision")) is int
+    }
+    snapshot_registry = snapshot.get("selection_retirements")
+    snapshot_retired_bundles = (
+        snapshot_registry.get("retired_bundles")
+        if isinstance(snapshot_registry, dict)
+        else None
+    )
+    earlier_retired_bundle_revisions = {
+        record.get("bundle_id"): record.get("retired_basis_revision")
+        for record in snapshot_retired_bundles or []
+        if isinstance(record, dict)
+        and isinstance(record.get("bundle_id"), str)
+        and type(record.get("retired_basis_revision")) is int
+    }
+    for bundle_id, revision in retired_bundle_revisions.items():
+        obligations.setdefault((bundle_id, revision), set()).add(
+            f"retired bundle `{bundle_id}`"
+        )
+    for contract in retired_contracts:
+        contract_id = contract.get("contract_id")
+        revision = contract.get("retired_basis_revision")
+        if not isinstance(contract_id, str) or type(revision) is not int:
+            continue
+        related_bundle_ids = [contract.get("owner_bundle_id")]
+        consumer_bundle_ids = contract.get("consumer_bundle_ids")
+        if isinstance(consumer_bundle_ids, list):
+            related_bundle_ids.extend(consumer_bundle_ids)
+        for bundle_id in related_bundle_ids:
+            if not isinstance(bundle_id, str):
+                continue
+            earlier_revision = earlier_retired_bundle_revisions.get(bundle_id)
+            if type(earlier_revision) is int and earlier_revision < revision:
+                continue
+            obligations.setdefault((bundle_id, revision), set()).add(
+                f"retired shared contract `{contract_id}`"
+            )
+            bundle_revision = retired_bundle_revisions.get(bundle_id)
+            if bundle_revision is not None and bundle_revision != revision:
+                errors.append(
+                    f"{label} retired bundle `{bundle_id}` and related shared contract "
+                    f"`{contract_id}` must use the same correction basis"
+                )
+
+    closure = snapshot.get("semantic_review_closure")
+    if not isinstance(closure, dict):
+        return
+    reviews = closure.get("review_passes")
+    invalidations = closure.get("invalidations")
+    if not isinstance(reviews, list) or not isinstance(invalidations, list):
+        return
+    for (bundle_id, revision), sources in obligations.items():
+        prior_passes = [
+            review
+            for review in reviews
+            if isinstance(review, dict)
+            and review.get("reviewer_role") in {"development", "risk"}
+            and review.get("scope") == bundle_id
+            and review.get("status") in {"current", "stale"}
+            and isinstance(review.get("review_id"), str)
+            and type(review.get("basis_revision")) is int
+            and review["basis_revision"] < revision
+        ]
+        for review in prior_passes:
+            review_id = review["review_id"]
+            matching_invalidations = [
+                invalidation
+                for invalidation in invalidations
+                if isinstance(invalidation, dict)
+                and invalidation.get("status") == "open"
+                and invalidation.get("opened_revision") == revision
+                and bundle_id
+                in semantic_string_set(invalidation.get("affected_bundles"))
+                and review_id
+                in semantic_string_set(invalidation.get("stale_review_ids"))
+            ]
+            if review.get("status") != "stale" or not matching_invalidations:
+                errors.append(
+                    f"{label} {' and '.join(sorted(sources))} needs snapshot open "
+                    f"invalidation for prior PASS `{review_id}` on bundle `{bundle_id}` "
+                    f"at retirement basis {revision}"
+                )
+                continue
+            required_pair = (review.get("reviewer_role"), bundle_id)
+            if not any(
+                required_pair
+                in semantic_required_review_set(
+                    invalidation.get("required_reviews")
+                )
+                for invalidation in matching_invalidations
+            ):
+                errors.append(
+                    f"{label} retirement invalidation for prior PASS `{review_id}` "
+                    f"must include required review `{required_pair[0]}`/`{bundle_id}`"
+                )
+
+
+def validate_v4_append_only_records(
+    snapshot_value: Any,
+    current_value: Any,
+    identity_key: str,
+    mutable_fields: set[str],
+    label: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(snapshot_value, list) or not isinstance(current_value, list):
+        return
+    snapshot_ids = [
+        item.get(identity_key) if isinstance(item, dict) else None
+        for item in snapshot_value
+    ]
+    current_ids = [
+        item.get(identity_key) if isinstance(item, dict) else None
+        for item in current_value
+    ]
+    if current_ids[: len(snapshot_ids)] != snapshot_ids:
+        errors.append(f"{label} must be append-only")
+        return
+    current_by_id = {
+        item.get(identity_key): item
+        for item in current_value
+        if isinstance(item, dict) and isinstance(item.get(identity_key), str)
+    }
+    for prior in snapshot_value:
+        if not isinstance(prior, dict) or not isinstance(prior.get(identity_key), str):
+            continue
+        identity = prior[identity_key]
+        current_item = current_by_id.get(identity)
+        if not isinstance(current_item, dict):
+            continue
+        for field, value in prior.items():
+            if field not in mutable_fields and current_item.get(field) != value:
+                errors.append(f"{label} rewrites `{identity}` field `{field}`")
+        if prior.get("status") == "resolved" and current_item != prior:
+            errors.append(f"{label} rewrites resolved record `{identity}`")
+
+
 def validate_operation_metrics_progression(
     snapshot: dict[str, Any],
     current: dict[str, Any],
@@ -3324,34 +5668,108 @@ def validate_snapshot_semantic_mutation_guard(
     if not active_paths:
         return
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or selection.get("version") not in {"2", "3"}:
+    if not isinstance(selection, dict) or nonempty_string(selection.get("version")) not in {
+        "2",
+        "3",
+        "4",
+    }:
         return
     snapshot_closure = snapshot.get("semantic_review_closure")
     current_closure = current_state.get("semantic_review_closure")
     if not isinstance(snapshot_closure, dict) or not isinstance(current_closure, dict):
         return
 
-    accepted_scope = snapshot.get("accepted_scope")
+    selection_version = nonempty_string(selection.get("version"))
     domains: set[str] = set()
-    if isinstance(accepted_scope, list):
-        accepted = [value for value in accepted_scope if isinstance(value, str)]
-        for path in active_paths:
-            matches = [
-                domain
-                for domain in accepted
-                if managed_path_in_scope(path, {domain})
-            ]
-            if matches:
-                domains.add(max(matches, key=lambda value: len(Path(value).parts)))
+    if selection_version == "4":
+        path_atom_keys: dict[str, set[str]] = {}
+        operation_artifact_paths: set[str] = set()
+        artifacts = snapshot.get("operation_created_artifacts")
+        if isinstance(artifacts, list):
+            for artifact in artifacts:
+                if (
+                    isinstance(artifact, dict)
+                    and isinstance(artifact.get("path"), str)
+                    and isinstance(artifact.get("atom_key"), str)
+                ):
+                    operation_artifact_paths.add(artifact["path"])
+                    path_atom_keys.setdefault(artifact["path"], set()).add(
+                        artifact["atom_key"]
+                    )
+        actions = snapshot.get("approved_existing_actions")
+        if isinstance(actions, list):
+            for action in actions:
+                if not isinstance(action, dict):
+                    continue
+                members = [action.get("source"), action.get("target")]
+                owners = action.get("reference_owners")
+                if isinstance(owners, list):
+                    members.extend(owners)
+                for member in members:
+                    if (
+                        isinstance(member, dict)
+                        and isinstance(member.get("path"), str)
+                        and isinstance(member.get("atom_key"), str)
+                    ):
+                        path_atom_keys.setdefault(member["path"], set()).add(
+                            member["atom_key"]
+                        )
+        atom_bundle_ids: dict[str, set[str]] = {}
+        queue = snapshot.get("bundle_queue")
+        if isinstance(queue, list):
+            for bundle in queue:
+                if not isinstance(bundle, dict) or not isinstance(
+                    bundle.get("bundle_id"), str
+                ):
+                    continue
+                atom_keys = bundle.get("expected_atom_keys")
+                if not isinstance(atom_keys, list):
+                    continue
+                for atom_key in atom_keys:
+                    if isinstance(atom_key, str):
+                        atom_bundle_ids.setdefault(atom_key, set()).add(
+                            bundle["bundle_id"]
+                        )
+        for path in sorted(active_paths):
+            atom_keys = path_atom_keys.get(path, set())
+            bundle_ids = {
+                bundle_id
+                for atom_key in atom_keys
+                for bundle_id in atom_bundle_ids.get(atom_key, set())
+            }
+            if len(atom_keys) == 1 and len(bundle_ids) == 1:
+                domains.update(bundle_ids)
+            elif path in operation_artifact_paths or len(atom_keys) > 1 or len(bundle_ids) > 1:
+                errors.append(
+                    f"{label} operation-state rollback cannot map guarded v4 path "
+                    f"`{path}` through one snapshot atom_key to one bundle_id"
+                )
+    else:
+        accepted_scope = snapshot.get("accepted_scope")
+        if isinstance(accepted_scope, list):
+            accepted = [value for value in accepted_scope if isinstance(value, str)]
+            for path in active_paths:
+                matches = [
+                    domain
+                    for domain in accepted
+                    if managed_path_in_scope(path, {domain})
+                ]
+                if matches:
+                    domains.add(max(matches, key=lambda value: len(Path(value).parts)))
 
     snapshot_passes = snapshot_closure.get("review_passes")
     relevant_current: list[str] = []
-    relevant_stale: list[str] = []
+    relevant_stale: dict[str, str | None] = {}
     if isinstance(snapshot_passes, list):
         for review in snapshot_passes:
             if not isinstance(review, dict):
                 continue
-            if review.get("reviewer_role") != "development":
+            guarded_roles = (
+                {"development", "risk"}
+                if selection_version == "4"
+                else {"development"}
+            )
+            if review.get("reviewer_role") not in guarded_roles:
                 continue
             if review.get("scope") not in domains:
                 continue
@@ -3361,7 +5779,9 @@ def validate_snapshot_semantic_mutation_guard(
             if review.get("status") == "current":
                 relevant_current.append(review_id)
             elif review.get("status") == "stale":
-                relevant_stale.append(review_id)
+                relevant_stale[review_id] = (
+                    review.get("scope") if isinstance(review.get("scope"), str) else None
+                )
     snapshot_gate = snapshot_closure.get("final_gate")
     final_history = (
         snapshot_gate.get("review_history")
@@ -3392,7 +5812,7 @@ def validate_snapshot_semantic_mutation_guard(
         if final_review.get("status") == "current":
             relevant_current.append(final_review_id)
         elif final_review.get("status") == "stale":
-            relevant_stale.append(final_review_id)
+            relevant_stale[final_review_id] = None
     if relevant_current:
         errors.append(
             f"{label} operation-state rollback must open semantic invalidation and "
@@ -3409,11 +5829,17 @@ def validate_snapshot_semantic_mutation_guard(
             invalidation_id = invalidation.get("invalidation_id")
             if isinstance(invalidation_id, str):
                 snapshot_by_id[invalidation_id] = invalidation
-    for review_id in relevant_stale:
+    for review_id, review_scope in relevant_stale.items():
         if not any(
             invalidation.get("status") == "open"
             and review_id in invalidation.get("stale_review_ids", [])
             and semantic_invalidation_affects_paths(invalidation, active_paths)
+            and (
+                selection_version != "4"
+                or review_scope is None
+                or review_scope
+                in semantic_string_set(invalidation.get("affected_bundles"))
+            )
             for invalidation in snapshot_by_id.values()
         ):
             errors.append(
@@ -3477,8 +5903,13 @@ def validate_snapshot_selection_routing(
         )
     )
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or selection.get("version") not in {"1", "2", "3"}:
-        local.append("snapshot context_selection must use version `1`, `2`, or `3`")
+    selection_version = (
+        nonempty_string(selection.get("version"))
+        if isinstance(selection, dict)
+        else None
+    )
+    if selection_version not in {"1", "2", "3", "4"}:
+        local.append("snapshot context_selection must use version `1`, `2`, `3`, or `4`")
         candidates: Any = None
     else:
         candidates = selection.get("candidates")
@@ -3570,6 +6001,15 @@ def validate_snapshot_selection_routing(
         candidate_dispositions,
         local,
     )
+    if selection_version == "4":
+        validate_owner_readiness_v4(
+            snapshot,
+            candidate_targets,
+            candidate_dispositions,
+            candidate_domains,
+            local,
+            require_final=False,
+        )
     validate_semantic_review_closure(
         snapshot,
         local,
@@ -3824,9 +6264,34 @@ def exact_object_map(
     return result
 
 
-def normalized_bundle_queue(value: Any, removed_key: str | None) -> Any:
-    if not isinstance(value, list) or removed_key is None:
+def v4_retirement_delta(
+    snapshot: dict[str, Any], current: dict[str, Any]
+) -> set[str]:
+    snapshot_registry = snapshot.get("selection_retirements")
+    current_registry = current.get("selection_retirements")
+    if not isinstance(snapshot_registry, dict) or not isinstance(current_registry, dict):
+        return set()
+    prior = snapshot_registry.get("retired_contracts")
+    latest = current_registry.get("retired_contracts")
+    if not isinstance(prior, list) or not isinstance(latest, list):
+        return set()
+    appended = latest[len(prior) :]
+    contract_ids = {
+        item.get("contract_id")
+        for item in appended
+        if isinstance(item, dict) and isinstance(item.get("contract_id"), str)
+    }
+    return contract_ids
+
+
+def normalized_bundle_queue(
+    value: Any,
+    removed_key: str | None,
+    retired_contract_ids: set[str] | None = None,
+) -> Any:
+    if not isinstance(value, list):
         return value
+    retired_contract_ids = retired_contract_ids or set()
     normalized: list[Any] = []
     for item in value:
         if not isinstance(item, dict):
@@ -3841,6 +6306,13 @@ def normalized_bundle_queue(value: Any, removed_key: str | None) -> Any:
             continue
         copy = dict(item)
         copy["expected_atom_keys"] = remaining
+        dependencies = copy.get("depends_on_contract_ids")
+        if isinstance(dependencies, list):
+            copy["depends_on_contract_ids"] = [
+                contract_id
+                for contract_id in dependencies
+                if contract_id not in retired_contract_ids
+            ]
         normalized.append(copy)
     return normalized
 
@@ -3849,9 +6321,11 @@ def normalized_risk_triggers(
     value: Any,
     removed_candidate_id: str | None,
     removed_atom_key: str | None,
+    retired_contract_ids: set[str] | None = None,
 ) -> Any:
     if not isinstance(value, list):
         return value
+    retired_contract_ids = retired_contract_ids or set()
     remaining = [
         item
         for item in value
@@ -3860,6 +6334,7 @@ def normalized_risk_triggers(
             and (
                 item.get("candidate_id") == removed_candidate_id
                 or item.get("atom_key") == removed_atom_key
+                or item.get("shared_contract_id") in retired_contract_ids
             )
         )
     ]
