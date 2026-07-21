@@ -46,8 +46,16 @@ def validate_manifest(data: Any) -> dict[str, Any]:
             raise ManifestError(f"slot {name!r} has an invalid owner")
         if not isinstance(slot.get("path"), str) or not slot["path"]:
             raise ManifestError(f"slot {name!r} has an invalid path")
-        if not isinstance(slot.get("repositories", {}), dict):
+        repositories = slot.get("repositories", {})
+        if not isinstance(repositories, dict):
             raise ManifestError(f"slot {name!r} has invalid repository metadata")
+        for repo, identity in repositories.items():
+            if not isinstance(repo, str) or not repo or not isinstance(identity, dict):
+                raise ManifestError(f"slot {name!r} has an invalid repository identity")
+            if not isinstance(identity.get("branch"), str) or not identity["branch"]:
+                raise ManifestError(f"slot {name!r} repository {repo!r} has an invalid branch")
+            if not isinstance(identity.get("pr"), str) or not identity["pr"]:
+                raise ManifestError(f"slot {name!r} repository {repo!r} has an invalid PR")
     return data
 
 
@@ -122,18 +130,30 @@ def require_active_owner(slot: dict[str, Any], name: str, owner: str) -> None:
         )
 
 
-def claim(data: dict[str, Any], name: str, owner: str, path: str) -> dict[str, Any]:
+def claim(
+    data: dict[str, Any],
+    name: str,
+    owner: str,
+    path: str,
+    preserve_repositories: bool = False,
+) -> dict[str, Any]:
     requested_path = str(Path(path).resolve())
     current = data["slots"].get(name)
     if current and current["path"] != requested_path:
         raise ManifestError(f"fixed slot path mismatch for {name}")
     if current and current["state"] == "active":
         require_active_owner(current, name, owner)
+        if preserve_repositories and not current["repositories"]:
+            raise ManifestError(f"slot has no repository identity to preserve: {name}")
         return current
+    if preserve_repositories and not current:
+        raise ManifestError(f"cannot preserve repository identity for missing slot: {name}")
+    if preserve_repositories and not current["repositories"]:
+        raise ManifestError(f"slot has no repository identity to preserve: {name}")
     data["slots"][name] = {
         "owner": owner,
         "path": requested_path,
-        "repositories": {},
+        "repositories": dict(current["repositories"]) if preserve_repositories else {},
         "state": "active",
     }
     return data["slots"][name]
@@ -145,17 +165,13 @@ def record_repository(
     owner: str,
     repo: str,
     branch: str,
-    head_sha: str,
-    pushed_sha: str,
     pr: str,
 ) -> dict[str, Any]:
     slot = require_slot(data, name)
     require_active_owner(slot, name, owner)
     slot.setdefault("repositories", {})[repo] = {
         "branch": branch,
-        "head_sha": head_sha,
         "pr": pr,
-        "pushed_sha": pushed_sha,
     }
     return slot
 
@@ -179,14 +195,17 @@ def parser() -> argparse.ArgumentParser:
     claim_parser.add_argument("--slot", required=True)
     claim_parser.add_argument("--owner", required=True)
     claim_parser.add_argument("--path", required=True)
+    claim_parser.add_argument(
+        "--preserve-repositories",
+        action="store_true",
+        help="Preserve released branch/PR identity for explicit correction recovery",
+    )
 
-    record = subparsers.add_parser("record", help="Record pushed branch and PR identity")
+    record = subparsers.add_parser("record", help="Record task branch and PR identity")
     record.add_argument("--slot", required=True)
     record.add_argument("--owner", required=True)
     record.add_argument("--repo", required=True)
     record.add_argument("--branch", required=True)
-    record.add_argument("--head-sha", required=True)
-    record.add_argument("--pushed-sha", required=True)
     record.add_argument("--pr", required=True)
 
     release_parser = subparsers.add_parser("release", help="Release a slot as its exact owner")
@@ -206,7 +225,13 @@ def main() -> int:
             with manifest_lock(path):
                 data = load_manifest(path)
                 if args.command == "claim":
-                    payload = claim(data, args.slot, args.owner, args.path)
+                    payload = claim(
+                        data,
+                        args.slot,
+                        args.owner,
+                        args.path,
+                        args.preserve_repositories,
+                    )
                 elif args.command == "record":
                     payload = record_repository(
                         data,
@@ -214,8 +239,6 @@ def main() -> int:
                         args.owner,
                         args.repo,
                         args.branch,
-                        args.head_sha,
-                        args.pushed_sha,
                         args.pr,
                     )
                 else:
