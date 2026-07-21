@@ -2,6 +2,21 @@
 
 Simple Workflow uses one human artifact, one internal review record, and small metadata files.
 
+## Workflow Root
+
+Every path below is relative to one resolved workflow root. An explicit root is authoritative. A
+confirmed multi-repository request uses the bundle root named by an exact `slot.path` in an ancestor
+`.stageflow-worktrees/slots.json`, while a single-repository request keeps its repository root. A
+manifest's presence alone does not promote a pointerless single-repo request, and path names such as
+`worktrees/<name>` are never bundle evidence. Hook continuation may recover the bundle from a child
+cwd only when the bundle session pointer selects the same request.
+
+The bundle owns one canonical `.simple` tree. A child copy with byte-identical `plan.md`, `review.md`, and `state.json`
+produces a warning and the bundle remains authoritative. A missing or
+different file is a divergent duplicate: UserPrompt and Stop report it without blocking, but the
+in-scope Simple Workflow `create_goal` is denied until the user manually removes or aligns the child
+copy; unrelated Goal calls prepass. The plugin never moves, merges, aligns, or deletes these artifacts.
+
 ## Metadata Files
 
 `.simple/index.json`

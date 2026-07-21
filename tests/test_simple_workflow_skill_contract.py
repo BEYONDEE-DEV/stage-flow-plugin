@@ -182,6 +182,26 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("`Stop` never emits a deny or blocking", self.hooks_text)
         self.assertIn("without repeatedly running the full validator", self.hooks_text)
 
+    def test_workflow_root_contract_uses_bundle_only_for_confirmed_multi_repo_scope(self) -> None:
+        self.assertIn("### Workflow Root Ownership", self.text)
+        self.assertIn("confirmed task spanning at least two independent repositories", self.text)
+        self.assertIn("`--resolve-root --multi-repo --start <cwd>`", self.text)
+        self.assertIn("exact `slot.path`", self.text)
+        self.assertIn("does not promote a new or pointerless single-repo request", self.text)
+        self.assertIn("Never infer a bundle from a path shape", self.text)
+        self.assertIn("bundle root—not", self.text)
+        self.assertIn("Every path below is relative to one resolved workflow root", self.artifact_text)
+
+    def test_duplicate_contract_is_warning_gate_and_manual_recovery_only(self) -> None:
+        for value in (self.text, self.artifact_text, self.hooks_text):
+            self.assertIn("`plan.md`, `review.md`, and `state.json`", value)
+            self.assertIn("UserPrompt and Stop", value)
+            self.assertIn("unrelated Goal", value)
+        self.assertIn("block only the in-scope Simple Workflow `create_goal`", self.text)
+        self.assertIn("Never automatically", self.text)
+        self.assertIn("same canonical request and fingerprint to be retried", self.text)
+        self.assertIn("same request may be retried after external recovery", self.hooks_text)
+
     def test_plugin_manifest_exposes_simple_workflow_prompt(self) -> None:
         manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
         interface = manifest["interface"]

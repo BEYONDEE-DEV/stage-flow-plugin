@@ -28,7 +28,7 @@ Do not add approval files, requirements files, goal files, implementation logs, 
 
 ## Request Storage
 
-Keep request state under the target project:
+Resolve the workflow root first, then keep request state under that root:
 
 ```text
 .simple/
@@ -43,6 +43,36 @@ Keep request state under the target project:
 `index.json`, `current.json`, `state.json`, and `review.md` are internal metadata or internal review records. The only required human workflow artifact is `plan.md`.
 
 Use request IDs in this form: `YYYYMMDD-HHMM-short-slug`.
+
+### Workflow Root Ownership
+
+The workflow root owns the entire `.simple` tree for one request. Resolve it before reading or
+writing `index.json`, a session pointer, or request artifacts, and keep every artifact for the
+request under that one canonical root.
+
+Use these modes and this precedence:
+
+1. An explicit workflow root is authoritative and is not rediscovered.
+2. For a user-declared bundle or a confirmed task spanning at least two independent repositories,
+   use the plugin-bundled checker's read-only `--resolve-root --multi-repo --start <cwd>` mode. It
+   may select a bundle automatically only from an exact `slot.path` in an ancestor
+   `.stageflow-worktrees/slots.json`; if no valid exact match exists, require an explicit root.
+3. For a hook continuation from a child repository, use the same resolver. Select the manifest
+   bundle only when its `.simple/sessions/<session-id>/current.json` points to the same request.
+4. Otherwise preserve the nearest single-repository root. Merely being inside a manifest-backed
+   slot does not promote a new or pointerless single-repo request to the bundle.
+
+Never infer a bundle from a path shape such as `worktrees/<name>` or from an individual
+repository's `git rev-parse --show-toplevel`. In a confirmed multi-repo request, the bundle root—not
+any child Git top-level—is the target project for Simple Workflow purposes.
+
+When the canonical bundle and a child repository contain the same request id, compare
+`plan.md`, `review.md`, and `state.json` without changing either copy. If all three files exist and
+are byte-identical, warn with both paths and continue from the canonical bundle. If any file is
+missing or different, report both paths and block only the in-scope Simple Workflow `create_goal`;
+UserPrompt and Stop remain non-blocking, and unrelated Goal calls prepass. Never automatically
+move, merge, align, or delete duplicate artifacts. Tell the user to remove the stale child copy or
+align it manually, then allow the same canonical request and fingerprint to be retried.
 
 Allowed phases are `plan`, `review`, and `completed`.
 
@@ -90,7 +120,10 @@ Keep fixed validator contract tokens unchanged when needed: headings, table colu
 
 ## Operating Flow
 
-At the start of a Simple Workflow turn, inspect `.simple/sessions/<session-id>/current.json` when it exists. When the skill trigger applies and the pointer is missing, invalid, or completed, the skill-applying agent creates or selects a request before continuing. Hooks do not infer activation from prompt strings.
+At the start of a Simple Workflow turn, resolve the workflow root using `Workflow Root Ownership`,
+then inspect `<workflow-root>/.simple/sessions/<session-id>/current.json` when it exists. When the
+skill trigger applies and the pointer is missing, invalid, or completed, the skill-applying agent
+creates or selects a request under that same root before continuing. Hooks do not infer activation from prompt strings.
 
 If an active session pointer exists for a request in `plan` or `review` phase, treat follow-up user messages as Simple Workflow continuation even when the prompt does not mention the plugin again. Short answers, confirmations, corrections, and renewed requests such as `응`, `맞아`, `그렇게 해줘`, or `수정해줘` must continue from the active request and follow the same `plan.md`, internal review, validator, and approval rules. A completed request must not capture unrelated follow-up prompts; explicit Simple Workflow invocation starts or selects another request.
 

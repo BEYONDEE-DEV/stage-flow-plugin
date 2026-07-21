@@ -7,6 +7,15 @@ Codex runs hook commands with the session `cwd`, so plugin-bundled hooks must no
 
 `simple_workflow_hook_check.py` resolves `validate_simple_workflow.py` from its own plugin `scripts` directory with `__file__`, so hook validation does not depend on the target project containing `hooks/simple_workflow_hook.py` or `scripts/validate_simple_workflow.py`.
 
+Before reading `.simple`, the checker uses one read-only resolver for agent diagnostics and hook
+execution. `--root` is authoritative. Agent-confirmed multi-repo work uses
+`--resolve-root --multi-repo --start <cwd>` and succeeds automatically only when an ancestor
+`.stageflow-worktrees/slots.json` contains an exact `slot.path` that contains the start path; a
+missing or malformed manifest requires explicit `--root`. Without `--multi-repo`, a manifest-backed
+child remains at its nearest repository root unless the exact bundle has the same session/request
+pointer. No `worktrees/<name>` path heuristic or child `git rev-parse --show-toplevel` result can
+promote a multi-repo request.
+
 It keeps the session pointer model:
 
 ```text
@@ -48,6 +57,13 @@ decision and persisted it before attempting the tool call. `Stop` never emits a 
 wire response and never runs the full validator. Invalid lightweight state may produce a diagnostic
 warning on stderr, but Codex can always send the user-facing response.
 
+For a canonical bundle request, the checker read-only compares any immediate child-repository copy
+of the same request's `plan.md`, `review.md`, and `state.json`. An identical copy adds a warning with
+the canonical and duplicate paths and continues from the bundle. A missing or changed file marks the
+copy divergent: UserPrompt and Stop still only warn, unrelated Goals still prepass, and only the
+in-scope Simple Workflow `create_goal` is denied. The warning directs manual removal or alignment;
+the checker never changes either tree, and the same request may be retried after external recovery.
+
 For material replan after Goal creation, `goal_plan_fingerprint` continues to identify the original
 Goal objective and is never changed. `approved_plan_fingerprint` identifies the latest explicitly
 approved plan. Review validation allows a coherent v2 `pending` state so Codex can ask for
@@ -64,6 +80,13 @@ Run manually with the plugin-bundled checker against a target project root:
 python <plugin-root>/scripts/simple_workflow_hook_check.py --root <target-project-root> --event user_prompt_submit
 python <plugin-root>/scripts/simple_workflow_hook_check.py --root <target-project-root> --event pre_tool_use
 python <plugin-root>/scripts/simple_workflow_hook_check.py --root <target-project-root> --event stop
+```
+
+Resolve a root without running a hook event:
+
+```powershell
+python <plugin-root>/scripts/simple_workflow_hook_check.py --resolve-root --multi-repo --start <child-repo>
+python <plugin-root>/scripts/simple_workflow_hook_check.py --resolve-root --start <single-repo>
 ```
 
 These commands produce hook wire output. Add `--diagnostic` when manually inspecting the internal

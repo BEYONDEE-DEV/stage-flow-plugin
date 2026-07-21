@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import unittest
@@ -48,6 +49,38 @@ class HookCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return (json.loads(result.stdout) if result.stdout.strip() else {}, result.stderr)
 
+    def run_discovered_hook(
+        self,
+        start: Path,
+        payload: dict[str, object],
+        event: str = "user_prompt_submit",
+    ) -> dict[str, object]:
+        result = subprocess.run(
+            [sys.executable, str(HOOK_CHECK), "--event", event, "--diagnostic"],
+            cwd=start,
+            input=json.dumps(payload),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def run_resolver(
+        self,
+        start: Path,
+        *args: str,
+        expect_success: bool = True,
+    ) -> dict[str, object]:
+        result = subprocess.run(
+            [sys.executable, str(HOOK_CHECK), "--resolve-root", "--start", str(start), *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(result.returncode == 0, expect_success, result.stderr or result.stdout)
+        return json.loads(result.stdout)
+
     def test_prompt_text_never_activates_or_creates_request(self) -> None:
         for prompt in ("Use Simple Workflow", ".simple status", "simple workflow를 수정해줘", "workflow status"):
             with self.subTest(prompt=prompt), temp_project() as td:
@@ -63,6 +96,44 @@ class HookCheckTests(unittest.TestCase):
             self.assertEqual(result["status"], "PREPASS")
             self.assertFalse(result["prompt_relevant"])
             self.assertFalse(result["request_creation_required"])
+
+    def test_completed_bundle_reports_duplicates_without_capturing_prompt(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="completed", approval_status="approved", goal_status="completed")
+            no_duplicate = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(no_duplicate["status"], "PREPASS")
+            self.assertFalse(no_duplicate["prompt_relevant"])
+
+            make_v2_project(child, phase="completed", approval_status="approved", goal_status="completed")
+            identical = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(identical["status"], "WARN")
+            self.assertEqual(identical["duplicate"]["status"], "identical")
+            self.assertFalse(identical["prompt_relevant"])
+            self.assertFalse(identical["continuation_required"])
+
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="completed", approval_status="approved", goal_status="completed")
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="active")
+            divergent = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(divergent["status"], "WARN")
+            self.assertEqual(divergent["duplicate"]["status"], "divergent")
+            self.assertFalse(divergent["prompt_relevant"])
+            self.assertFalse(divergent["continuation_required"])
+
+            wire_result = subprocess.run(
+                [sys.executable, str(HOOK_CHECK), "--event", "user_prompt_submit"],
+                cwd=child,
+                input=json.dumps({"session_id": SESSION_ID, "prompt": "상태"}),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(wire_result.returncode, 0, wire_result.stderr)
+            wire = json.loads(wire_result.stdout)
+            context = json.loads(wire["hookSpecificOutput"]["additionalContext"])
+            self.assertEqual(context["duplicate"]["status"], "divergent")
 
     def test_active_pointer_supplies_lightweight_continuation_context(self) -> None:
         with temp_project() as td:
@@ -161,6 +232,118 @@ class HookCheckTests(unittest.TestCase):
                     root = make_v2_project(root, phase="review", approval_status="approved", goal_status="pending")
                 result = self.run_hook(root, goal_payload(objective="Stageflow implementation request"), "pre_tool_use")
                 self.assertEqual(result["status"], "PREPASS")
+
+    def test_manifest_resolution_separates_multi_repo_and_single_repo_modes(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            multi = self.run_resolver(child, "--multi-repo")
+            self.assertEqual(multi["workflow_root"], str(bundle))
+            self.assertEqual(multi["root_kind"], "bundle")
+            self.assertEqual(multi["source"], "slot_manifest_multi_repo")
+
+            single = self.run_resolver(child)
+            self.assertEqual(single["workflow_root"], str(child))
+            self.assertEqual(single["root_kind"], "single_repo")
+            self.assertEqual(single["source"], "single_repo")
+
+            explicit = self.run_resolver(child, "--root", str(child), "--multi-repo")
+            self.assertEqual(explicit["workflow_root"], str(child))
+            self.assertEqual(explicit["source"], "explicit_root")
+
+    def test_missing_or_malformed_manifest_requires_explicit_multi_repo_root_only(self) -> None:
+        for manifest_value in (None, "{not-json"):
+            with self.subTest(manifest_value=manifest_value), temp_project() as td:
+                workspace, _, child = make_slot_fixture(Path(td), manifest_value=manifest_value)
+                multi = self.run_resolver(child, "--multi-repo", expect_success=False)
+                self.assertEqual(multi["status"], "UNRESOLVED")
+                self.assertIn("explicit --root", multi["reason"])
+                single = self.run_resolver(child)
+                self.assertEqual(single["workflow_root"], str(child))
+                self.assertEqual(single["root_kind"], "single_repo")
+                self.assertTrue(workspace.is_dir())
+
+    def test_child_cwd_continues_same_bundle_session_but_not_pointerless_flow(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="review", approval_status="approved", goal_status="pending")
+            continued = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(continued["workflow_root"], str(bundle))
+            self.assertEqual(continued["root_source"], "slot_manifest_continuation")
+            self.assertEqual(continued["current_request_id"], REQUEST_ID)
+
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            same_request = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(same_request["workflow_root"], str(bundle))
+            self.assertEqual(same_request["root_source"], "slot_manifest_continuation")
+            self.assertEqual(same_request["duplicate"]["status"], "identical")
+
+        with temp_project() as td:
+            _, _, child = make_slot_fixture(Path(td))
+            pointerless = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(pointerless["status"], "PREPASS")
+            self.assertEqual(pointerless["workflow_root"], str(child))
+
+    def test_child_session_wins_when_bundle_session_points_to_another_request(self) -> None:
+        for bundle_phase in ("review", "completed"):
+            with self.subTest(bundle_phase=bundle_phase), temp_project() as td:
+                _, bundle, child = make_slot_fixture(Path(td))
+                make_v2_project(
+                    bundle,
+                    phase=bundle_phase,
+                    approval_status="approved",
+                    goal_status="active" if bundle_phase == "review" else "completed",
+                )
+                bundle_current_path = bundle / ".simple" / "sessions" / SESSION_ID / "current.json"
+                bundle_current = json.loads(bundle_current_path.read_text(encoding="utf-8"))
+                bundle_current["request_id"] = "20260609-1121-stale-bundle"
+                bundle_current["phase"] = bundle_phase
+                write_json(bundle_current_path, bundle_current)
+
+                make_v2_project(child, phase="review", approval_status="approved", goal_status="active")
+                result = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+                self.assertEqual(result["workflow_root"], str(child))
+                self.assertEqual(result["root_source"], "session_continuation")
+                self.assertEqual(result["current_request_id"], REQUEST_ID)
+
+    def test_duplicate_transition_blocks_only_in_scope_goal_and_recovers(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="review", approval_status="approved", goal_status="pending")
+            canonical = bundle / ".simple" / "requests" / REQUEST_ID
+            duplicate = child / ".simple" / "requests" / REQUEST_ID
+            copy_request_artifacts(canonical, duplicate)
+
+            identical = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(identical["duplicate"]["status"], "identical")
+            self.assertIn(str(canonical), identical["warnings"][0])
+            self.assertIn(str(duplicate), identical["warnings"][0])
+            self.assertIn("manually", identical["warnings"][0])
+
+            state_path = canonical / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["canonical_only"] = True
+            write_json(state_path, state)
+
+            prompt = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
+            self.assertEqual(prompt["duplicate"]["status"], "divergent")
+            self.assertNotIn("decision", prompt)
+            stop = self.run_discovered_hook(child, {"session_id": SESSION_ID}, "stop")
+            self.assertEqual(stop["status"], "WARN")
+            self.assertNotIn("decision", stop)
+            blocked = self.run_discovered_hook(child, goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(blocked["status"], "BLOCKED")
+            self.assertIn("Divergent", blocked["reason"])
+            unrelated = self.run_discovered_hook(
+                child,
+                goal_payload(objective="Stageflow implementation request"),
+                "pre_tool_use",
+            )
+            self.assertEqual(unrelated["status"], "PREPASS")
+
+            shutil.rmtree(duplicate)
+            recovered = self.run_discovered_hook(child, goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(recovered["status"], "CREATE_GOAL_ALLOWED")
+            self.assertEqual(recovered["workflow_root"], str(bundle))
 
     def test_simple_goal_requires_active_pointer_selected_request_and_exact_path(self) -> None:
         objective = f".simple/requests/{REQUEST_ID}/plan.md sha256:{'0' * 64}"
@@ -276,6 +459,30 @@ def load_hook_check_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def make_slot_fixture(
+    root: Path,
+    *,
+    manifest_value: str | None = "valid",
+) -> tuple[Path, Path, Path]:
+    workspace = root / "workspace"
+    bundle = workspace / "worktrees" / "slot-3"
+    child = bundle / "repo-a"
+    (child / ".git").mkdir(parents=True)
+    manifest = workspace / ".stageflow-worktrees" / "slots.json"
+    if manifest_value == "valid":
+        write_json(manifest, {"schema_version": 1, "slots": {"slot-3": {"path": str(bundle)}}})
+    elif manifest_value is not None:
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(manifest_value, encoding="utf-8")
+    return workspace, bundle, child
+
+
+def copy_request_artifacts(source: Path, target: Path) -> None:
+    target.mkdir(parents=True)
+    for name in ("plan.md", "review.md", "state.json"):
+        shutil.copyfile(source / name, target / name)
 
 
 if __name__ == "__main__":
