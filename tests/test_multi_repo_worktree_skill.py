@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "skills" / "multi-repo-worktree"
@@ -31,7 +32,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("Use only when the user explicitly invokes", text)
         self.assertIn("Do not use for ordinary Git, single-repo, or single-worktree requests", text)
         self.assertIn("multiple independent Git repositories", text)
-        self.assertIn("help, status, create, submit, pull, and sync", text)
+        for keyword in ["`help`", "`status`", "`create`", "`submit`", "`pull`", "`sync`"]:
+            self.assertIn(keyword, text)
         self.assertIn("$stageflow:multi-repo-worktree <keyword> [free-form intent]", text)
         self.assertIn("[$stageflow:multi-repo-worktree](...)", text)
         self.assertIn("references/worktree-operations.md", text)
@@ -45,24 +47,30 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         text = read(SKILL)
 
         self.assertIn("source branch as a repo-specific, user-confirmed fact", text)
-        self.assertIn("task branches", text)
+        self.assertIn("fixed task branch", text)
         self.assertIn("Git does not record the branch from which another branch was originally created", text)
-        self.assertIn("Before any Git write", text)
+        self.assertIn("Before any Git or GitHub write", text)
         self.assertIn("Accept approval only after presenting that exact plan", text)
         self.assertIn("Approval applies only to the displayed batch", text)
         self.assertIn("Never execute a write using an inferred or ambiguous source branch", text)
-        self.assertIn("Never reset, clean, force checkout, force push, or delete a branch", text)
+        self.assertIn("Never reset, clean, force checkout, force push, rewrite history", text)
         self.assertIn("`sync` runs only in development worktrees", text)
         self.assertIn("explicit approval", text)
-        self.assertIn("missing or ambiguous remotes", text)
+        self.assertIn("missing/ambiguous remotes", text)
 
     def test_reference_covers_required_operations(self) -> None:
         text = read(REFERENCE)
 
         for phrase in [
             "## Keyword And Approval Contract",
+            "## Roles And Repeated-PR Flow",
+            "## Permanent Slot Manifest",
             "## Read-Only Inspection And Status",
             "## Create",
+            "## Submit Common Phase",
+            "## Submit NONE And OPEN",
+            "## Submit MERGED",
+            "## Retry And Partial Results",
             "## Pull",
             "## Sync",
             "`help`",
@@ -70,31 +78,27 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "`create`",
             "`pull`",
             "`sync`",
-            "## Submit",
-            "## Partial Results And Reporting",
-            "Preflight the complete batch",
+            "Preflight the complete batch and classify every changed repo",
             "Receive explicit approval after the exact plan",
             "source branch",
-            "derived worktree",
-            "List repos independently even when branch names match",
+            "development worktree",
             "Git does not retain a branch's creation parent",
-            "Fast-forward one repo at a time",
+            "merge --ff-only",
         ]:
             self.assertIn(phrase, text)
 
         for removed_heading in ["## Recycle", "## Integrate", "## Merge"]:
             self.assertNotIn(removed_heading, text)
 
-    def test_simplified_pr_slot_workflow_has_explicit_roles_and_safety_gates(self) -> None:
+    def test_permanent_pr_slot_workflow_has_explicit_roles_and_safety_gates(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
 
         for phrase in [
             ".stageflow-worktrees/slots.json",
-            "Only the exact active owner",
-            "safe released-slot reuse",
-            "GitHub PR merge is manual and outside this skill",
-            "Never enable auto-merge or run a PR merge command",
+            "There is no `active`/`released` state",
+            "create once -> develop -> submit -> user merges on GitHub",
+            "Never enable auto-merge or run a remote PR merge command",
             "`pull` runs only in confirmed original/source worktrees",
             "`sync` runs only in development worktrees",
             "recovery-required",
@@ -103,15 +107,14 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             self.assertIn(phrase, skill)
 
         for phrase in [
-            "user merges the PR on GitHub",
-            "Development owner",
-            "Original owner",
+            "user merges PR 1 on GitHub",
+            "Development user",
+            "Original user",
             "GitHub user",
-            "Same-owner claim is idempotent",
-            "wrong-owner release",
-            "Correction recovery",
-            "minimal repository branch/PR identity",
-            "The user merges on GitHub outside this skill",
+            "Generation `0` requires `pr: null`",
+            "An exact repeated call is idempotent",
+            "operation lock is separate from slot ownership",
+            "same slot, worktrees, and task branches",
         ]:
             self.assertIn(phrase, reference)
 
@@ -126,54 +129,46 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertNotIn("scripts/inspect_pr_submission.py", skill)
 
-    def test_submit_commits_when_needed_then_stops_at_regular_pr(self) -> None:
+    def test_submit_commits_in_korean_and_supports_chained_ready_prs(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
 
         for phrase in [
-            "Write the PR title and explanatory prose in Korean",
-            "Inspect every repo's staged, unstaged, and untracked paths",
-            "Stage only the approved literal paths and commit",
-            'add -A -- "<approved-path-1>" "<approved-path-2>"',
-            'commit -m "<approved-commit-message>"',
-            "Skip the commit for a repo that is already clean",
-            "Complete the local commit phase for every repo before the first push",
-            "a commit diff matching the approved content",
-            "If a commit fails, a hook changes files, the committed diff differs, or the scope changes",
-            "Record only branch and PR identity",
-            "After every repo succeeds, release the slot",
-            "partial push, PR, or record failure keeps the slot active",
-            "Do not pass `--draft`, run `gh pr ready`, create submitted-SHA comments",
-            "The user merges on GitHub outside this skill",
+            "Inspect staged, unstaged, and untracked paths",
+            "Korean commit message",
+            'add -A --',
+            'commit -m "<approved-Korean-commit-message>"',
+            "Complete the local commit phase for every repo before the first remote write",
+            "Do not pass `--draft`",
+            "Do not advance generation or create another PR",
+            "Only after every repo passes may one `record-batch` atomically advance",
+            "Files changed",
+            "Old commits from an earlier squash merge may remain",
+            "Adopt only one ready OPEN result",
         ]:
             self.assertIn(phrase, reference)
 
-        self.assertIn("show and execute exact pushes and Korean PR titles/bodies", skill)
-        self.assertIn("commit approved intended changes when needed", skill)
-        self.assertIn("stage only those approved paths and commit before any push", skill)
-        self.assertIn("Skip the commit for clean repos", skill)
-        self.assertIn("record only repository branch/PR identity", skill)
-        self.assertIn("Never enable auto-merge or run a PR merge command", skill)
-        self.assertIn("Never amend, create an empty commit, enable auto-merge, or merge a PR", skill)
-        self.assertNotIn("submitted SHA", skill)
+        self.assertIn("approved-path Korean commits", skill)
+        self.assertIn("same-branch push", skill)
+        self.assertIn("Korean ready PR creation or update", skill)
+        self.assertIn("`OPEN` updates the same PR", skill)
+        self.assertIn("`MERGED` fetches and pins the base", skill)
+        self.assertIn("Never enable auto-merge or run a remote PR merge command", skill)
         self.assertNotIn('git -C "<development-worktree>" add .', reference)
 
-    def test_create_has_actionable_empty_reuse_and_correction_flows(self) -> None:
+    def test_create_is_one_time_idempotent_initialization(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
 
-        self.assertIn("switches an existing released clean slot to a new branch", skill)
-        self.assertIn("Claim before the first approved add/switch", skill)
-        self.assertIn("Existing released-slot reuse", reference)
-        self.assertIn(
-            'switch -c "<new-task-branch>" "<confirmed-source-start-point>"',
-            reference,
-        )
-        self.assertIn('switch "<recorded-pr-branch>"', reference)
-        self.assertIn("Require the recorded local branch HEAD to equal that pinned PR-head SHA", reference)
+        self.assertIn("first initialization and exact idempotent retry", skill)
+        self.assertIn("Never use it to start later work", skill)
+        self.assertIn("Initialize the permanent manifest binding", skill)
+        self.assertIn("Use `create` only for the first fixed bundle initialization", reference)
+        self.assertIn("initialize --slot", reference)
         self.assertIn("worktree add -b", reference)
-        self.assertIn("A partial add/switch keeps ownership active", reference)
-        self.assertIn("--preserve-repositories", reference)
+        self.assertIn("An exact retry may leave already-correct clean worktrees untouched", reference)
+        self.assertIn("Never switch an existing slot to a new task branch", reference)
+        self.assertNotIn("--preserve-repositories", reference)
 
     def test_pull_and_sync_have_separate_locations_and_update_rules(self) -> None:
         skill = read(SKILL)
@@ -206,8 +201,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("Do not use a Markdown table", reference)
         self.assertIn("<source-branch (추정)|확인 필요>", reference)
         self.assertIn("<repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>", reference)
-        self.assertIn("Show each participating repo on one line", reference)
-        self.assertIn("Make `폴더` relative to `기준 폴더`", reference)
+        self.assertIn("Add each repo's manifest generation/current PR", reference)
         self.assertIn("Keep upstream, HEAD, locks, prunable state, and operation state out", reference)
         self.assertIn("filter to it and do not mix the workspace or sibling bundles", reference)
 
@@ -527,8 +521,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         text = read(OPENAI_YAML)
 
         self.assertIn('display_name: "Multi Repo Worktree"', text)
-        self.assertIn('short_description: "Safe multi-repo worktree and PR coordination."', text)
-        self.assertIn("Use $stageflow:multi-repo-worktree status", text)
+        self.assertIn('short_description: "Permanent multi-repo worktrees and chained PRs."', text)
+        self.assertIn("Use $stageflow:multi-repo-worktree status to inspect a permanent", text)
         self.assertIn("allow_implicit_invocation: false", text)
 
     def test_plugin_manifest_exposes_multi_repo_worktree_prompt(self) -> None:
@@ -537,11 +531,11 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertIn("multi-repo-worktree", interface["longDescription"])
         self.assertIn(
-            "help, status, create, submit, pull, and sync keywords",
+            "one-time create, repeated same-branch submit",
             interface["longDescription"],
         )
         self.assertIn(
-            "Use $stageflow:multi-repo-worktree status to inspect a multi-repo Git worktree or PR slot bundle.",
+            "Use $stageflow:multi-repo-worktree status to inspect a permanent multi-repo worktree and PR chain.",
             interface["defaultPrompt"],
         )
 
@@ -556,33 +550,66 @@ class SlotManifestTests(unittest.TestCase):
             text=True,
         )
 
-    def test_claim_is_idempotent_for_exact_owner_and_rejects_other_owner(self) -> None:
+    def test_initialize_is_exactly_idempotent_and_rejects_binding_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "worktrees" / "slot-1"
             first = self.run_manifest(
-                root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path)
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a=task-a",
+                "--repository", "service-b=task-b",
             )
             second = self.run_manifest(
-                root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path)
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-b=task-b",
+                "--repository", "service-a=task-a",
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
+            )
+            after_pr = self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a=task-a",
+                "--repository", "service-b=task-b",
             )
             conflict = self.run_manifest(
                 root,
-                "claim",
-                "--slot",
-                "slot-1",
-                "--owner",
-                "task-b",
-                "--path",
-                str(path),
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a=other-branch",
+                "--repository", "service-b=task-b",
                 check=False,
             )
 
             self.assertEqual(json.loads(first.stdout)["result"], json.loads(second.stdout)["result"])
+            self.assertEqual(
+                json.loads(after_pr.stdout)["result"]["repositories"]["service-a"],
+                {"branch": "task-a", "generation": 1, "pr": "17"},
+            )
             self.assertEqual(conflict.returncode, 2)
-            self.assertIn("owner mismatch", conflict.stderr)
+            self.assertIn("permanent slot binding mismatch", conflict.stderr)
+            result = json.loads(first.stdout)["result"]
+            self.assertNotIn("owner", result)
+            self.assertNotIn("state", result)
+            self.assertEqual(result["repositories"]["service-a"], {"branch": "task-a", "generation": 0, "pr": None})
 
-    def test_concurrent_claims_have_one_owner_and_leave_valid_json(self) -> None:
+    def test_concurrent_conflicting_initializations_leave_one_valid_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "worktrees" / "slot-1"
@@ -592,15 +619,12 @@ class SlotManifestTests(unittest.TestCase):
                     str(SLOT_MANIFEST),
                     "--root",
                     str(root),
-                    "claim",
-                    "--slot",
-                    "slot-1",
-                    "--owner",
-                    owner,
-                    "--path",
-                    str(path),
+                    "initialize",
+                    "--slot", "slot-1",
+                    "--path", str(path),
+                    "--repository", f"service-a={branch}",
                 ]
-                for owner in ["task-a", "task-b"]
+                for branch in ["task-a", "task-b"]
             ]
             processes = [
                 subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -610,176 +634,201 @@ class SlotManifestTests(unittest.TestCase):
 
             self.assertEqual(sorted(result[2] for result in results), [0, 2])
             status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
-            self.assertIn(status["owner"], {"task-a", "task-b"})
-            self.assertEqual(status["state"], "active")
+            self.assertIn(status["repositories"]["service-a"]["branch"], {"task-a", "task-b"})
+            self.assertEqual(status["repositories"]["service-a"]["generation"], 0)
 
-    def test_only_active_exact_owner_can_record_and_release(self) -> None:
+    def test_manifest_lock_is_recoverable_after_holder_process_exits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            path = root / "worktrees" / "slot-1"
-            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path))
+            crash_while_locked = """
+import os
+import pathlib
+import sys
 
-            integration_release = self.run_manifest(
-                root, "release", "--slot", "slot-1", "--owner", "integration", check=False
+module = {"__name__": "slot_manifest_crash_test"}
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+exec(compile(source, sys.argv[1], "exec"), module)
+path = module["manifest_path"](pathlib.Path(sys.argv[2]))
+with module["manifest_lock"](path, timeout_seconds=1.0):
+    os._exit(0)
+"""
+            subprocess.run(
+                [sys.executable, "-c", crash_while_locked, str(SLOT_MANIFEST), str(root)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
-            self.assertEqual(integration_release.returncode, 2)
 
-            self.run_manifest(
+            lock_path = root / ".stageflow-worktrees" / "slots.json.lock"
+            self.assertTrue(lock_path.exists())
+            initialized = self.run_manifest(
                 root,
-                "record",
-                "--slot",
-                "slot-1",
-                "--owner",
-                "task-a",
-                "--repo",
-                "service-a",
-                "--branch",
-                "task-a",
-                "--pr",
-                "17",
-            )
-            released = self.run_manifest(
-                root, "release", "--slot", "slot-1", "--owner", "task-a"
-            )
-            stale_release = self.run_manifest(
-                root, "release", "--slot", "slot-1", "--owner", "task-a", check=False
-            )
-
-            result = json.loads(released.stdout)["result"]
-            self.assertEqual(result["state"], "released")
-            self.assertEqual(result["repositories"]["service-a"]["pr"], "17")
-            self.assertEqual(stale_release.returncode, 2)
-            self.assertIn("not active", stale_release.stderr)
-
-    def test_released_slot_can_be_claimed_by_new_owner_without_branch_deletion(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            path = root / "worktrees" / "slot-1"
-            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path))
-            self.run_manifest(
-                root,
-                "record",
+                "initialize",
                 "--slot", "slot-1",
-                "--owner", "task-a",
-                "--repo", "service-a",
-                "--branch", "task-a",
-                "--pr", "17",
+                "--path", str(root / "worktrees" / "slot-1"),
+                "--repository", "service-a=task-a",
             )
-            self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "task-a")
-            claimed = self.run_manifest(
-                root, "claim", "--slot", "slot-1", "--owner", "task-b", "--path", str(path)
+            self.assertEqual(json.loads(initialized.stdout)["result"]["path"], str(root / "worktrees" / "slot-1"))
+
+    def test_operation_lock_is_exclusive_idempotent_and_exact_token_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a=task-a",
             )
-            old_owner = self.run_manifest(
-                root, "release", "--slot", "slot-1", "--owner", "task-a", check=False
+            first = self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            repeated = self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            competing = self.run_manifest(
+                root, "lock", "--slot", "slot-1", "--token", "submit-b", check=False
+            )
+            wrong_unlock = self.run_manifest(
+                root, "unlock", "--slot", "slot-1", "--token", "submit-b", check=False
+            )
+            status = self.run_manifest(root, "lock-status", "--slot", "slot-1")
+            unlocked = self.run_manifest(
+                root, "unlock", "--slot", "slot-1", "--token", "submit-a"
             )
 
-            result = json.loads(claimed.stdout)["result"]
-            self.assertEqual(result["owner"], "task-b")
-            self.assertEqual(result["repositories"], {})
-            self.assertEqual(old_owner.returncode, 2)
+            self.assertEqual(json.loads(first.stdout)["result"]["token"], "submit-a")
+            self.assertEqual(json.loads(repeated.stdout)["result"]["token"], "submit-a")
+            self.assertEqual(json.loads(status.stdout)["result"]["token"], "submit-a")
+            self.assertEqual(json.loads(unlocked.stdout)["result"]["token"], "submit-a")
+            self.assertEqual(competing.returncode, 2)
+            self.assertIn("slot operation is locked", competing.stderr)
+            self.assertEqual(wrong_unlock.returncode, 2)
+            self.assertIn("token mismatch", wrong_unlock.stderr)
+
+    def test_record_batch_requires_lock_and_advances_all_repositories_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a=task-a",
+                "--repository", "service-b=task-b",
+            )
+            no_lock = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
+                "--repository-pr", "service-b", "23",
+                check=False,
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            recorded = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
+                "--repository-pr", "service-b", "23",
+            )
+
+            self.assertEqual(no_lock.returncode, 2)
+            self.assertIn("not locked", no_lock.stderr)
+            result = json.loads(recorded.stdout)["result"]
+            self.assertEqual(result["repositories"]["service-a"]["generation"], 1)
+            self.assertEqual(result["repositories"]["service-a"]["pr"], "17")
+            self.assertEqual(result["repositories"]["service-b"]["generation"], 1)
+            self.assertEqual(result["repositories"]["service-b"]["pr"], "23")
             self.assertNotIn("subprocess", read(SLOT_MANIFEST))
 
-    def test_record_stays_active_until_release_and_correction_owner_can_resubmit(self) -> None:
+    def test_record_batch_is_retry_idempotent_and_advances_next_pr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "worktrees" / "slot-1"
-            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path))
             self.run_manifest(
                 root,
-                "record",
+                "initialize",
                 "--slot", "slot-1",
-                "--owner", "task-a",
-                "--repo", "service-a",
-                "--branch", "task-a",
-                "--pr", "17",
-            )
-
-            active = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
-            self.assertEqual(active["state"], "active")
-
-            self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "task-a")
-            recovered = self.run_manifest(
-                root,
-                "claim",
-                "--slot", "slot-1",
-                "--owner", "correction-a",
                 "--path", str(path),
-                "--preserve-repositories",
+                "--repository", "service-a=task-a",
             )
-            self.assertEqual(
-                json.loads(recovered.stdout)["result"]["repositories"]["service-a"],
-                {"branch": "task-a", "pr": "17"},
-            )
-            self.run_manifest(
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            first = self.run_manifest(
                 root,
-                "record",
+                "record-batch",
                 "--slot", "slot-1",
-                "--owner", "correction-a",
-                "--repo", "service-a",
-                "--branch", "task-a",
-                "--pr", "17",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
             )
-            corrected = json.loads(
-                self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "correction-a").stdout
-            )["result"]
-
-            self.assertEqual(corrected["state"], "released")
-            self.assertEqual(
-                corrected["repositories"]["service-a"],
-                {"branch": "task-a", "pr": "17"},
+            repeated = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
+            )
+            second = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--expected-generation", "1",
+                "--repository-pr", "service-a", "18",
             )
 
-    def test_correction_preserve_requires_released_repository_identity(self) -> None:
+            self.assertEqual(json.loads(first.stdout)["result"], json.loads(repeated.stdout)["result"])
+            identity = json.loads(second.stdout)["result"]["repositories"]["service-a"]
+            self.assertEqual(identity, {"branch": "task-a", "generation": 2, "pr": "18"})
+
+    def test_record_batch_rejects_generation_or_repository_mismatch_without_partial_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "worktrees" / "slot-1"
-            missing = self.run_manifest(
-                root,
-                "claim",
-                "--slot", "slot-1",
-                "--owner", "correction-a",
-                "--path", str(path),
-                "--preserve-repositories",
-                check=False,
-            )
-
-            self.assertEqual(missing.returncode, 2)
-            self.assertIn("missing slot", missing.stderr)
-            self.assertFalse((root / ".stageflow-worktrees" / "slots.json").exists())
-
             self.run_manifest(
                 root,
-                "claim",
+                "initialize",
                 "--slot", "slot-1",
-                "--owner", "task-a",
                 "--path", str(path),
+                "--repository", "service-a=task-a",
+                "--repository", "service-b=task-b",
             )
-            active_empty = self.run_manifest(
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            unknown = self.run_manifest(
                 root,
-                "claim",
+                "record-batch",
                 "--slot", "slot-1",
-                "--owner", "task-a",
-                "--path", str(path),
-                "--preserve-repositories",
+                "--token", "submit-a",
+                "--expected-generation", "0",
+                "--repository-pr", "service-a", "17",
+                "--repository-pr", "missing", "23",
                 check=False,
             )
-            self.assertEqual(active_empty.returncode, 2)
-            self.assertIn("no repository identity", active_empty.stderr)
-
-            self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "task-a")
-            released_empty = self.run_manifest(
+            wrong_generation = self.run_manifest(
                 root,
-                "claim",
+                "record-batch",
                 "--slot", "slot-1",
-                "--owner", "correction-a",
-                "--path", str(path),
-                "--preserve-repositories",
+                "--token", "submit-a",
+                "--expected-generation", "1",
+                "--repository-pr", "service-a", "17",
                 check=False,
             )
-            self.assertEqual(released_empty.returncode, 2)
-            self.assertIn("no repository identity", released_empty.stderr)
+            status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
 
-    def test_legacy_sha_fields_are_read_but_next_record_replaces_them(self) -> None:
+            self.assertEqual(unknown.returncode, 2)
+            self.assertIn("no repository binding", unknown.stderr)
+            self.assertEqual(wrong_generation.returncode, 2)
+            self.assertIn("generation mismatch", wrong_generation.stderr)
+            self.assertEqual(status["repositories"]["service-a"]["generation"], 0)
+            self.assertIsNone(status["repositories"]["service-a"]["pr"])
+
+    def test_legacy_lifecycle_manifest_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             state = root / ".stageflow-worktrees"
@@ -804,45 +853,175 @@ class SlotManifestTests(unittest.TestCase):
             }
             (state / "slots.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-            status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
-            self.assertEqual(status["repositories"]["service-a"]["head_sha"], "a" * 40)
-            updated = self.run_manifest(
-                root,
-                "record",
-                "--slot", "slot-1",
-                "--owner", "task-a",
-                "--repo", "service-a",
-                "--branch", "task-a",
-                "--pr", "17",
-            )
-            self.assertEqual(
-                json.loads(updated.stdout)["result"]["repositories"]["service-a"],
-                {"branch": "task-a", "pr": "17"},
-            )
+            status = self.run_manifest(root, "status", "--slot", "slot-1", check=False)
 
-    def test_released_fixed_slot_rejects_a_different_path(self) -> None:
+            self.assertEqual(status.returncode, 2)
+            self.assertIn("unsupported manifest schema: 1", status.stderr)
+            self.assertIn("legacy active/released manifests require manual correction", status.stderr)
+
+    def test_permanent_slot_rejects_a_different_path_or_repository_set(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             original = root / "worktrees" / "slot-1"
             replacement = root / "worktrees" / "other-slot"
-            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(original))
-            self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "task-a")
-            result = self.run_manifest(
+            self.run_manifest(
                 root,
-                "claim",
-                "--slot",
-                "slot-1",
-                "--owner",
-                "task-b",
-                "--path",
-                str(replacement),
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(original),
+                "--repository", "service-a=task-a",
+            )
+            path_result = self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(replacement),
+                "--repository", "service-a=task-a",
+                check=False,
+            )
+            repositories_result = self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(original),
+                "--repository", "service-a=task-a",
+                "--repository", "service-b=task-b",
                 check=False,
             )
 
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("fixed slot path mismatch", result.stderr)
+            self.assertEqual(path_result.returncode, 2)
+            self.assertIn("permanent slot binding mismatch", path_result.stderr)
+            self.assertEqual(repositories_result.returncode, 2)
+            self.assertIn("permanent slot binding mismatch", repositories_result.stderr)
             status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
             self.assertEqual(status["path"], str(original))
+
+    def test_concurrent_operation_locks_allow_only_one_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(root / "worktrees" / "slot-1"),
+                "--repository", "service-a=task-a",
+            )
+            commands = [
+                [
+                    sys.executable,
+                    str(SLOT_MANIFEST),
+                    "--root", str(root),
+                    "lock",
+                    "--slot", "slot-1",
+                    "--token", token,
+                ]
+                for token in ["submit-a", "submit-b"]
+            ]
+            processes = [
+                subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                for command in commands
+            ]
+            results = [process.communicate(timeout=10) + (process.returncode,) for process in processes]
+
+            self.assertEqual(sorted(result[2] for result in results), [0, 2])
+            lock = json.loads(self.run_manifest(root, "lock-status", "--slot", "slot-1").stdout)["result"]
+            self.assertIn(lock["token"], {"submit-a", "submit-b"})
+
+    def test_unpublished_lock_candidate_does_not_create_a_malformed_stale_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(root / "worktrees" / "slot-1"),
+                "--repository", "service-a=task-a",
+            )
+            locks = root / ".stageflow-worktrees" / "operation-locks"
+            locks.mkdir()
+            (locks / "interrupted-candidate.tmp").write_text("{partial", encoding="utf-8")
+
+            acquired = self.run_manifest(
+                root, "lock", "--slot", "slot-1", "--token", "submit-a"
+            )
+            status = self.run_manifest(root, "lock-status", "--slot", "slot-1")
+
+            self.assertEqual(json.loads(acquired.stdout)["result"]["token"], "submit-a")
+            self.assertEqual(json.loads(status.stdout)["result"]["token"], "submit-a")
+            source = read(SLOT_MANIFEST)
+            self.assertIn("os.link(candidate, path)", source)
+            self.assertNotIn("os.open(path, os.O_CREAT | os.O_EXCL", source)
+
+    def test_lock_publish_failure_leaves_no_final_or_candidate_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            module: dict[str, object] = {"__name__": "slot_manifest_test"}
+            exec(compile(read(SLOT_MANIFEST), str(SLOT_MANIFEST), "exec"), module)
+            lock_path = module["operation_lock_path"](root, "slot-1")
+
+            with mock.patch.object(module["os"], "link", side_effect=OSError("simulated crash")):
+                with self.assertRaises(module["ManifestError"]):
+                    module["acquire_operation_lock"](root, "slot-1", "submit-a")
+
+            self.assertFalse(lock_path.exists())
+            self.assertEqual(list(lock_path.parent.glob("*.tmp")), [])
+
+    def test_schema_rejects_relative_paths_and_unexpected_lifecycle_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            manifest = {
+                "schema_version": 2,
+                "slots": {
+                    "slot-1": {
+                        "path": "worktrees/slot-1",
+                        "repositories": {
+                            "service-a": {"branch": "task-a", "generation": 0, "pr": None}
+                        },
+                    }
+                },
+            }
+            (state / "slots.json").write_text(json.dumps(manifest), encoding="utf-8")
+            relative = self.run_manifest(root, "status", check=False)
+
+            manifest["slots"]["slot-1"]["path"] = str((root / "worktrees" / "slot-1").resolve())
+            manifest["slots"]["slot-1"]["state"] = "active"
+            (state / "slots.json").write_text(json.dumps(manifest), encoding="utf-8")
+            lifecycle = self.run_manifest(root, "status", check=False)
+
+            self.assertEqual(relative.returncode, 2)
+            self.assertIn("invalid path", relative.stderr)
+            self.assertEqual(lifecycle.returncode, 2)
+            self.assertIn("unexpected fields", lifecycle.stderr)
+
+    def test_schema_rejects_boolean_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            for generation, pr in [(True, "17"), (False, None)]:
+                with self.subTest(generation=generation):
+                    manifest = {
+                        "schema_version": 2,
+                        "slots": {
+                            "slot-1": {
+                                "path": str((root / "worktrees" / "slot-1").resolve()),
+                                "repositories": {
+                                    "service-a": {
+                                        "branch": "task-a",
+                                        "generation": generation,
+                                        "pr": pr,
+                                    }
+                                },
+                            }
+                        },
+                    }
+                    (state / "slots.json").write_text(json.dumps(manifest), encoding="utf-8")
+                    result = self.run_manifest(root, "status", check=False)
+
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("invalid generation", result.stderr)
 
     def test_malformed_manifest_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -854,6 +1033,154 @@ class SlotManifestTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 2)
             self.assertIn("cannot read manifest", result.stderr)
+
+@unittest.skipIf(shutil.which("git") is None, "git is required for same-branch PR flow tests")
+class SameBranchFollowUpFlowTests(unittest.TestCase):
+    def git(self, path: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(path), *arguments],
+            check=check,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def test_squash_merged_base_leaves_only_next_work_in_three_dot_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            subprocess.run(
+                ["git", "init", "-b", "main", str(repo)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.git(repo, "config", "user.name", "Stageflow Test")
+            self.git(repo, "config", "user.email", "stageflow@example.invalid")
+            (repo / "base.txt").write_text("base\n", encoding="utf-8")
+            self.git(repo, "add", "base.txt")
+            self.git(repo, "commit", "-m", "base")
+
+            self.git(repo, "switch", "-c", "fixed-task")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A")
+
+            self.git(repo, "switch", "main")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A 스쿼시 병합")
+            pinned_base = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            self.git(repo, "switch", "fixed-task")
+            (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+            self.git(repo, "add", "b.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            self.git(repo, "merge", pinned_base, "-m", "기준 브랜치 main 동기화")
+
+            ancestor = self.git(repo, "merge-base", "--is-ancestor", pinned_base, "HEAD", check=False)
+            changed = self.git(repo, "diff", "--name-only", f"{pinned_base}...HEAD").stdout.splitlines()
+            commits = self.git(repo, "log", "--format=%s", f"{pinned_base}..HEAD").stdout
+
+            self.assertEqual(ancestor.returncode, 0)
+            self.assertEqual(changed, ["b.txt"])
+            self.assertIn("작업 A", commits)
+            self.assertIn("작업 B", commits)
+
+    def test_squash_merged_base_without_next_work_has_empty_three_dot_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            subprocess.run(
+                ["git", "init", "-b", "main", str(repo)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.git(repo, "config", "user.name", "Stageflow Test")
+            self.git(repo, "config", "user.email", "stageflow@example.invalid")
+            (repo / "base.txt").write_text("base\n", encoding="utf-8")
+            self.git(repo, "add", "base.txt")
+            self.git(repo, "commit", "-m", "base")
+
+            self.git(repo, "switch", "-c", "fixed-task")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A")
+
+            self.git(repo, "switch", "main")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A 스쿼시 병합")
+            pinned_base = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            self.git(repo, "switch", "fixed-task")
+            self.git(repo, "merge", pinned_base, "-m", "기준 브랜치 main 동기화")
+            changed = self.git(repo, "diff", "--name-only", f"{pinned_base}...HEAD").stdout
+
+            self.assertEqual(changed, "")
+            self.assertEqual(
+                self.git(repo, "merge-base", "--is-ancestor", pinned_base, "HEAD", check=False).returncode,
+                0,
+            )
+
+    def test_deleted_remote_head_is_recreated_by_non_force_same_branch_push(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote = root / "remote.git"
+            repo = root / "repo"
+            subprocess.run(
+                ["git", "init", "--bare", str(remote)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "clone", str(remote), str(repo)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.git(repo, "config", "user.name", "Stageflow Test")
+            self.git(repo, "config", "user.email", "stageflow@example.invalid")
+            self.git(repo, "switch", "-c", "main")
+            (repo / "base.txt").write_text("base\n", encoding="utf-8")
+            self.git(repo, "add", "base.txt")
+            self.git(repo, "commit", "-m", "base")
+            self.git(repo, "push", "-u", "origin", "main")
+
+            self.git(repo, "switch", "-c", "fixed-task")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A")
+            self.git(repo, "push", "-u", "origin", "fixed-task")
+
+            self.git(repo, "switch", "main")
+            (repo / "a.txt").write_text("work A\n", encoding="utf-8")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-m", "작업 A 스쿼시 병합")
+            self.git(repo, "push", "origin", "main")
+            self.git(repo, "push", "origin", "--delete", "fixed-task")
+
+            self.git(repo, "switch", "fixed-task")
+            (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+            self.git(repo, "add", "b.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            self.git(repo, "fetch", "--prune", "origin")
+            missing_remote_head = self.git(
+                repo, "rev-parse", "--verify", "refs/remotes/origin/fixed-task", check=False
+            )
+            pinned_base = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+            self.git(repo, "merge", pinned_base, "-m", "기준 브랜치 main 동기화")
+            changed = self.git(repo, "diff", "--name-only", f"{pinned_base}...HEAD").stdout.splitlines()
+            self.git(repo, "push", "origin", "HEAD:refs/heads/fixed-task")
+            recreated = self.git(repo, "ls-remote", "--heads", "origin", "refs/heads/fixed-task").stdout
+
+            self.assertNotEqual(missing_remote_head.returncode, 0)
+            self.assertEqual(changed, ["b.txt"])
+            self.assertIn(self.git(repo, "rev-parse", "HEAD").stdout.strip(), recreated)
 
 
 @unittest.skipIf(shutil.which("git") is None, "git is required for pull/sync flow tests")

@@ -1,7 +1,7 @@
 interface:
   display_name: "Multi Repo Worktree"
-  short_description: "Safe multi-repo worktree and PR coordination."
-  default_prompt: "Use $stageflow:multi-repo-worktree status to inspect this multi-repo worktree or PR slot bundle."
+  short_description: "Permanent multi-repo worktrees and chained PRs."
+  default_prompt: "Use $stageflow:multi-repo-worktree status to inspect a permanent multi-repo worktree and PR chain."
 
 policy:
   allow_implicit_invocation: false
