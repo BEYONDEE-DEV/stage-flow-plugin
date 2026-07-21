@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference owns when non-atom project documents are created or retained and how operation-local inventory, ownership, and evidence state is produced and retired. `atomic-document-contract.md` owns their structural kind and paths; `source-convention-and-domain-policy.md` owns source-convention content and semantic failure conditions.
+This reference owns when non-atom project documents are created or retained and how operation-local inventory and evidence indexes are produced and retired. `atomic-document-contract.md` owns their structural kind and paths; `source-convention-and-domain-policy.md` owns source-convention content and semantic failure conditions; `shared-contract-readiness.md` owns version-4 shared-owner/consumer state and readiness transitions.
 
 ## Source Convention Document Flow
 
@@ -19,7 +19,7 @@ Project documents are non-atom documents. Use:
 
 Do not give these files atom frontmatter, AIDs, `graph_edges`, or required atom sections unless an explicit accepted migration converts one into an atom.
 
-A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` from domain proposal through writer/reviewer cycles. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final implementation-context index.
+A service logic inventory is operation-local by default. Keep it under `.stageflow/atomic-docs/requests/<request-id>/inventory.md` or `work-state.json` from domain proposal through writer/reviewer cycles and through final request-bound selection/docs/baseline plus both terminal checks. Retain `<doc-root>/project/service-logic-inventory.md` only when the accepted scope explicitly asks for a final implementation-context index.
 
 Keep queue-time relationship availability operation-local. When an approved later bundle will own a consumer, owner, or graph target, managed prose describes the accepted durable relationship without saying that its Atom is "not created yet". If the relationship is not stable enough to state, retain the pending owner/consumer note in inventory or `work-state.json` and reconcile it after the target bundle; do not turn operation progress into durable product context.
 
@@ -35,7 +35,7 @@ Do not require every inventory row to contain fields for validation, state, pers
 
 Project document review must fail when a project document directly judges implementation status like an atom, when glossary meaning is too shallow to resolve a real conflict, or when `project-goal.md` treats docs config, baseline/cache paths, reset/delete notes, reviewer logs, or operation status as the service or product goal. A retained project inventory must also FAIL when it is only a source identifier list, lacks the selection reason or important owner/contract context required by this reference, claims exhaustive behavior coverage, or is not synchronized to real `atom_key` and existing AID references. Do not create or advance baseline metadata while the retained inventory is in that state. Source-convention-specific failures come only from `source-convention-and-domain-policy.md`.
 
-One root unresolved decision has one canonical owner in the narrowest shared project/context or domain Atom that can resolve it. A consumer points to that owner by `atom_key` and AID or owning heading; it creates a local Gap only for a distinct consumer-specific decision or consequence. In version 3 or 2, when glossary, inventory, context, or an Atom changes that owner after a review PASS, treat every changed owner/consumer projection as an affected artifact under `semantic-review-closure.md`. Legacy operations route the same correction through their recorded review flow without adding closure state.
+One root unresolved decision has one canonical owner in the narrowest shared project/context or domain Atom that can resolve it. A consumer points to that owner by `atom_key` and AID or owning heading; it creates a local Gap only for a distinct consumer-specific decision or consequence. When glossary, inventory, context, or an Atom changes that owner after a review PASS, treat every changed owner/consumer projection as an affected artifact under `semantic-review-closure.md`.
 
 ## Pre-Approval Domain Proposal
 
@@ -69,22 +69,16 @@ One context candidate may cite several source surfaces. Do not create one invent
 
 ## Ownership And Evidence Prepass
 
-For multi-domain or `initial-baseline` work, run one prepass over selected shared/high-impact context candidates before the first writer. A targeted single-domain operation checks only the target owner and adjacent contracts; it does not perform project-wide ownership discovery.
+For multi-domain or `initial-baseline` work, run one prepass over selected shared/high-impact context candidates before the first writer. A targeted single-domain operation checks only the target owner and adjacent contracts; it does not perform project-wide ownership discovery. Apply the bounded kinds, local/shared disposition, owner/consumer evidence closure, and readiness gate from `shared-contract-readiness.md`.
 
-- identify shared payload, storage, permission, policy, integration, transaction, and glossary source-of-truth owners
-- record which domains reference each shared owner and use reference count only as queue-order evidence
-- confirm owners whose later change would reopen several bundles
-- keep ordinary single-domain owners provisional until their bundle is written and reviewed
-- order confirmed shared-owner bundles before direct dependents, then process independent bundles
+Use reference count only as a scheduling hint. Confirm shared owners whose later change would reopen direct consumers, order their bundles before those dependents, and keep ordinary single-domain owners provisional until their bundle is written and reviewed. Do not build a complete semantic graph, freeze every aggregate owner, or turn the prepass into exhaustive permission/API/transaction discovery.
 
-Do not build a complete semantic graph or freeze every aggregate owner before writing. Uncertain shared ownership remains an explicit blocker; uncertain local ownership may be resolved in its bundle.
+Create one operation-local `evidence.md` beside request state, pin it to `source_commit_observed`, and reuse it as a source-navigation index. Give every candidate one `## <candidate_id>` section. Use constrained plain Markdown: tab characters, fenced or indented code, multiline inline code, and raw HTML-like syntax are not allowed; ordinary inline code must close on the same line. Use the smallest authoritative source locators and one concise relevance statement per row, following the evidence format in `validation-contract.md`. Include `drop` candidates so their exclusion remains auditable through version-4 terminal revalidation, but pass only active `write` and targeting `merge` sections to the writer. Add storage, transaction, integration, schema, setting, and test locations only when they help judge a selected contract or owner. Do not preserve field lists, parser algorithms, payload mappings, branch sequences, stale-response reproductions, or defect narratives merely because they were inspected. Reviewers reopen source for exact mechanics when a retained claim needs verification.
 
-Create one operation-local `evidence.md` beside request state, pin it to `source_commit_observed`, and reuse it as a source-navigation index. Give every candidate one `## <candidate_id>` section. Use constrained plain Markdown: tab characters, fenced or indented code, multiline inline code, and raw HTML-like syntax are not allowed; ordinary inline code must close on the same line. Use the smallest authoritative source locators and one concise relevance statement per row, following the evidence format in `validation-contract.md`. Include `drop` candidates so their exclusion remains auditable until operation close, but pass only active `write` and targeting `merge` sections to the writer. Add storage, transaction, integration, schema, setting, and test locations only when they help judge a selected contract or owner. Do not preserve field lists, parser algorithms, payload mappings, branch sequences, stale-response reproductions, or defect narratives merely because they were inspected. Reviewers reopen source for exact mechanics when a retained claim needs verification.
-
-After these anchors are known, finalize `write|merge|drop`, update the planned Atom keys and queue, and run the selection preflight from `validation-contract.md` before the first writer. A newly discovered candidate repeats this small admission step; it does not expand `evidence.md` into behavior closure.
+After these anchors are known, finalize `write|merge|drop` and update planned Atom keys and queue. Require the same persistent development reviewer's readiness PASS under `shared-contract-readiness.md`, then the selection preflight from `validation-contract.md`, before the first writer. A newly discovered candidate repeats only the affected admission/readiness step; it does not expand `evidence.md` into behavior closure.
 
 Every `write` or `merge` candidate must resolve to an owner or an explicit unresolved decision before review PASS. Every `drop` candidate stays outside the write queue with its selection basis. If reviewer correction drops an already written candidate, retain its inventory and evidence row through operation close while removing candidate output keys, queue entries, risk routes, and managed Atom output under `docs-generation-flow.md`. Ordinary source behavior that never became a candidate needs no row or disposition. If a selected high-impact owner remains unclear and that uncertainty would mislead the atom's stated scope, record a gap with source evidence and `confirmation_needed`.
 
 The required context-quality reviewer checks the selected queue and may identify a missing shared/external owner or non-obvious constraint only when its omission would make an atom's stated scope misleading. It must not search for or disposition every source behavior.
 
-After accepted atom docs are written and reviewed, delete or ignore the operation-local inventory unless the user explicitly approved retaining a synced project context index.
+After accepted atom docs are written and reviewed, keep operation-local inventory/evidence until final selection, request-bound docs/baseline, `metrics-preterminal`, and `metrics-final` all PASS. Only then delete or ignore them unless the user explicitly approved retaining a synced project context index.
