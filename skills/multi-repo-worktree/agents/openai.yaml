@@ -1,7 +1,7 @@
 interface:
   display_name: "Multi Repo Worktree"
-  short_description: "Permanent multi-repo worktrees and chained PRs."
-  default_prompt: "Use $stageflow:multi-repo-worktree status to inspect a permanent multi-repo worktree and PR chain."
+  short_description: "Low-interruption permanent worktrees and chained PRs."
+  default_prompt: "Use $stageflow:multi-repo-worktree submit to publish the current multi-repo worktree without routine re-approval."
 
 policy:
   allow_implicit_invocation: false

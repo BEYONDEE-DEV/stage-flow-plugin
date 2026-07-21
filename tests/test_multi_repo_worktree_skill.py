@@ -43,26 +43,34 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertNotIn("**Setup**", text)
         self.assertNotIn("TODO", text)
 
-    def test_skill_records_source_and_derived_branch_safety_rules(self) -> None:
+    def test_skill_uses_intent_authorization_and_narrow_decision_gates(self) -> None:
         text = read(SKILL)
 
-        self.assertIn("source branch as a repo-specific, user-confirmed fact", text)
+        self.assertIn("## Decision Contract", text)
         self.assertIn("fixed task branch", text)
-        self.assertIn("Git does not record the branch from which another branch was originally created", text)
-        self.assertIn("Before any Git or GitHub write", text)
-        self.assertIn("Accept approval only after presenting that exact plan", text)
-        self.assertIn("Approval applies only to the displayed batch", text)
-        self.assertIn("Never execute a write using an inferred or ambiguous source branch", text)
+        self.assertIn("explicit request to execute `create`, `submit`, `pull`, or `sync`", text)
+        self.assertIn("inspection only, or dry-run is always read-only", text)
+        self.assertIn("concise non-blocking commentary summary", text)
+        self.assertIn("Do not ask the user to approve exact commands", text)
+        self.assertIn("Ask one consolidated question only", text)
+        self.assertIn("Persist repo-specific source branches and remotes at `create`", text)
+        self.assertIn("Never write using inferred or ambiguous context", text)
         self.assertIn("Never reset, clean, force checkout, force push, rewrite history", text)
         self.assertIn("`sync` runs only in development worktrees", text)
-        self.assertIn("explicit approval", text)
         self.assertIn("missing/ambiguous remotes", text)
+        for obsolete in [
+            "Accept approval only after presenting that exact plan",
+            "Approval applies only to the displayed batch",
+            "Receive explicit approval after the exact plan",
+            "approved-path Korean commits",
+        ]:
+            self.assertNotIn(obsolete, text)
 
     def test_reference_covers_required_operations(self) -> None:
         text = read(REFERENCE)
 
         for phrase in [
-            "## Keyword And Approval Contract",
+            "## Keyword Authorization And Decision Contract",
             "## Roles And Repeated-PR Flow",
             "## Permanent Slot Manifest",
             "## Read-Only Inspection And Status",
@@ -79,7 +87,9 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "`pull`",
             "`sync`",
             "Preflight the complete batch and classify every changed repo",
-            "Receive explicit approval after the exact plan",
+            "Do not turn the summary into an approval question",
+            "Ask one consolidated question only",
+            "inspection only, or dry-run remains read-only",
             "source branch",
             "development worktree",
             "Git does not retain a branch's creation parent",
@@ -89,6 +99,13 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         for removed_heading in ["## Recycle", "## Integrate", "## Merge"]:
             self.assertNotIn(removed_heading, text)
+        for obsolete in [
+            "Receive explicit approval after the exact plan",
+            "approved-Korean-commit-message",
+            "approved-Korean-title",
+            "Any drift requires a new plan and approval",
+        ]:
+            self.assertNotIn(obsolete, text)
 
     def test_permanent_pr_slot_workflow_has_explicit_roles_and_safety_gates(self) -> None:
         skill = read(SKILL)
@@ -115,6 +132,11 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "An exact repeated call is idempotent",
             "operation lock is separate from slot ownership",
             "same slot, worktrees, and task branches",
+            '"schema_version": 3',
+            '"source_branch": "feature-etc"',
+            '"remote": "origin"',
+            "selected legacy slot",
+            "status`, inspection, and dry-run must leave manifest bytes unchanged",
         ]:
             self.assertIn(phrase, reference)
 
@@ -134,10 +156,10 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         reference = read(REFERENCE)
 
         for phrase in [
-            "Inspect staged, unstaged, and untracked paths",
-            "Korean commit message",
+            "Inspect staged, unstaged, and non-ignored untracked paths",
+            "generated Korean commit message",
             'add -A --',
-            'commit -m "<approved-Korean-commit-message>"',
+            'commit -m "<generated-Korean-commit-message>"',
             "Complete the local commit phase for every repo before the first remote write",
             "Do not pass `--draft`",
             "Do not advance generation or create another PR",
@@ -148,12 +170,14 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, reference)
 
-        self.assertIn("approved-path Korean commits", skill)
+        self.assertIn("task-related-path Korean commits", skill)
         self.assertIn("same-branch push", skill)
         self.assertIn("Korean ready PR creation or update", skill)
-        self.assertIn("`OPEN` updates the same PR", skill)
+        self.assertIn("`OPEN` pushes to the same PR", skill)
         self.assertIn("`MERGED` fetches and pins the base", skill)
         self.assertIn("Never enable auto-merge or run a remote PR merge command", skill)
+        self.assertIn("without rewriting its title/body", skill)
+        self.assertIn("Never run `gh pr edit` during routine `submit`", reference)
         self.assertNotIn('git -C "<development-worktree>" add .', reference)
 
     def test_create_is_one_time_idempotent_initialization(self) -> None:
@@ -162,7 +186,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertIn("first initialization and exact idempotent retry", skill)
         self.assertIn("Never use it to start later work", skill)
-        self.assertIn("Initialize the permanent manifest binding", skill)
+        self.assertIn("Initialize the complete permanent manifest binding", skill)
         self.assertIn("Use `create` only for the first fixed bundle initialization", reference)
         self.assertIn("initialize --slot", reference)
         self.assertIn("worktree add -b", reference)
@@ -178,6 +202,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("fast-forward each source branch to its pinned SHA", skill)
         self.assertIn("Run only in the requested development worktree bundle", skill)
         self.assertIn("never switch or update an original worktree", skill)
+        self.assertEqual(skill.count("refs/remotes/<remote>/<source-branch>"), 2)
+        self.assertNotIn("`origin/<source>`", skill)
         self.assertIn("merge --ff-only \"<pinned-source-sha>\"", reference)
         self.assertIn("merge \"<pinned-source-sha>\"", reference)
         self.assertIn("Do not use plain `git pull`", reference)
@@ -521,8 +547,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         text = read(OPENAI_YAML)
 
         self.assertIn('display_name: "Multi Repo Worktree"', text)
-        self.assertIn('short_description: "Permanent multi-repo worktrees and chained PRs."', text)
-        self.assertIn("Use $stageflow:multi-repo-worktree status to inspect a permanent", text)
+        self.assertIn('short_description: "Low-interruption permanent worktrees and chained PRs."', text)
+        self.assertIn("Use $stageflow:multi-repo-worktree submit to publish the current", text)
         self.assertIn("allow_implicit_invocation: false", text)
 
     def test_plugin_manifest_exposes_multi_repo_worktree_prompt(self) -> None:
@@ -531,11 +557,11 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertIn("multi-repo-worktree", interface["longDescription"])
         self.assertIn(
-            "one-time create, repeated same-branch submit",
+            "low-interruption permanent worktrees with one-time create, repeated same-branch submit",
             interface["longDescription"],
         )
         self.assertIn(
-            "Use $stageflow:multi-repo-worktree status to inspect a permanent multi-repo worktree and PR chain.",
+            "Use $stageflow:multi-repo-worktree submit to publish the current multi-repo worktree without routine re-approval.",
             interface["defaultPrompt"],
         )
 
@@ -559,16 +585,16 @@ class SlotManifestTests(unittest.TestCase):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "task-a", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
             )
             second = self.run_manifest(
                 root,
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-b=task-b",
-                "--repository", "service-a=task-a",
+                "--repository", "service-b", "task-b", "main", "origin",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
             self.run_manifest(
@@ -584,30 +610,45 @@ class SlotManifestTests(unittest.TestCase):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "task-a", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
             )
             conflict = self.run_manifest(
                 root,
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=other-branch",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "other-branch", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
                 check=False,
             )
 
             self.assertEqual(json.loads(first.stdout)["result"], json.loads(second.stdout)["result"])
             self.assertEqual(
                 json.loads(after_pr.stdout)["result"]["repositories"]["service-a"],
-                {"branch": "task-a", "generation": 1, "pr": "17"},
+                {
+                    "branch": "task-a",
+                    "source_branch": "main",
+                    "remote": "origin",
+                    "generation": 1,
+                    "pr": "17",
+                },
             )
             self.assertEqual(conflict.returncode, 2)
             self.assertIn("permanent slot binding mismatch", conflict.stderr)
             result = json.loads(first.stdout)["result"]
             self.assertNotIn("owner", result)
             self.assertNotIn("state", result)
-            self.assertEqual(result["repositories"]["service-a"], {"branch": "task-a", "generation": 0, "pr": None})
+            self.assertEqual(
+                result["repositories"]["service-a"],
+                {
+                    "branch": "task-a",
+                    "source_branch": "main",
+                    "remote": "origin",
+                    "generation": 0,
+                    "pr": None,
+                },
+            )
 
     def test_concurrent_conflicting_initializations_leave_one_valid_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -622,7 +663,7 @@ class SlotManifestTests(unittest.TestCase):
                     "initialize",
                     "--slot", "slot-1",
                     "--path", str(path),
-                    "--repository", f"service-a={branch}",
+                    "--repository", "service-a", branch, "main", "origin",
                 ]
                 for branch in ["task-a", "task-b"]
             ]
@@ -636,6 +677,146 @@ class SlotManifestTests(unittest.TestCase):
             status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
             self.assertIn(status["repositories"]["service-a"]["branch"], {"task-a", "task-b"})
             self.assertEqual(status["repositories"]["service-a"]["generation"], 0)
+
+    def test_schema_v2_status_is_read_only_and_selected_slot_context_binding_is_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            manifest_path = state / "slots.json"
+            manifest = {
+                "schema_version": 2,
+                "slots": {
+                    "slot-1": {
+                        "path": str((root / "worktrees" / "slot-1").resolve()),
+                        "repositories": {
+                            "service-a": {"branch": "task-a", "generation": 1, "pr": "17"},
+                            "service-b": {"branch": "task-b", "generation": 1, "pr": "23"},
+                        },
+                    },
+                    "slot-2": {
+                        "path": str((root / "worktrees" / "slot-2").resolve()),
+                        "repositories": {
+                            "service-c": {"branch": "task-c", "generation": 0, "pr": None}
+                        },
+                    },
+                },
+            }
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+            before = manifest_path.read_bytes()
+
+            status = json.loads(self.run_manifest(root, "status").stdout)["result"]
+            self.assertEqual(status["schema_version"], 3)
+            self.assertIsNone(status["slots"]["slot-1"]["repositories"]["service-a"]["source_branch"])
+            self.assertIsNone(status["slots"]["slot-2"]["repositories"]["service-c"]["remote"])
+            self.assertEqual(manifest_path.read_bytes(), before)
+
+            locked_before_context = self.run_manifest(
+                root, "lock", "--slot", "slot-1", "--token", "submit-a", check=False
+            )
+            self.assertEqual(locked_before_context.returncode, 2)
+            self.assertIn("requires source context", locked_before_context.stderr)
+            self.assertEqual(manifest_path.read_bytes(), before)
+
+            incomplete = self.run_manifest(
+                root,
+                "bind-context",
+                "--slot", "slot-1",
+                "--repository-context", "service-a", "main", "origin",
+                check=False,
+            )
+            self.assertEqual(incomplete.returncode, 2)
+            self.assertIn("context must cover every repository", incomplete.stderr)
+            self.assertEqual(manifest_path.read_bytes(), before)
+
+            bound = self.run_manifest(
+                root,
+                "bind-context",
+                "--slot", "slot-1",
+                "--repository-context", "service-a", "main", "origin",
+                "--repository-context", "service-b", "main", "upstream",
+            )
+            repeated = self.run_manifest(
+                root,
+                "bind-context",
+                "--slot", "slot-1",
+                "--repository-context", "service-b", "main", "upstream",
+                "--repository-context", "service-a", "main", "origin",
+            )
+            self.assertEqual(json.loads(bound.stdout)["result"], json.loads(repeated.stdout)["result"])
+
+            written = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(written["schema_version"], 3)
+            self.assertEqual(
+                written["slots"]["slot-1"]["repositories"]["service-a"]["source_branch"],
+                "main",
+            )
+            self.assertEqual(
+                written["slots"]["slot-1"]["repositories"]["service-b"]["remote"],
+                "upstream",
+            )
+            self.assertIsNone(
+                written["slots"]["slot-2"]["repositories"]["service-c"]["source_branch"]
+            )
+            self.assertIsNone(written["slots"]["slot-2"]["repositories"]["service-c"]["remote"])
+
+            conflict_before = manifest_path.read_bytes()
+            conflict = self.run_manifest(
+                root,
+                "bind-context",
+                "--slot", "slot-1",
+                "--repository-context", "service-a", "develop", "origin",
+                "--repository-context", "service-b", "main", "upstream",
+                check=False,
+            )
+            self.assertEqual(conflict.returncode, 2)
+            self.assertIn("source context mismatch", conflict.stderr)
+            self.assertEqual(manifest_path.read_bytes(), conflict_before)
+
+    def test_initialize_enriches_exact_v2_binding_and_preserves_current_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            slot_path = (root / "worktrees" / "slot-1").resolve()
+            manifest = {
+                "schema_version": 2,
+                "slots": {
+                    "slot-1": {
+                        "path": str(slot_path),
+                        "repositories": {
+                            "service-a": {"branch": "task-a", "generation": 1, "pr": "17"}
+                        },
+                    }
+                },
+            }
+            (state / "slots.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+            enriched = self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(slot_path),
+                "--repository", "service-a", "task-a", "main", "origin",
+            )
+            identity = json.loads(enriched.stdout)["result"]["repositories"]["service-a"]
+            self.assertEqual(identity["generation"], 1)
+            self.assertEqual(identity["pr"], "17")
+            self.assertEqual(identity["source_branch"], "main")
+            self.assertEqual(identity["remote"], "origin")
+
+            before = (state / "slots.json").read_bytes()
+            mismatch = self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(slot_path),
+                "--repository", "service-a", "task-a", "develop", "origin",
+                check=False,
+            )
+            self.assertEqual(mismatch.returncode, 2)
+            self.assertIn("permanent slot binding mismatch", mismatch.stderr)
+            self.assertEqual((state / "slots.json").read_bytes(), before)
 
     def test_manifest_lock_is_recoverable_after_holder_process_exits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -667,7 +848,7 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(root / "worktrees" / "slot-1"),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             self.assertEqual(json.loads(initialized.stdout)["result"]["path"], str(root / "worktrees" / "slot-1"))
 
@@ -680,7 +861,7 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             first = self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
             repeated = self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
@@ -713,8 +894,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "task-a", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
             )
             no_lock = self.run_manifest(
                 root,
@@ -755,7 +936,7 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
             first = self.run_manifest(
@@ -785,7 +966,16 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
 
             self.assertEqual(json.loads(first.stdout)["result"], json.loads(repeated.stdout)["result"])
             identity = json.loads(second.stdout)["result"]["repositories"]["service-a"]
-            self.assertEqual(identity, {"branch": "task-a", "generation": 2, "pr": "18"})
+            self.assertEqual(
+                identity,
+                {
+                    "branch": "task-a",
+                    "source_branch": "main",
+                    "remote": "origin",
+                    "generation": 2,
+                    "pr": "18",
+                },
+            )
 
     def test_record_batch_rejects_generation_or_repository_mismatch_without_partial_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -796,8 +986,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(path),
-                "--repository", "service-a=task-a",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "task-a", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
             )
             self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
             unknown = self.run_manifest(
@@ -869,14 +1059,14 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(original),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             path_result = self.run_manifest(
                 root,
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(replacement),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
                 check=False,
             )
             repositories_result = self.run_manifest(
@@ -884,8 +1074,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(original),
-                "--repository", "service-a=task-a",
-                "--repository", "service-b=task-b",
+                "--repository", "service-a", "task-a", "main", "origin",
+                "--repository", "service-b", "task-b", "main", "origin",
                 check=False,
             )
 
@@ -904,7 +1094,7 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(root / "worktrees" / "slot-1"),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             commands = [
                 [
@@ -935,7 +1125,7 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "initialize",
                 "--slot", "slot-1",
                 "--path", str(root / "worktrees" / "slot-1"),
-                "--repository", "service-a=task-a",
+                "--repository", "service-a", "task-a", "main", "origin",
             )
             locks = root / ".stageflow-worktrees" / "operation-locks"
             locks.mkdir()
@@ -1022,6 +1212,57 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
 
                     self.assertEqual(result.returncode, 2)
                     self.assertIn("invalid generation", result.stderr)
+
+    def test_schema_v3_rejects_partial_or_empty_source_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            manifest_path = state / "slots.json"
+            base_identity = {
+                "branch": "task-a",
+                "source_branch": "main",
+                "remote": "origin",
+                "generation": 0,
+                "pr": None,
+            }
+            for source_branch, remote, error in [
+                (None, "origin", "bind source branch and remote together"),
+                ("main", None, "bind source branch and remote together"),
+                ("", "origin", "invalid source context"),
+                ("main", "", "invalid source context"),
+            ]:
+                with self.subTest(source_branch=source_branch, remote=remote):
+                    identity = dict(base_identity, source_branch=source_branch, remote=remote)
+                    manifest = {
+                        "schema_version": 3,
+                        "slots": {
+                            "slot-1": {
+                                "path": str((root / "worktrees" / "slot-1").resolve()),
+                                "repositories": {"service-a": identity},
+                            }
+                        },
+                    }
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    result = self.run_manifest(root, "status", check=False)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn(error, result.stderr)
+
+    def test_schema_version_must_be_an_exact_integer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            manifest_path = state / "slots.json"
+            for version in [True, 2.0, 3.0, "3"]:
+                with self.subTest(version=version):
+                    manifest_path.write_text(
+                        json.dumps({"schema_version": version, "slots": {}}),
+                        encoding="utf-8",
+                    )
+                    result = self.run_manifest(root, "status", check=False)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("unsupported manifest schema", result.stderr)
 
     def test_malformed_manifest_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1239,6 +1480,22 @@ class PullAndSyncFlowTests(unittest.TestCase):
             self.assertEqual(self.git(original, "branch", "--show-current").stdout.strip(), "main")
             self.assertEqual(self.git(original, "status", "--porcelain").stdout, "")
 
+    def test_pull_uses_the_manifest_remote_name_instead_of_literal_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, seed, original = self.make_remote_fixture(Path(tmp))
+            self.git(original, "remote", "rename", "origin", "upstream")
+            remote_head = self.advance_remote(seed, "remote update\n")
+
+            self.git(original, "fetch", "--prune", "upstream")
+            pinned = self.git(
+                original, "rev-parse", "refs/remotes/upstream/main"
+            ).stdout.strip()
+            self.assertEqual(pinned, remote_head)
+            self.git(original, "merge", "--ff-only", pinned)
+
+            self.assertEqual(self.git(original, "rev-parse", "HEAD").stdout.strip(), remote_head)
+            self.assertEqual(self.git(original, "status", "--porcelain").stdout, "")
+
     def test_sync_fetches_in_derived_worktree_without_updating_original_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1256,6 +1513,27 @@ class PullAndSyncFlowTests(unittest.TestCase):
             self.assertEqual(self.git(derived, "rev-parse", "HEAD").stdout.strip(), remote_head)
             self.assertEqual(self.git(original, "rev-parse", "HEAD").stdout.strip(), original_head)
             self.assertEqual(self.git(original, "branch", "--show-current").stdout.strip(), "main")
+            self.assertEqual(self.git(original, "status", "--porcelain").stdout, "")
+
+    def test_sync_uses_the_manifest_remote_name_without_updating_original_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, seed, original = self.make_remote_fixture(root)
+            self.git(original, "remote", "rename", "origin", "upstream")
+            derived = root / "derived"
+            self.git(original, "worktree", "add", "-b", "task", str(derived), "main")
+            original_head = self.git(original, "rev-parse", "HEAD").stdout.strip()
+            remote_head = self.advance_remote(seed, "remote update\n")
+
+            self.git(derived, "fetch", "--prune", "upstream")
+            pinned = self.git(
+                derived, "rev-parse", "refs/remotes/upstream/main"
+            ).stdout.strip()
+            self.assertEqual(pinned, remote_head)
+            self.git(derived, "merge", pinned)
+
+            self.assertEqual(self.git(derived, "rev-parse", "HEAD").stdout.strip(), remote_head)
+            self.assertEqual(self.git(original, "rev-parse", "HEAD").stdout.strip(), original_head)
             self.assertEqual(self.git(original, "status", "--porcelain").stdout, "")
 
     def test_pull_fast_forward_check_rejects_diverged_original(self) -> None:

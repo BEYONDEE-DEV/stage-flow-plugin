@@ -20,7 +20,8 @@ if os.name == "nt":
 else:
     import fcntl
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+LEGACY_PERMANENT_SCHEMA_VERSION = 2
 MANIFEST_RELATIVE_PATH = Path(".stageflow-worktrees") / "slots.json"
 LOCKS_RELATIVE_PATH = Path(".stageflow-worktrees") / "operation-locks"
 
@@ -45,10 +46,23 @@ def empty_manifest() -> dict[str, Any]:
 def validate_repository(name: str, identity: Any, slot_name: str) -> None:
     if not isinstance(name, str) or not name or not isinstance(identity, dict):
         raise ManifestError(f"slot {slot_name!r} has an invalid repository identity")
-    if set(identity) != {"branch", "generation", "pr"}:
+    if set(identity) != {"branch", "source_branch", "remote", "generation", "pr"}:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has unexpected fields")
     if not isinstance(identity["branch"], str) or not identity["branch"]:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch")
+    source_branch = identity["source_branch"]
+    remote = identity["remote"]
+    if (source_branch is None) != (remote is None):
+        raise ManifestError(
+            f"slot {slot_name!r} repository {name!r} must bind source branch and remote together"
+        )
+    if source_branch is not None and (
+        not isinstance(source_branch, str)
+        or not source_branch
+        or not isinstance(remote, str)
+        or not remote
+    ):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid source context")
     if type(identity["generation"]) is not int or identity["generation"] < 0:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid generation")
     pr = identity["pr"]
@@ -60,14 +74,11 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation requires a PR")
 
 
-def validate_manifest(data: Any) -> dict[str, Any]:
+def validate_manifest_v3(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
     if data.get("schema_version") != SCHEMA_VERSION:
-        raise ManifestError(
-            f"unsupported manifest schema: {data.get('schema_version')!r}; "
-            "legacy active/released manifests require manual correction"
-        )
+        raise ManifestError(f"manifest must use schema {SCHEMA_VERSION}")
     if set(data) != {"schema_version", "slots"}:
         raise ManifestError("manifest has unexpected top-level fields")
     slots = data.get("slots")
@@ -90,6 +101,66 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         for repo, identity in repositories.items():
             validate_repository(repo, identity, name)
     return data
+
+
+def promote_v2_manifest(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ManifestError("manifest must be a JSON object")
+    if set(data) != {"schema_version", "slots"}:
+        raise ManifestError("manifest has unexpected top-level fields")
+    slots = data.get("slots")
+    if not isinstance(slots, dict):
+        raise ManifestError("manifest slots must be a JSON object")
+
+    promoted: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "slots": {}}
+    for name, slot in slots.items():
+        if not isinstance(name, str) or not name or not isinstance(slot, dict):
+            raise ManifestError("manifest contains an invalid slot entry")
+        if set(slot) != {"path", "repositories"}:
+            raise ManifestError(f"slot {name!r} has unexpected fields")
+        if (
+            not isinstance(slot["path"], str)
+            or not slot["path"]
+            or not Path(slot["path"]).is_absolute()
+        ):
+            raise ManifestError(f"slot {name!r} has an invalid path")
+        repositories = slot["repositories"]
+        if not isinstance(repositories, dict) or not repositories:
+            raise ManifestError(f"slot {name!r} must have repository bindings")
+        promoted_repositories: dict[str, Any] = {}
+        for repo, identity in repositories.items():
+            if not isinstance(repo, str) or not repo or not isinstance(identity, dict):
+                raise ManifestError(f"slot {name!r} has an invalid repository identity")
+            if set(identity) != {"branch", "generation", "pr"}:
+                raise ManifestError(f"slot {name!r} repository {repo!r} has unexpected fields")
+            candidate = {
+                "branch": identity.get("branch"),
+                "source_branch": None,
+                "remote": None,
+                "generation": identity.get("generation"),
+                "pr": identity.get("pr"),
+            }
+            validate_repository(repo, candidate, name)
+            promoted_repositories[repo] = candidate
+        promoted["slots"][name] = {
+            "path": slot["path"],
+            "repositories": promoted_repositories,
+        }
+    return validate_manifest_v3(promoted)
+
+
+def validate_manifest(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ManifestError("manifest must be a JSON object")
+    version = data.get("schema_version")
+    if type(version) is int and version == SCHEMA_VERSION:
+        return validate_manifest_v3(data)
+    if type(version) is int and version == LEGACY_PERMANENT_SCHEMA_VERSION:
+        return promote_v2_manifest(data)
+    raise ManifestError(
+        f"unsupported manifest schema: {version!r}; "
+        "legacy active/released manifests require manual correction"
+    )
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -163,7 +234,7 @@ def write_json_atomic(path: Path, data: Any, prefix: str) -> None:
 
 
 def write_manifest(path: Path, data: dict[str, Any]) -> None:
-    validate_manifest(data)
+    validate_manifest_v3(data)
     write_json_atomic(path, data, "slots.")
 
 
@@ -174,42 +245,115 @@ def require_slot(data: dict[str, Any], name: str) -> dict[str, Any]:
     return slot
 
 
-def parse_repository_bindings(values: list[str]) -> dict[str, str]:
-    bindings: dict[str, str] = {}
-    for value in values:
-        if "=" not in value:
-            raise ManifestError(f"repository binding must use <repo>=<branch>: {value!r}")
-        repo, branch = value.split("=", 1)
-        if not repo or not branch:
-            raise ManifestError(f"repository binding must use <repo>=<branch>: {value!r}")
+def require_complete_context(slot: dict[str, Any], name: str) -> None:
+    incomplete = sorted(
+        repo
+        for repo, identity in slot["repositories"].items()
+        if identity["source_branch"] is None or identity["remote"] is None
+    )
+    if incomplete:
+        raise ManifestError(
+            f"slot {name!r} requires source context for: {', '.join(incomplete)}"
+        )
+
+
+def parse_repository_bindings(values: list[list[str]]) -> dict[str, dict[str, str]]:
+    bindings: dict[str, dict[str, str]] = {}
+    for repo, branch, source_branch, remote in values:
+        if not repo or not branch or not source_branch or not remote:
+            raise ManifestError("repository binding values must not be empty")
         if repo in bindings:
             raise ManifestError(f"duplicate repository binding: {repo}")
-        bindings[repo] = branch
+        bindings[repo] = {
+            "branch": branch,
+            "source_branch": source_branch,
+            "remote": remote,
+        }
     if not bindings:
         raise ManifestError("at least one repository binding is required")
     return bindings
 
 
-def initialize(data: dict[str, Any], name: str, path: str, bindings: dict[str, str]) -> dict[str, Any]:
+def parse_repository_contexts(values: list[list[str]]) -> dict[str, dict[str, str]]:
+    contexts: dict[str, dict[str, str]] = {}
+    for repo, source_branch, remote in values:
+        if not repo or not source_branch or not remote:
+            raise ManifestError("repository context values must not be empty")
+        if repo in contexts:
+            raise ManifestError(f"duplicate repository context: {repo}")
+        contexts[repo] = {"source_branch": source_branch, "remote": remote}
+    if not contexts:
+        raise ManifestError("at least one repository context is required")
+    return contexts
+
+
+def initialize(
+    data: dict[str, Any],
+    name: str,
+    path: str,
+    bindings: dict[str, dict[str, str]],
+) -> dict[str, Any]:
     requested_path = str(Path(path).resolve())
     requested = {
         "path": requested_path,
         "repositories": {
-            repo: {"branch": branch, "generation": 0, "pr": None}
-            for repo, branch in sorted(bindings.items())
+            repo: {
+                "branch": binding["branch"],
+                "source_branch": binding["source_branch"],
+                "remote": binding["remote"],
+                "generation": 0,
+                "pr": None,
+            }
+            for repo, binding in sorted(bindings.items())
         },
     }
     current = data["slots"].get(name)
     if current is not None:
-        current_bindings = {
-            repo: identity["branch"]
-            for repo, identity in current["repositories"].items()
-        }
-        if current["path"] != requested_path or current_bindings != bindings:
+        if current["path"] != requested_path or set(current["repositories"]) != set(bindings):
             raise ManifestError(f"permanent slot binding mismatch for {name}")
+        for repo, binding in bindings.items():
+            identity = current["repositories"][repo]
+            if identity["branch"] != binding["branch"]:
+                raise ManifestError(f"permanent slot binding mismatch for {name}")
+            current_context = (identity["source_branch"], identity["remote"])
+            requested_context = (binding["source_branch"], binding["remote"])
+            if current_context == (None, None):
+                identity["source_branch"], identity["remote"] = requested_context
+            elif current_context != requested_context:
+                raise ManifestError(f"permanent slot binding mismatch for {name}")
         return current
     data["slots"][name] = requested
     return requested
+
+
+def bind_context(
+    data: dict[str, Any],
+    name: str,
+    contexts: dict[str, dict[str, str]],
+) -> dict[str, Any]:
+    slot = require_slot(data, name)
+    repositories = slot["repositories"]
+    if set(contexts) != set(repositories):
+        missing = sorted(set(repositories) - set(contexts))
+        extra = sorted(set(contexts) - set(repositories))
+        details = []
+        if missing:
+            details.append(f"missing: {', '.join(missing)}")
+        if extra:
+            details.append(f"unknown: {', '.join(extra)}")
+        raise ManifestError(f"slot {name!r} context must cover every repository ({'; '.join(details)})")
+
+    for repo, context in contexts.items():
+        identity = repositories[repo]
+        current = (identity["source_branch"], identity["remote"])
+        requested = (context["source_branch"], context["remote"])
+        if current != (None, None) and current != requested:
+            raise ManifestError(f"repository {repo!r} source context mismatch")
+
+    for repo, context in contexts.items():
+        repositories[repo]["source_branch"] = context["source_branch"]
+        repositories[repo]["remote"] = context["remote"]
+    return slot
 
 
 def load_operation_lock(path: Path) -> dict[str, Any] | None:
@@ -312,6 +456,7 @@ def record_batch(
         updates[repo] = pr
 
     slot = require_slot(data, name)
+    require_complete_context(slot, name)
     repositories = slot["repositories"]
     missing = sorted(set(updates) - set(repositories))
     if missing:
@@ -357,8 +502,23 @@ def parser() -> argparse.ArgumentParser:
         "--repository",
         action="append",
         required=True,
-        metavar="REPO=BRANCH",
-        help="Repository and its fixed worktree branch; repeat for every repository",
+        nargs=4,
+        metavar=("REPO", "TASK_BRANCH", "SOURCE_BRANCH", "REMOTE"),
+        help="Repository and permanent Git context; repeat for every repository",
+    )
+
+    bind_context_parser = subparsers.add_parser(
+        "bind-context",
+        help="Atomically fill one legacy slot's permanent source context",
+    )
+    bind_context_parser.add_argument("--slot", required=True)
+    bind_context_parser.add_argument(
+        "--repository-context",
+        action="append",
+        required=True,
+        nargs=3,
+        metavar=("REPO", "SOURCE_BRANCH", "REMOTE"),
+        help="Repository source branch and remote; repeat for every repository in the slot",
     )
 
     lock_parser = subparsers.add_parser("lock", help="Acquire a transient slot operation lock")
@@ -396,7 +556,8 @@ def main() -> int:
             payload: Any = data if args.slot is None else require_slot(data, args.slot)
         elif args.command == "lock":
             data = load_manifest(path)
-            require_slot(data, args.slot)
+            slot = require_slot(data, args.slot)
+            require_complete_context(slot, args.slot)
             payload = acquire_operation_lock(args.root, args.slot, args.token)
         elif args.command == "lock-status":
             data = load_manifest(path)
@@ -412,6 +573,9 @@ def main() -> int:
                 if args.command == "initialize":
                     bindings = parse_repository_bindings(args.repository)
                     payload = initialize(data, args.slot, args.path, bindings)
+                elif args.command == "bind-context":
+                    contexts = parse_repository_contexts(args.repository_context)
+                    payload = bind_context(data, args.slot, contexts)
                 else:
                     require_operation_lock(args.root, args.slot, args.token)
                     payload = record_batch(
