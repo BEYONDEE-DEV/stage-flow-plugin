@@ -15,7 +15,7 @@ SKILL = SKILL_DIR / "SKILL.md"
 REFERENCE = SKILL_DIR / "references" / "worktree-operations.md"
 INSPECTOR = SKILL_DIR / "scripts" / "inspect_worktrees.py"
 SLOT_MANIFEST = SKILL_DIR / "scripts" / "slot_manifest.py"
-PR_READINESS = SKILL_DIR / "scripts" / "inspect_pr_readiness.py"
+PR_SUBMISSION = SKILL_DIR / "scripts" / "inspect_pr_submission.py"
 OPENAI_YAML = SKILL_DIR / "agents" / "openai.yaml"
 PLUGIN_JSON = ROOT / ".codex-plugin" / "plugin.json"
 
@@ -101,11 +101,11 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "outside every development bundle",
             "one-shot approved batch",
             "machine-readable",
-            "stageflow-ready-sha",
-            "any later PR update, push, or force-push invalidates readiness",
-            "audit the PR timeline",
+            "stageflow-submitted-sha",
+            "A later head change invalidates the handoff",
             "--match-head-commit",
-            "queue policy cannot be confirmed",
+            "runtime merge policy and strategy",
+            "Do not add `--auto`, `--admin`, or `--delete-branch`",
             "provider is actually merged",
             "recovery-required",
             "never auto-rollback",
@@ -119,13 +119,51 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "GitHub",
             "Same-owner claim is idempotent",
             "wrong-owner release",
-            "Recycle reuses a fixed directory, not an old task branch",
+            "Recycle reuses a fixed directory",
             "prior local HEAD equals its pushed SHA",
-            "Ready is bound to that immutable SHA",
-            "provider queue admission is not enough",
+            "Submission is bound to the full SHA",
+            "provider merge request or queue admission is not enough",
             "Never auto-revert a merged provider",
         ]:
             self.assertIn(phrase, reference)
+
+        for legacy in [
+            "submit Draft",
+            "submit Ready",
+            "stageflow-ready-sha",
+            "inspect_pr_readiness.py",
+        ]:
+            self.assertNotIn(legacy, skill)
+            self.assertNotIn(legacy, reference)
+
+        self.assertNotIn("merge-ready", skill)
+
+    def test_single_submit_and_direct_integrate_contract(self) -> None:
+        skill = read(SKILL)
+        reference = read(REFERENCE)
+
+        for phrase in [
+            "submit regular PR at exact SHA",
+            "stageflow-submitted-sha",
+            "Write the title and all explanatory body prose in Korean",
+            "exact Korean title and body",
+            "Do not pass `--draft` or run `gh pr ready`",
+            "Release the slot only after every participating repo is recorded successfully",
+            "Reviews, status updates, and unrelated PR comments do not invalidate an unchanged head",
+            "If a problem is found before integration",
+            "latest submitted-SHA comment",
+            "Do not add `--auto`, `--admin`, or `--delete-branch`",
+            "If GitHub rejects a merge",
+        ]:
+            self.assertIn(phrase, reference)
+
+        self.assertIn("Create or update regular non-Draft PRs", skill)
+        self.assertIn("Write every PR title and all explanatory prose in its body in Korean", skill)
+        self.assertIn("Show the exact Korean title and body before approval", skill)
+        self.assertIn("latest submitted SHA", skill)
+        self.assertIn("confirmed-strategy-flag", skill)
+        self.assertNotIn("Draft submission", skill)
+        self.assertNotIn("Ready submission", skill)
 
     def test_merge_requires_post_merge_push_prompt(self) -> None:
         skill = read(SKILL)
@@ -624,6 +662,47 @@ class SlotManifestTests(unittest.TestCase):
             self.assertEqual(old_owner.returncode, 2)
             self.assertNotIn("subprocess", read(SLOT_MANIFEST))
 
+    def test_record_stays_active_until_release_and_correction_owner_can_resubmit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "task-a", "--path", str(path))
+            self.run_manifest(
+                root,
+                "record",
+                "--slot", "slot-1",
+                "--owner", "task-a",
+                "--repo", "service-a",
+                "--branch", "task-a",
+                "--head-sha", "a" * 40,
+                "--pushed-sha", "a" * 40,
+                "--pr", "17",
+            )
+
+            active = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
+            self.assertEqual(active["state"], "active")
+
+            self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "task-a")
+            self.run_manifest(root, "claim", "--slot", "slot-1", "--owner", "correction-a", "--path", str(path))
+            self.run_manifest(
+                root,
+                "record",
+                "--slot", "slot-1",
+                "--owner", "correction-a",
+                "--repo", "service-a",
+                "--branch", "task-a",
+                "--head-sha", "b" * 40,
+                "--pushed-sha", "b" * 40,
+                "--pr", "17",
+            )
+            corrected = json.loads(
+                self.run_manifest(root, "release", "--slot", "slot-1", "--owner", "correction-a").stdout
+            )["result"]
+
+            self.assertEqual(corrected["state"], "released")
+            self.assertEqual(corrected["repositories"]["service-a"]["head_sha"], "b" * 40)
+            self.assertEqual(corrected["repositories"]["service-a"]["pr"], "17")
+
     def test_released_fixed_slot_rejects_a_different_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -660,33 +739,32 @@ class SlotManifestTests(unittest.TestCase):
             self.assertIn("cannot read manifest", result.stderr)
 
 
-class PrReadinessTests(unittest.TestCase):
+class PrSubmissionTests(unittest.TestCase):
     def fixture(
         self,
         path: Path,
         *,
         head: str = "a" * 40,
-        ready_sha: str | None = None,
-        ready_created_at: str = "2026-07-20T07:00:00Z",
-        pr_updated_at: str | None = None,
+        submitted_sha: str | None = None,
+        submitted_created_at: str = "2026-07-20T07:00:00Z",
         **updates: object,
     ) -> None:
         data: dict[str, object] = {
             "number": 17,
             "url": "https://github.example/pr/17",
+            "state": "OPEN",
             "isDraft": False,
             "baseRefName": "feature-etc",
             "headRefName": "task-a",
             "headRefOid": head,
-            "labels": [{"name": "merge-ready"}],
             "reviewDecision": "APPROVED",
             "statusCheckRollup": [{"name": "test", "conclusion": "SUCCESS"}],
             "mergeStateStatus": "CLEAN",
             "mergeable": "MERGEABLE",
-            "updatedAt": pr_updated_at or ready_created_at,
+            "updatedAt": "2026-07-20T07:05:00Z",
             "comments": [{
-                "body": f"<!-- stageflow-ready-sha: {ready_sha or head} -->",
-                "createdAt": ready_created_at,
+                "body": f"<!-- stageflow-submitted-sha: {submitted_sha or head} -->",
+                "createdAt": submitted_created_at,
             }],
         }
         data.update(updates)
@@ -696,7 +774,7 @@ class PrReadinessTests(unittest.TestCase):
         return subprocess.run(
             [
                 sys.executable,
-                str(PR_READINESS),
+                str(PR_SUBMISSION),
                 "--input",
                 str(fixture),
                 "--base",
@@ -708,26 +786,23 @@ class PrReadinessTests(unittest.TestCase):
             text=True,
         )
 
-    def test_exact_ready_sha_passes(self) -> None:
+    def test_exact_submitted_sha_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = Path(tmp) / "pr.json"
             self.fixture(fixture)
             result = json.loads(self.inspect(fixture).stdout)
 
-            self.assertTrue(result["ready"])
+            self.assertTrue(result["submitted"])
             self.assertEqual(result["head_sha"], "a" * 40)
+            self.assertEqual(result["latest_submitted_sha"], "a" * 40)
 
-    def test_draft_label_base_review_check_and_mergeability_fail_closed(self) -> None:
+    def test_closed_draft_wrong_base_and_conflict_fail_closed(self) -> None:
         cases = [
+            {"state": "CLOSED"},
             {"isDraft": True},
-            {"labels": []},
             {"baseRefName": "main"},
-            {"reviewDecision": "REVIEW_REQUIRED"},
-            {"statusCheckRollup": []},
-            {"statusCheckRollup": [{"name": "test", "conclusion": "FAILURE"}]},
-            {"statusCheckRollup": [{"name": "test", "status": "IN_PROGRESS"}]},
+            {"comments": []},
             {"mergeable": "CONFLICTING"},
-            {"mergeStateStatus": "BLOCKED"},
         ]
         with tempfile.TemporaryDirectory() as tmp:
             for index, updates in enumerate(cases):
@@ -736,50 +811,70 @@ class PrReadinessTests(unittest.TestCase):
                     self.fixture(fixture, **updates)
                     result = self.inspect(fixture, check=False)
                     self.assertEqual(result.returncode, 1)
-                    self.assertFalse(json.loads(result.stdout)["ready"])
+                    self.assertFalse(json.loads(result.stdout)["submitted"])
 
-    def test_head_move_or_force_push_invalidates_old_ready_sha_until_redeclared(self) -> None:
+    def test_head_move_invalidates_old_submission_until_resubmitted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = Path(tmp) / "pr.json"
             old_head = "a" * 40
             new_head = "b" * 40
-            self.fixture(fixture, head=new_head, ready_sha=old_head)
+            self.fixture(fixture, head=new_head, submitted_sha=old_head)
             stale = self.inspect(fixture, check=False)
 
             self.assertEqual(stale.returncode, 1)
-            self.assertIn("no matching Ready SHA", stale.stdout)
+            self.assertIn("latest submitted SHA declaration does not match current head", stale.stdout)
 
-            self.fixture(fixture, head=new_head, ready_sha=new_head)
+            self.fixture(fixture, head=new_head, submitted_sha=new_head)
             recovered = json.loads(self.inspect(fixture).stdout)
-            self.assertTrue(recovered["ready"])
-            self.assertEqual(recovered["ready_shas"], [new_head])
+            self.assertTrue(recovered["submitted"])
+            self.assertEqual(recovered["submitted_shas"], [new_head])
 
-    def test_head_returning_to_old_sha_stays_invalid_until_fresh_ready_comment(self) -> None:
+    def test_latest_submission_marker_controls_after_correction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = Path(tmp) / "pr.json"
             head = "a" * 40
-            self.fixture(
-                fixture,
-                head=head,
-                ready_sha=head,
-                ready_created_at="2026-07-20T07:00:00Z",
-                pr_updated_at="2026-07-20T07:05:00Z",
-            )
+            self.fixture(fixture, head=head)
+            data = json.loads(fixture.read_text(encoding="utf-8"))
+            data["comments"].append({
+                "body": f"<!-- stageflow-submitted-sha: {'b' * 40} -->",
+                "createdAt": "2026-07-20T07:06:00Z",
+            })
+            fixture.write_text(json.dumps(data), encoding="utf-8")
             returned = self.inspect(fixture, check=False)
 
             self.assertEqual(returned.returncode, 1)
-            self.assertIn("changed after the latest Ready", returned.stdout)
+            self.assertIn("latest submitted SHA declaration does not match current head", returned.stdout)
 
             self.fixture(
                 fixture,
                 head=head,
-                ready_sha=head,
-                ready_created_at="2026-07-20T07:06:00Z",
+                submitted_sha=head,
+                submitted_created_at="2026-07-20T07:07:00Z",
             )
-            self.assertTrue(json.loads(self.inspect(fixture).stdout)["ready"])
+            self.assertTrue(json.loads(self.inspect(fixture).stdout)["submitted"])
+
+    def test_review_checks_merge_state_and_later_pr_activity_do_not_block_unchanged_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = Path(tmp) / "pr.json"
+            self.fixture(
+                fixture,
+                reviewDecision="REVIEW_REQUIRED",
+                statusCheckRollup=[{"name": "test", "conclusion": "FAILURE"}],
+                mergeStateStatus="BLOCKED",
+                updatedAt="2026-07-20T08:00:00Z",
+            )
+            data = json.loads(fixture.read_text(encoding="utf-8"))
+            data["comments"].append({
+                "body": "review note without a submission marker",
+                "createdAt": "2026-07-20T08:00:00Z",
+            })
+            fixture.write_text(json.dumps(data), encoding="utf-8")
+
+            result = json.loads(self.inspect(fixture).stdout)
+            self.assertTrue(result["submitted"])
 
     def test_helper_contains_only_read_only_gh_commands(self) -> None:
-        text = read(PR_READINESS)
+        text = read(PR_SUBMISSION)
         self.assertIn('["gh", "auth", "status"]', text)
         self.assertIn('"gh", "pr", "view"', text)
         for command in ["pr create", "pr edit", "pr ready", "pr merge", "api --method"]:
