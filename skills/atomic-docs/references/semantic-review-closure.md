@@ -14,9 +14,9 @@ This reference is the normative owner of forward-only semantic review invalidati
 
 ## Forward-Only State
 
-New Atomic Docs operations use `context_selection.version: "4"`; existing version-3 and version-2 operations keep this same closure contract. All three add `semantic_review_closure` to `work-state.json` after Goal handoff and before candidate writing. Versions 4 and 3 use the sibling metrics contract from `operation-metrics.md`; version 4 additionally uses `shared-contract-readiness.md`. Existing version-1 or unversioned operations continue without migration and cannot claim this closure guarantee.
+Every post-Goal operation uses exact `context_selection.version: "4"` and adds `semantic_review_closure` to `work-state.json` before candidate writing. It also uses the sibling metrics contract from `operation-metrics.md` and readiness state from `shared-contract-readiness.md`.
 
-Use this version-1 shape:
+Use this `semantic_review_closure.version: "1"` shape:
 
 ```json
 {
@@ -27,7 +27,7 @@ Use this version-1 shape:
       {
         "review_id": "fulfillment-development-1",
         "reviewer_role": "development",
-        "scope": "fulfillment",
+        "scope": "fulfillment-bundle",
         "basis_revision": 1,
         "verdict": "PASS",
         "status": "superseded"
@@ -35,7 +35,7 @@ Use this version-1 shape:
       {
         "review_id": "fulfillment-development-2",
         "reviewer_role": "development",
-        "scope": "fulfillment",
+        "scope": "fulfillment-bundle",
         "basis_revision": 2,
         "verdict": "PASS",
         "status": "current"
@@ -59,10 +59,10 @@ Use this version-1 shape:
           {"location": "managed-docs", "path": "project/project-glossary.md"},
           {"location": "request", "path": "inventory.md"}
         ],
-        "affected_bundles": ["fulfillment"],
+        "affected_bundles": ["fulfillment-bundle"],
         "stale_review_ids": ["fulfillment-development-1"],
         "required_reviews": [
-          {"reviewer_role": "development", "scope": "fulfillment"},
+          {"reviewer_role": "development", "scope": "fulfillment-bundle"},
           {"reviewer_role": "integration", "scope": "affected-closure"}
         ],
         "status": "resolved",
@@ -80,9 +80,9 @@ Use this version-1 shape:
 
 `basis_revision` is a positive operation-local integer, not a source commit or global document version. Increment it only when a post-PASS meaning or review basis changes. Review roles are `development`, `risk`, `integration`, or `baseline`. Review status is `current`, `stale`, or `superseded`; verdict is exact `PASS` because FAIL findings remain in the ordinary review result until corrected.
 
-For version 4, bundle-scoped development/risk review PASSes and `required_reviews.scope` use stable `bundle_id`, and invalidation `affected_bundles` records those same IDs. Historical scopes and affected IDs resolve through active bundles plus immutable `selection_retirements.retired_bundles`; active routing still resolves active bundles only. Integration/baseline scopes keep their controlled values. Version 3 and version 2 retain domain-scoped development/risk reviews and affected bundles.
+Bundle-scoped development/risk review PASSes and `required_reviews.scope` use stable `bundle_id`, and invalidation `affected_bundles` records those same IDs. Historical scopes and affected IDs resolve through active bundles plus immutable `selection_retirements.retired_bundles`; active routing still resolves active bundles only. Integration/baseline scopes keep their controlled values.
 
-For every version-4 invalidation, including late-discovery and general-correction invalidations, each `stale_review_ids` entry that names a development or risk PASS requires its exact `(reviewer_role, stable bundle_id scope)` pair in `required_reviews`. This rule follows the PASS that actually became stale, not merely an affected bundle: a current risk PASS left out of `stale_review_ids` adds no risk pair and remains reusable only under the independently confirmed risk-neutral flow below. Version 3 and version 2 keep their recorded domain-scoped invalidation behavior.
+For every invalidation, including late-discovery and general-correction invalidations, each `stale_review_ids` entry that names a development or risk PASS requires its exact `(reviewer_role, stable bundle_id scope)` pair in `required_reviews`. This rule follows the PASS that actually became stale, not merely an affected bundle: a current risk PASS left out of `stale_review_ids` adds no risk pair and remains reusable only under the independently confirmed risk-neutral flow below.
 
 Review PASS and invalidation records are append-only history. Keep each ID and its opening identity; a PASS status moves `current → stale → superseded`, and an open invalidation may only expand or become resolved. A later rollback comparison may observe `current → superseded` only when the retained resolved invalidation proves the stale-and-resolution sequence. Never delete or replace an older record to make current state appear closed. Once an invalidation is resolved, leave it unchanged; a later affected correction opens a new invalidation and preserves the resolved one.
 
@@ -93,7 +93,7 @@ Artifact locations are `managed-docs` for paths below the configured docs root a
 Open an invalidation before changing a meaning that already contributed to a PASS. A version-4 late discovery after readiness but before any affected bundle semantic PASS has nothing to invalidate and records `semantic_invalidation_ids: []`; once an affected PASS exists, invalidation is mandatory before correction. Triggers are `candidate-disposition`, `atom-merge`, `ownership`, `glossary-source`, `shared-decision-owner`, `graph-relationship`, or `documented-meaning`.
 
 1. Increment `basis_revision` once for the correction set.
-2. Record the cause, every known affected managed/request artifact, active-or-retired stable bundle ID for version 4 or domain for older versions, and every required review pair; for version 4, derive the exact development/risk pair from each PASS made stale.
+2. Record the cause, every known affected managed/request artifact, active-or-retired stable bundle ID, and every required review pair; derive the exact development/risk pair from each PASS made stale.
 3. Change only affected `current` review passes to `stale` and list their IDs in `stale_review_ids`. Do not stale unrelated bundle PASSes.
 4. If an affected final PASS exists, stale it, list it in `stale_review_ids`, clear `final_gate.review_id`, and retain `review_history`; keep whether the gate is required.
 5. Then edit, remove, merge, or reroute the affected artifacts.

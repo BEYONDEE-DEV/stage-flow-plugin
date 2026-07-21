@@ -232,75 +232,40 @@ def main(argv: list[str] | None = None) -> int:
                 final_request_validation = (
                     args.phase == "baseline" or not args.expect_atom_key
                 )
-                if final_request_validation and request_uses_selection_v4(
-                    config, args.request_id, errors
-                ):
-                    validate_selection(
-                        config,
-                        args.request_id,
-                        errors,
-                        require_actions_final=True,
-                        require_final=True,
-                        metrics_mode="final-validation",
-                        validation_scope=args.phase,
-                    )
-                else:
-                    validate_request_semantic_review_closure(
-                        config,
-                        args.request_id,
-                        errors,
-                        require_final=final_request_validation,
-                        required_final_role=(
-                            "baseline" if args.phase == "baseline" else None
-                        ),
-                    )
-                    validate_request_operation_metrics(
-                        config,
-                        args.request_id,
-                        errors,
-                        mode=(
-                            "final-validation"
-                            if final_request_validation
-                            else "active"
-                        ),
-                        validation_scope=args.phase,
-                    )
+                validate_selection(
+                    config,
+                    args.request_id,
+                    errors,
+                    require_actions_final=final_request_validation,
+                    require_final=final_request_validation,
+                    metrics_mode=(
+                        "final-validation" if final_request_validation else "active"
+                    ),
+                    validation_scope=args.phase,
+                )
         if args.phase == "baseline":
             validate_baseline(config, errors)
         if args.phase in {"metrics-preterminal", "metrics-final"} and args.request_id:
-            selection_v4 = request_uses_selection_v4(
-                config, args.request_id, errors
-            )
             if args.phase == "metrics-preterminal":
                 validate_request_preterminal_artifacts(
                     config,
                     args.request_id,
                     errors,
-                    validate_closure=not selection_v4,
                 )
             terminal_mode = (
                 "preterminal"
                 if args.phase == "metrics-preterminal"
                 else "final"
             )
-            if selection_v4:
-                validate_selection(
-                    config,
-                    args.request_id,
-                    errors,
-                    require_actions_final=True,
-                    require_final=True,
-                    metrics_mode=terminal_mode,
-                    validation_scope=None,
-                )
-            else:
-                validate_request_operation_metrics(
-                    config,
-                    args.request_id,
-                    errors,
-                    mode=terminal_mode,
-                    validation_scope=None,
-                )
+            validate_selection(
+                config,
+                args.request_id,
+                errors,
+                require_actions_final=True,
+                require_final=True,
+                metrics_mode=terminal_mode,
+                validation_scope=None,
+            )
 
     if errors:
         print(f"FAIL {args.phase}:")
@@ -394,6 +359,15 @@ def validate_selection(
     if state is None:
         return
 
+    context_selection = state.get("context_selection")
+    if not isinstance(context_selection, dict):
+        errors.append("work-state must contain a `context_selection` object")
+        return
+    selection_version = context_selection.get("version")
+    if selection_version != "4":
+        errors.append("work-state `context_selection.version` must be exact `4`")
+        return
+
     if require_final is None:
         require_final = require_actions_final
     required_final_role = None
@@ -440,16 +414,6 @@ def validate_selection(
         if evidence_text is not None:
             validate_evidence_revision(evidence_text, source_commit, errors)
 
-    context_selection = state.get("context_selection")
-    if not isinstance(context_selection, dict):
-        errors.append("work-state must contain a `context_selection` object")
-        return
-    selection_version = nonempty_string(context_selection.get("version"))
-    if selection_version not in {"1", "2", "3", "4"}:
-        errors.append(
-            "work-state `context_selection.version` must be `1`, `2`, or `3` "
-            "(or `4` for owner readiness)"
-        )
     raw_candidates = context_selection.get("candidates")
     if not isinstance(raw_candidates, list):
         errors.append("work-state `context_selection.candidates` must be a list")
@@ -542,15 +506,14 @@ def validate_selection(
     risk_keys = validate_selection_risk_triggers(
         state.get("risk_triggers", []), candidate_targets, candidate_dispositions, errors
     )
-    if selection_version == "4":
-        validate_owner_readiness_v4(
-            state,
-            candidate_targets,
-            candidate_dispositions,
-            candidate_domains,
-            errors,
-            require_final=require_final,
-        )
+    validate_owner_readiness_v4(
+        state,
+        candidate_targets,
+        candidate_dispositions,
+        candidate_domains,
+        errors,
+        require_final=require_final,
+    )
     validate_operation_artifact_state(
         config,
         request_root,
@@ -586,72 +549,10 @@ def atomic_docs_request_root(
     return request_root
 
 
-def request_uses_selection_v4(
-    config: Config, request_id: str, errors: list[str]
-) -> bool:
-    request_root = atomic_docs_request_root(config, request_id, errors)
-    if request_root is None:
-        return False
-    state_path = request_root / "work-state.json"
-    state = read_json(state_path, rel(config.project_root, state_path), errors)
-    if not isinstance(state, dict):
-        return False
-    selection = state.get("context_selection")
-    return isinstance(selection, dict) and selection.get("version") == "4"
-
-
-def validate_request_semantic_review_closure(
-    config: Config,
-    request_id: str,
-    errors: list[str],
-    *,
-    require_final: bool,
-    required_final_role: str | None,
-) -> None:
-    request_root = atomic_docs_request_root(config, request_id, errors)
-    if request_root is None:
-        return
-    state_path = request_root / "work-state.json"
-    state = read_json(state_path, rel(config.project_root, state_path), errors)
-    if state is None:
-        return
-    validate_semantic_review_closure(
-        state,
-        errors,
-        require_final=require_final,
-        required_final_role=required_final_role,
-    )
-
-
-def validate_request_operation_metrics(
-    config: Config,
-    request_id: str,
-    errors: list[str],
-    *,
-    mode: str,
-    validation_scope: str | None,
-) -> None:
-    request_root = atomic_docs_request_root(config, request_id, errors)
-    if request_root is None:
-        return
-    state_path = request_root / "work-state.json"
-    state = read_json(state_path, rel(config.project_root, state_path), errors)
-    if state is None:
-        return
-    validate_operation_metrics(
-        state,
-        errors,
-        mode=mode,
-        validation_scope=validation_scope,
-    )
-
-
 def validate_request_preterminal_artifacts(
     config: Config,
     request_id: str,
     errors: list[str],
-    *,
-    validate_closure: bool = True,
 ) -> None:
     request_root = atomic_docs_request_root(config, request_id, errors)
     if request_root is None:
@@ -682,13 +583,6 @@ def validate_request_preterminal_artifacts(
             f"`{validation_scope}`"
         )
     validate_docs(config, errors, [])
-    if validate_closure:
-        validate_semantic_review_closure(
-            state,
-            errors,
-            require_final=True,
-            required_final_role="baseline" if required_scope == "baseline" else None,
-        )
     if required_scope == "baseline":
         validate_baseline(config, errors)
 
@@ -723,29 +617,16 @@ def validate_operation_metrics(
     validation_scope: str | None,
 ) -> None:
     selection = state.get("context_selection")
-    selection_version = (
-        nonempty_string(selection.get("version"))
-        if isinstance(selection, dict)
-        else None
-    )
+    selection_version = selection.get("version") if isinstance(selection, dict) else None
     metrics = state.get("operation_metrics")
-    if selection_version not in {"3", "4"}:
-        if "operation_metrics" in state:
-            errors.append(
-                "work-state `operation_metrics` requires `context_selection.version` "
-                "`3` or `4`"
-            )
-        if mode in {"preterminal", "final"}:
-            errors.append(
-                f"operation metrics `{mode}` validation requires "
-                "`context_selection.version` `3` or `4`"
-            )
+    if selection_version != "4":
+        errors.append(
+            "work-state `operation_metrics` requires "
+            "`context_selection.version` exact `4`"
+        )
         return
     if not isinstance(metrics, dict):
-        errors.append(
-            f"work-state with `context_selection.version` `{selection_version}` must "
-            "contain `operation_metrics`"
-        )
+        errors.append("v4 work-state must contain `operation_metrics`")
         return
 
     required = {"version", "status", "started_at", "spans"}
@@ -785,29 +666,26 @@ def validate_operation_metrics(
     if not isinstance(spans, list):
         errors.append("operation metrics `spans` must be a list")
         spans = []
-    v4_metric_bundle_scopes: set[str] = set()
-    if selection_version == "4":
-        queue = state.get("bundle_queue")
-        if isinstance(queue, list):
-            v4_metric_bundle_scopes.update(
-                bundle["bundle_id"]
-                for bundle in queue
-                if isinstance(bundle, dict)
-                and isinstance(bundle.get("bundle_id"), str)
-            )
-        registry = state.get("selection_retirements")
-        retired_bundles = (
-            registry.get("retired_bundles")
-            if isinstance(registry, dict)
-            else None
+    metric_bundle_scopes: set[str] = set()
+    queue = state.get("bundle_queue")
+    if isinstance(queue, list):
+        metric_bundle_scopes.update(
+            bundle["bundle_id"]
+            for bundle in queue
+            if isinstance(bundle, dict)
+            and isinstance(bundle.get("bundle_id"), str)
         )
-        if isinstance(retired_bundles, list):
-            v4_metric_bundle_scopes.update(
-                bundle["bundle_id"]
-                for bundle in retired_bundles
-                if isinstance(bundle, dict)
-                and isinstance(bundle.get("bundle_id"), str)
-            )
+    registry = state.get("selection_retirements")
+    retired_bundles = (
+        registry.get("retired_bundles") if isinstance(registry, dict) else None
+    )
+    if isinstance(retired_bundles, list):
+        metric_bundle_scopes.update(
+            bundle["bundle_id"]
+            for bundle in retired_bundles
+            if isinstance(bundle, dict)
+            and isinstance(bundle.get("bundle_id"), str)
+        )
     parsed_spans: list[dict[str, Any]] = []
     spans_by_id: dict[str, dict[str, Any]] = {}
     active_spans: list[dict[str, Any]] = []
@@ -845,17 +723,13 @@ def validate_operation_metrics(
         scope = single_line_string(span.get("scope"), f"{label} `scope`", errors)
         if kind == "validation" and scope in {"metrics-preterminal", "metrics-final"}:
             errors.append(f"{label} must not instrument a terminal metrics check")
-        if selection_version == "4" and kind == "development-review":
-            if scope != "selection-readiness" and scope not in v4_metric_bundle_scopes:
+        if kind == "development-review":
+            if scope != "selection-readiness" and scope not in metric_bundle_scopes:
                 errors.append(
                     f"{label} v4 development-review scope must be `selection-readiness` "
                     "or an active/retired stable bundle_id"
                 )
-        if (
-            selection_version == "4"
-            and kind == "risk-review"
-            and scope not in v4_metric_bundle_scopes
-        ):
+        if kind == "risk-review" and scope not in metric_bundle_scopes:
             errors.append(
                 f"{label} v4 risk-review scope must be an active/retired stable "
                 "bundle_id"
@@ -1079,42 +953,23 @@ def validate_operation_metric_completion_coverage(
                     "needs a matching finished operation metric span"
                 )
 
-    selection = state.get("context_selection")
-    candidates = selection.get("candidates") if isinstance(selection, dict) else None
-    if isinstance(selection, dict) and selection.get("version") == "4":
-        risk_scope_by_atom = {
-            atom_key: bundle.get("bundle_id")
-            for bundle in queue or []
-            if isinstance(bundle, dict) and isinstance(bundle.get("bundle_id"), str)
-            for atom_key in (
-                bundle.get("expected_atom_keys")
-                if isinstance(bundle.get("expected_atom_keys"), list)
-                else []
-            )
-            if isinstance(atom_key, str)
-        }
-        risk_scopes = {
-            risk_scope_by_atom.get(trigger.get("atom_key"))
-            for trigger in state.get("risk_triggers") or []
-            if isinstance(trigger, dict)
-            and risk_scope_by_atom.get(trigger.get("atom_key")) is not None
-        }
-    else:
-        candidate_domains = {
-            candidate.get("candidate_id"): candidate.get("domain")
-            for candidate in candidates or []
-            if isinstance(candidate, dict)
-            and isinstance(candidate.get("candidate_id"), str)
-            and isinstance(candidate.get("domain"), str)
-        }
-        risk_scopes = {
-            candidate_domains.get(trigger.get("candidate_id"))
-            for trigger in state.get("risk_triggers") or []
-            if isinstance(trigger, dict)
-            and candidate_domains.get(trigger.get("candidate_id")) is not None
-            and candidate_domains.get(trigger.get("candidate_id"))
-            in required_bundle_counts
-        }
+    risk_scope_by_atom = {
+        atom_key: bundle.get("bundle_id")
+        for bundle in queue or []
+        if isinstance(bundle, dict) and isinstance(bundle.get("bundle_id"), str)
+        for atom_key in (
+            bundle.get("expected_atom_keys")
+            if isinstance(bundle.get("expected_atom_keys"), list)
+            else []
+        )
+        if isinstance(atom_key, str)
+    }
+    risk_scopes = {
+        risk_scope_by_atom.get(trigger.get("atom_key"))
+        for trigger in state.get("risk_triggers") or []
+        if isinstance(trigger, dict)
+        and risk_scope_by_atom.get(trigger.get("atom_key")) is not None
+    }
     for domain in sorted(risk_scopes):
         if not any(
             span.get("kind") == "risk-review" and span.get("scope") == domain
@@ -1152,27 +1007,20 @@ def validate_semantic_review_closure(
     required_final_role: str | None,
 ) -> None:
     selection = state.get("context_selection")
-    selection_version = (
-        nonempty_string(selection.get("version"))
-        if isinstance(selection, dict)
-        else None
-    )
+    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    if selection_version != "4":
+        errors.append(
+            "work-state `semantic_review_closure` requires "
+            "`context_selection.version` exact `4`"
+        )
+        return
     if "semantic_review_closure" not in state:
-        if selection_version in {"2", "3", "4"}:
-            errors.append(
-                f"work-state with `context_selection.version` `{selection_version}` must contain "
-                "`semantic_review_closure`"
-            )
+        errors.append("v4 work-state must contain `semantic_review_closure`")
         return
     closure = state["semantic_review_closure"]
     if not isinstance(closure, dict):
         errors.append("work-state `semantic_review_closure` must be an object")
         return
-    if selection_version not in {"2", "3", "4"}:
-        errors.append(
-            "work-state `semantic_review_closure` requires `context_selection.version` "
-            "`2`, `3`, or `4`"
-        )
     validate_object_keys(
         closure,
         {"version", "basis_revision", "review_passes", "invalidations", "final_gate"},
@@ -1187,8 +1035,7 @@ def validate_semantic_review_closure(
         "semantic review closure `basis_revision`",
         errors,
     )
-    v4_bundle_scopes = selection_version == "4"
-    accepted_domains = semantic_accepted_domains(state, errors)
+    bundle_scopes = semantic_review_bundle_scopes(state, errors)
 
     review_passes = closure.get("review_passes")
     if not isinstance(review_passes, list):
@@ -1240,10 +1087,9 @@ def validate_semantic_review_closure(
         validate_semantic_review_scope(
             role,
             scope,
-            accepted_domains,
+            bundle_scopes,
             label,
             errors,
-            v4_bundle_scopes=v4_bundle_scopes,
         )
         revision = positive_integer(
             review.get("basis_revision"), f"{label} `basis_revision`", errors
@@ -1336,16 +1182,11 @@ def validate_semantic_review_closure(
         if len(affected_bundles) != len(set(affected_bundles)):
             errors.append(f"{label} repeats an affected bundle")
         for bundle in affected_bundles:
-            if bundle not in accepted_domains:
-                if v4_bundle_scopes:
-                    errors.append(
-                        f"{label} affected bundle `{bundle}` does not resolve to a v4 "
-                        "`bundle_queue.bundle_id`"
-                    )
-                else:
-                    errors.append(
-                        f"{label} affected bundle `{bundle}` is outside `accepted_scope`"
-                    )
+            if bundle not in bundle_scopes:
+                errors.append(
+                    f"{label} affected bundle `{bundle}` does not resolve to a v4 "
+                    "`bundle_queue.bundle_id`"
+                )
 
         stale_review_ids = string_list(
             invalidation.get("stale_review_ids"),
@@ -1394,10 +1235,9 @@ def validate_semantic_review_closure(
             validate_semantic_review_scope(
                 role,
                 scope,
-                accepted_domains,
+                bundle_scopes,
                 review_label,
                 errors,
-                v4_bundle_scopes=v4_bundle_scopes,
             )
             if role in {"development", "risk"} and scope not in affected_bundles:
                 errors.append(
@@ -1411,22 +1251,21 @@ def validate_semantic_review_closure(
             required_pairs.add(pair)
         if not required_pairs:
             errors.append(f"{label} must require at least one semantic review")
-        if selection_version == "4":
-            for review_id in stale_review_ids:
-                stale_review = passes_by_id.get(review_id)
-                if not isinstance(stale_review, dict):
-                    continue
-                stale_role = stale_review.get("reviewer_role")
-                stale_scope = stale_review.get("scope")
-                if (
-                    stale_role in {"development", "risk"}
-                    and isinstance(stale_scope, str)
-                    and (stale_role, stale_scope) not in required_pairs
-                ):
-                    errors.append(
-                        f"{label} stale v4 PASS `{review_id}` must include exact "
-                        f"required review `{stale_role}`/`{stale_scope}`"
-                    )
+        for review_id in stale_review_ids:
+            stale_review = passes_by_id.get(review_id)
+            if not isinstance(stale_review, dict):
+                continue
+            stale_role = stale_review.get("reviewer_role")
+            stale_scope = stale_review.get("scope")
+            if (
+                stale_role in {"development", "risk"}
+                and isinstance(stale_scope, str)
+                and (stale_role, stale_scope) not in required_pairs
+            ):
+                errors.append(
+                    f"{label} stale v4 PASS `{review_id}` must include exact "
+                    f"required review `{stale_role}`/`{stale_scope}`"
+                )
 
         if status not in {"open", "resolved"}:
             errors.append(f"{label} `status` must be `open` or `resolved`")
@@ -1610,74 +1449,49 @@ def validate_semantic_review_closure(
                     )
 
 
-def semantic_accepted_domains(
+def semantic_review_bundle_scopes(
     state: dict[str, Any], errors: list[str]
 ) -> set[str]:
-    selection = state.get("context_selection")
-    if isinstance(selection, dict) and selection.get("version") == "4":
-        queue = state.get("bundle_queue")
-        if not isinstance(queue, list):
-            errors.append(
-                "v4 semantic review closure requires work-state `bundle_queue` as a list"
-            )
-            return set()
-        bundle_ids: set[str] = set()
-        for index, bundle in enumerate(queue, start=1):
-            if not isinstance(bundle, dict):
-                continue
-            bundle_id = single_line_string(
-                bundle.get("bundle_id"),
-                f"v4 semantic review bundle item {index} `bundle_id`",
-                errors,
-            )
-            if bundle_id is not None:
-                bundle_ids.add(bundle_id)
-        registry = state.get("selection_retirements")
-        retired = (
-            registry.get("retired_bundles") if isinstance(registry, dict) else None
-        )
-        if isinstance(retired, list):
-            for bundle in retired:
-                if isinstance(bundle, dict) and isinstance(
-                    bundle.get("bundle_id"), str
-                ):
-                    bundle_ids.add(bundle["bundle_id"])
-        return bundle_ids
-    raw_scope = state.get("accepted_scope")
-    if not isinstance(raw_scope, list):
+    queue = state.get("bundle_queue")
+    if not isinstance(queue, list):
         errors.append(
-            "semantic review closure requires work-state `accepted_scope` as a list"
+            "v4 semantic review closure requires work-state `bundle_queue` as a list"
         )
         return set()
-    domains: set[str] = set()
-    for index, value in enumerate(raw_scope, start=1):
-        domain = single_line_string(
-            value, f"semantic review accepted scope item {index}", errors
+    bundle_ids: set[str] = set()
+    for index, bundle in enumerate(queue, start=1):
+        if not isinstance(bundle, dict):
+            continue
+        bundle_id = single_line_string(
+            bundle.get("bundle_id"),
+            f"v4 semantic review bundle item {index} `bundle_id`",
+            errors,
         )
-        if domain is not None:
-            domains.add(domain)
-    return domains
+        if bundle_id is not None:
+            bundle_ids.add(bundle_id)
+    registry = state.get("selection_retirements")
+    retired = registry.get("retired_bundles") if isinstance(registry, dict) else None
+    if isinstance(retired, list):
+        for bundle in retired:
+            if isinstance(bundle, dict) and isinstance(bundle.get("bundle_id"), str):
+                bundle_ids.add(bundle["bundle_id"])
+    return bundle_ids
 
 
 def validate_semantic_review_scope(
     role: Any,
     scope: str | None,
-    accepted_domains: set[str],
+    bundle_scopes: set[str],
     label: str,
     errors: list[str],
-    *,
-    v4_bundle_scopes: bool = False,
 ) -> None:
     if scope is None or role not in SEMANTIC_REVIEW_ROLES:
         return
-    if role in {"development", "risk"} and scope not in accepted_domains:
-        if v4_bundle_scopes:
-            errors.append(
-                f"{label} scope `{scope}` does not resolve to a v4 "
-                "`bundle_queue.bundle_id`"
-            )
-        else:
-            errors.append(f"{label} scope `{scope}` is outside `accepted_scope`")
+    if role in {"development", "risk"} and scope not in bundle_scopes:
+        errors.append(
+            f"{label} scope `{scope}` does not resolve to a v4 "
+            "`bundle_queue.bundle_id`"
+        )
     if role == "integration" and scope not in {"affected-closure", "project-wide"}:
         errors.append(
             f"{label} integration scope must be `affected-closure` or `project-wide`"
@@ -4709,22 +4523,13 @@ def validate_state_snapshot_completeness(
         "action_execution",
         "semantic_review_closure",
         "operation_metrics",
+        "shared_contracts",
+        "selection_readiness",
+        "late_shared_contract_discoveries",
+        "semantic_fail_diagnostics",
+        "selection_retirements",
+        "dispatch_control",
     }
-    current_selection_for_owners = current_state.get("context_selection")
-    if (
-        isinstance(current_selection_for_owners, dict)
-        and current_selection_for_owners.get("version") == "4"
-    ):
-        active_state_owners.update(
-            {
-                "shared_contracts",
-                "selection_readiness",
-                "late_shared_contract_discoveries",
-                "semantic_fail_diagnostics",
-                "selection_retirements",
-                "dispatch_control",
-            }
-        )
     for field in sorted((set(snapshot) | set(current_state)) - active_state_owners):
         if (
             field not in snapshot
@@ -4820,11 +4625,11 @@ def validate_state_snapshot_completeness(
         if isinstance(snapshot_selection, dict)
         else None
     )
-    if snapshot_selection_version != current_selection_version:
+    if current_selection_version != "4" or snapshot_selection_version != "4":
         errors.append(
-            f"{label} operation-state rollback changes context selection version"
+            f"{label} operation-state rollback requires context selection version `4`"
         )
-    if snapshot_selection_version == current_selection_version == "4":
+    else:
         validate_v4_owner_readiness_progression(snapshot, current_state, label, errors)
     current_closure = current_state.get("semantic_review_closure")
     snapshot_closure = snapshot.get("semantic_review_closure")
@@ -4920,7 +4725,8 @@ def validate_state_snapshot_completeness(
         label,
         errors,
     )
-    validate_snapshot_selection_routing(snapshot, label, errors)
+    if snapshot_selection_version == "4":
+        validate_snapshot_selection_routing(snapshot, label, errors)
 
 
 def action_manifest_paths(manifest: dict[str, Any]) -> set[str]:
@@ -5668,94 +5474,76 @@ def validate_snapshot_semantic_mutation_guard(
     if not active_paths:
         return
     selection = snapshot.get("context_selection")
-    if not isinstance(selection, dict) or nonempty_string(selection.get("version")) not in {
-        "2",
-        "3",
-        "4",
-    }:
+    if not isinstance(selection, dict) or selection.get("version") != "4":
         return
     snapshot_closure = snapshot.get("semantic_review_closure")
     current_closure = current_state.get("semantic_review_closure")
     if not isinstance(snapshot_closure, dict) or not isinstance(current_closure, dict):
         return
 
-    selection_version = nonempty_string(selection.get("version"))
     domains: set[str] = set()
-    if selection_version == "4":
-        path_atom_keys: dict[str, set[str]] = {}
-        operation_artifact_paths: set[str] = set()
-        artifacts = snapshot.get("operation_created_artifacts")
-        if isinstance(artifacts, list):
-            for artifact in artifacts:
-                if (
-                    isinstance(artifact, dict)
-                    and isinstance(artifact.get("path"), str)
-                    and isinstance(artifact.get("atom_key"), str)
-                ):
-                    operation_artifact_paths.add(artifact["path"])
-                    path_atom_keys.setdefault(artifact["path"], set()).add(
-                        artifact["atom_key"]
-                    )
-        actions = snapshot.get("approved_existing_actions")
-        if isinstance(actions, list):
-            for action in actions:
-                if not isinstance(action, dict):
-                    continue
-                members = [action.get("source"), action.get("target")]
-                owners = action.get("reference_owners")
-                if isinstance(owners, list):
-                    members.extend(owners)
-                for member in members:
-                    if (
-                        isinstance(member, dict)
-                        and isinstance(member.get("path"), str)
-                        and isinstance(member.get("atom_key"), str)
-                    ):
-                        path_atom_keys.setdefault(member["path"], set()).add(
-                            member["atom_key"]
-                        )
-        atom_bundle_ids: dict[str, set[str]] = {}
-        queue = snapshot.get("bundle_queue")
-        if isinstance(queue, list):
-            for bundle in queue:
-                if not isinstance(bundle, dict) or not isinstance(
-                    bundle.get("bundle_id"), str
-                ):
-                    continue
-                atom_keys = bundle.get("expected_atom_keys")
-                if not isinstance(atom_keys, list):
-                    continue
-                for atom_key in atom_keys:
-                    if isinstance(atom_key, str):
-                        atom_bundle_ids.setdefault(atom_key, set()).add(
-                            bundle["bundle_id"]
-                        )
-        for path in sorted(active_paths):
-            atom_keys = path_atom_keys.get(path, set())
-            bundle_ids = {
-                bundle_id
-                for atom_key in atom_keys
-                for bundle_id in atom_bundle_ids.get(atom_key, set())
-            }
-            if len(atom_keys) == 1 and len(bundle_ids) == 1:
-                domains.update(bundle_ids)
-            elif path in operation_artifact_paths or len(atom_keys) > 1 or len(bundle_ids) > 1:
-                errors.append(
-                    f"{label} operation-state rollback cannot map guarded v4 path "
-                    f"`{path}` through one snapshot atom_key to one bundle_id"
+    path_atom_keys: dict[str, set[str]] = {}
+    operation_artifact_paths: set[str] = set()
+    artifacts = snapshot.get("operation_created_artifacts")
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if (
+                isinstance(artifact, dict)
+                and isinstance(artifact.get("path"), str)
+                and isinstance(artifact.get("atom_key"), str)
+            ):
+                operation_artifact_paths.add(artifact["path"])
+                path_atom_keys.setdefault(artifact["path"], set()).add(
+                    artifact["atom_key"]
                 )
-    else:
-        accepted_scope = snapshot.get("accepted_scope")
-        if isinstance(accepted_scope, list):
-            accepted = [value for value in accepted_scope if isinstance(value, str)]
-            for path in active_paths:
-                matches = [
-                    domain
-                    for domain in accepted
-                    if managed_path_in_scope(path, {domain})
-                ]
-                if matches:
-                    domains.add(max(matches, key=lambda value: len(Path(value).parts)))
+    actions = snapshot.get("approved_existing_actions")
+    if isinstance(actions, list):
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            members = [action.get("source"), action.get("target")]
+            owners = action.get("reference_owners")
+            if isinstance(owners, list):
+                members.extend(owners)
+            for member in members:
+                if (
+                    isinstance(member, dict)
+                    and isinstance(member.get("path"), str)
+                    and isinstance(member.get("atom_key"), str)
+                ):
+                    path_atom_keys.setdefault(member["path"], set()).add(
+                        member["atom_key"]
+                    )
+    atom_bundle_ids: dict[str, set[str]] = {}
+    queue = snapshot.get("bundle_queue")
+    if isinstance(queue, list):
+        for bundle in queue:
+            if not isinstance(bundle, dict) or not isinstance(
+                bundle.get("bundle_id"), str
+            ):
+                continue
+            atom_keys = bundle.get("expected_atom_keys")
+            if not isinstance(atom_keys, list):
+                continue
+            for atom_key in atom_keys:
+                if isinstance(atom_key, str):
+                    atom_bundle_ids.setdefault(atom_key, set()).add(
+                        bundle["bundle_id"]
+                    )
+    for path in sorted(active_paths):
+        atom_keys = path_atom_keys.get(path, set())
+        bundle_ids = {
+            bundle_id
+            for atom_key in atom_keys
+            for bundle_id in atom_bundle_ids.get(atom_key, set())
+        }
+        if len(atom_keys) == 1 and len(bundle_ids) == 1:
+            domains.update(bundle_ids)
+        elif path in operation_artifact_paths or len(atom_keys) > 1 or len(bundle_ids) > 1:
+            errors.append(
+                f"{label} operation-state rollback cannot map guarded v4 path "
+                f"`{path}` through one snapshot atom_key to one bundle_id"
+            )
 
     snapshot_passes = snapshot_closure.get("review_passes")
     relevant_current: list[str] = []
@@ -5764,12 +5552,7 @@ def validate_snapshot_semantic_mutation_guard(
         for review in snapshot_passes:
             if not isinstance(review, dict):
                 continue
-            guarded_roles = (
-                {"development", "risk"}
-                if selection_version == "4"
-                else {"development"}
-            )
-            if review.get("reviewer_role") not in guarded_roles:
+            if review.get("reviewer_role") not in {"development", "risk"}:
                 continue
             if review.get("scope") not in domains:
                 continue
@@ -5835,8 +5618,7 @@ def validate_snapshot_semantic_mutation_guard(
             and review_id in invalidation.get("stale_review_ids", [])
             and semantic_invalidation_affects_paths(invalidation, active_paths)
             and (
-                selection_version != "4"
-                or review_scope is None
+                review_scope is None
                 or review_scope
                 in semantic_string_set(invalidation.get("affected_bundles"))
             )
@@ -5894,6 +5676,15 @@ def validate_snapshot_selection_routing(
     label: str,
     errors: list[str],
 ) -> None:
+    selection = snapshot.get("context_selection")
+    selection_version = selection.get("version") if isinstance(selection, dict) else None
+    if selection_version != "4":
+        errors.append(
+            f"{label} operation-state rollback is not restorable: "
+            "snapshot context_selection must use exact version `4`"
+        )
+        return
+
     local: list[str] = []
     accepted_domains = set(
         string_list(
@@ -5902,17 +5693,7 @@ def validate_snapshot_selection_routing(
             local,
         )
     )
-    selection = snapshot.get("context_selection")
-    selection_version = (
-        nonempty_string(selection.get("version"))
-        if isinstance(selection, dict)
-        else None
-    )
-    if selection_version not in {"1", "2", "3", "4"}:
-        local.append("snapshot context_selection must use version `1`, `2`, `3`, or `4`")
-        candidates: Any = None
-    else:
-        candidates = selection.get("candidates")
+    candidates = selection.get("candidates")
     if not isinstance(candidates, list):
         local.append("snapshot context_selection.candidates must be a list")
         candidates = []
@@ -6001,15 +5782,14 @@ def validate_snapshot_selection_routing(
         candidate_dispositions,
         local,
     )
-    if selection_version == "4":
-        validate_owner_readiness_v4(
-            snapshot,
-            candidate_targets,
-            candidate_dispositions,
-            candidate_domains,
-            local,
-            require_final=False,
-        )
+    validate_owner_readiness_v4(
+        snapshot,
+        candidate_targets,
+        candidate_dispositions,
+        candidate_domains,
+        local,
+        require_final=False,
+    )
     validate_semantic_review_closure(
         snapshot,
         local,

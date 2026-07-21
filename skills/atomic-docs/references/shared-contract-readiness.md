@@ -19,7 +19,7 @@ This reference is the normative owner of version-4 local/shared risk routing, bo
 
 ## Version 4 Boundary
 
-New Atomic Docs operations use `context_selection.version: "4"`. Version 4 retains the version-3 candidate, semantic closure, operation metrics, removal/merge, rollback, and final-validation contracts, and adds these top-level owners to `work-state.json`:
+After Goal handoff, every executable Atomic Docs operation uses exact `context_selection.version: "4"`. Version 4 includes candidate selection, semantic closure, operation metrics, removal/merge, rollback, final validation, and these top-level owners in `work-state.json`:
 
 - `shared_contracts`
 - `selection_readiness`
@@ -28,9 +28,9 @@ New Atomic Docs operations use `context_selection.version: "4"`. Version 4 retai
 - `dispatch_control`
 - `selection_retirements`
 
-It also adds `route: local|shared-contract` to every `risk_triggers` entry and `bundle_id` plus `depends_on_contract_ids` to every `bundle_queue` entry. A `shared-contract` route names `shared_contract_id`; a `local` route omits it. Initialize every version-4 operation with exact `selection_retirements: {"version":"1","retired_bundles":[],"retired_contracts":[]}` before writing. Existing version 3, version 2, version 1, and unversioned operations continue under their recorded contracts without migration or backfill.
+Every `risk_triggers` entry has `route: local|shared-contract`, and every `bundle_queue` entry has `bundle_id` plus `depends_on_contract_ids`. A `shared-contract` route names `shared_contract_id`; a `local` route omits it. Initialize every operation with exact `selection_retirements: {"version":"1","retired_bundles":[],"retired_contracts":[]}` before writing. A pre-Goal bootstrap request may resume without selection; after Goal handoff, a missing or non-v4 marker is invalid and the agent starts a new v4 request instead of migrating it.
 
-Version-4 bundle-scoped development/risk review PASSes and required reviews use stable `bundle_id` as `scope`, and semantic invalidation `affected_bundles` contains those bundle IDs. This preserves affected-only review when one domain has several shards. Version 3 and older operations keep their recorded domain scopes; readiness itself keeps the fixed `selection-readiness` scope.
+Bundle-scoped development/risk review PASSes and required reviews use stable `bundle_id` as `scope`, and semantic invalidation `affected_bundles` contains those bundle IDs. This preserves affected-only review when one domain has several shards. Readiness itself keeps the fixed `selection-readiness` scope.
 
 ## Local And Shared Risk Routes
 
@@ -61,7 +61,7 @@ Couple retirement to the pre-mutation snapshot without broadening impact. For ea
 
 Every current version-4 selection also revalidates the entire retirement history, not only newly appended snapshot transitions. For a retirement at revision `T`, inspect each development/risk PASS in its stable bundle scope with `basis_revision < T`. Exclude a corrected PASS with `basis_revision >= T`, and exclude a pre-`T` PASS only when an earlier invalidation with `resolved_revision < T` already superseded it. Every other pre-`T` PASS, regardless of current status, has one matching `status: open|resolved` invalidation with `opened_revision == T`, the exact bundle in `affected_bundles`, its ID in `stale_review_ids`, and its exact `(reviewer_role, bundle_id)` in `required_reviews`. For a contract retirement, apply this temporal rule to its owner/consumer stable bundle scopes that were still live at `T`; omit a bundle scope retired strictly before the contract's `T`.
 
-For a version-4 guarded mutation, map each guarded managed path through its pre-mutation snapshot action/artifact `atom_key` to the snapshot queue entry whose `expected_atom_keys` contains that key. Current development and risk PASSes scoped to that exact stable `bundle_id` are pre-mutation invalidation targets, and the existing final-gate guard still applies; a same-domain shard with another bundle ID remains current. If an approved-existing source path's `atom_key` is absent from the snapshot queue, do not infer a bundle from its domain or candidate—apply only the existing final-gate protection. Version 3 and version 2 retain domain lookup, while version 1 keeps its recorded no-closure flow.
+For a guarded mutation, map each guarded managed path through its pre-mutation snapshot action/artifact `atom_key` to the snapshot queue entry whose `expected_atom_keys` contains that key. Current development and risk PASSes scoped to that exact stable `bundle_id` are pre-mutation invalidation targets, and the existing final-gate guard still applies; a same-domain shard with another bundle ID remains current. If an approved-existing source path's `atom_key` is absent from the snapshot queue, do not infer a bundle from its domain or candidate—apply only the existing final-gate protection.
 
 ## Pre-Writer Readiness Review
 

@@ -24,6 +24,7 @@ Before writing implementation code, ensure the requested behavior has an accepte
 - If `project/atomization-criteria.md` is missing, draft or update only the criteria document allowed by `atomic-docs`, run criteria review, summarize it, and stop for criteria approval.
 - If criteria is approved but docs write scope is not accepted, ask the user to choose or confirm the docs write scope in plain language.
 - If docs generation requires a Codex Goal, create or reuse the Goal as required by `atomic-docs` before writing project/common/domain docs, atom files, graph edges, source-baseline metadata, or operation-local inventory.
+- Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact `context_selection.version: "4"`. If post-Goal state is missing that marker or uses v1, v2, or v3, do not update or migrate it; create a new version-4 Atomic Docs request through the same scope approval and Goal gates.
 - Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval unless the approved docs paths and write actions are named.
 
 ## 3. Write Requirements As Implementation-Basis Docs
@@ -87,7 +88,7 @@ Use the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request
 관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap
 ```
 
-Do not create a separate trace file or copy this table into atoms, project inventory, or `work-state.json`. A compliance-only operation creates or resumes an Atomic Docs request and uses the same path. If either basis changes, recheck only affected rows.
+Do not create a separate trace file or copy this table into atoms, project inventory, or `work-state.json`. A compliance-only operation creates a version-4 Atomic Docs request or resumes only the allowed pre-Goal/v4 state above and uses the same path. If either basis changes, recheck only affected rows.
 
 The post-implementation user summary must include:
 
@@ -103,6 +104,7 @@ Ask whether to approve the implementation result and final docs update. Do not u
 
 After the user approves the implementation result, update atomic docs through the existing `atomic-docs` gates.
 
+- Recheck that the linked post-Goal Atomic Docs request still has exact `context_selection.version: "4"`; if not, do not mutate it and route the final update through a new version-4 request.
 - Keep docs write scope, writer/reviewer cycle, post-write gate, judgment labels, source evidence, AID, `atom_key`, and graph rules intact.
 - Remove each completed delta from `Planned Changes`, add a concise realization under `Current Implementation`, and keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section.
 - Add or refresh source evidence and validation basis for the implemented behavior.
@@ -115,7 +117,7 @@ After the user approves the implementation result, update atomic docs through th
 
 After final docs update, validate the real affected flow rather than only checking files.
 
-1. Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
+1. Confirm the linked request still has exact post-Goal `context_selection.version: "4"`, then compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
 2. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
 3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used for that compliance result. Compliance must FAIL when any required row or evidence cell is missing.
 4. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.

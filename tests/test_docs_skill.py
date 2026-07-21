@@ -811,14 +811,14 @@ class DocsSkillTests(unittest.TestCase):
                 "Ordinary CRUD, reversible preference persistence",
                 "authoritative local or user-approved provider evidence",
                 "Record `confirmation_needed` only when",
-                "candidate ID, planned `atom_key`, trigger, selected contract basis, and version-4 route",
+                "Record the candidate ID, planned `atom_key`, trigger, selected contract basis, and route in operation state before review",
                 "domain-level risk category",
                 "cannot expand managed-doc scope",
                 "empty trigger list is not self-validating",
                 "rerun both development and applicable risk reviews against the same corrected revision",
                 "never reuse the old FAIL as PASS",
-                "A versioned operation reruns selection preflight first",
-                "unversioned operation uses its recorded correction/preflight contract instead",
+                "correct state, rerun version-4 selection preflight",
+                "rerun version-4 selection preflight before the writer or semantic rerun",
             ),
         )
 
@@ -849,7 +849,7 @@ class DocsSkillTests(unittest.TestCase):
                 "must not search for or disposition every source behavior",
                 "until final selection, request-bound docs/baseline, `metrics-preterminal`, and `metrics-final` all PASS",
                 "Only then delete or ignore them",
-                "delete or ignore the operation-local inventory",
+                "retaining a synced project context index",
             ),
         )
 
@@ -996,7 +996,7 @@ class DocsSkillTests(unittest.TestCase):
                 "status: open|resolved",
                 "retired strictly before the contract's `T`",
                 "Never discard or reuse a retired ID",
-                "version 3, version 2, version 1, and unversioned operations continue under their recorded contracts",
+                "a missing or non-v4 marker is invalid and the agent starts a new v4 request instead of migrating it",
             ),
         )
 
@@ -1021,9 +1021,9 @@ class DocsSkillTests(unittest.TestCase):
                 "scope: selection-readiness",
                 "span_id` equal to `review_id",
                 "before the first writer span starts",
-                "bundle-scoped development/risk review PASSes",
+                "Bundle-scoped development/risk review PASSes",
                 "stable `bundle_id` as `scope`",
-                "Version 3 and older operations keep their recorded domain scopes",
+                "After Goal handoff, every executable Atomic Docs operation uses exact `context_selection.version: \"4\"`",
             ),
         )
 
@@ -1098,14 +1098,14 @@ class DocsSkillTests(unittest.TestCase):
                 "both `metrics-preterminal` and `metrics-final` checks",
                 "Keep request-local `inventory.md` and `evidence.md` through these checks",
                 "immutable retirement history and historical references",
-                "In every version-4 invalidation, each stale development/risk PASS ID requires the exact `(reviewer_role, stable bundle_id scope)` entry",
+                "In every invalidation, each stale development/risk PASS ID requires the exact `(reviewer_role, stable bundle_id scope)` entry",
                 "including late-discovery and general-correction invalidations",
                 "A current risk PASS not listed stale adds no pair",
-                "Versions 3 and 2 retain their legacy domain-scoped rule",
+                "The validator rejects older or unversioned post-Goal state and never migrates it",
                 "every development/risk metric span, including a first-attempt `FAIL` referenced by `semantic_fail_diagnostics`",
                 "active-or-retired stable bundle scope",
                 "except that only development may use `selection-readiness`",
-                "version 3 retains domain scope",
+                "Selection validation applies only to exact version 4 after Goal handoff",
             ),
         )
 
@@ -1155,7 +1155,7 @@ class DocsSkillTests(unittest.TestCase):
                 "Ordinary CRUD, preference persistence, or a risk-shaped source surface is not a trigger by itself",
                 "Do not run domain bundles in parallel by default",
                 "every reviewer applicable to the active bundle PASSes",
-                "reopens that bundle",
+                "then reopen that bundle",
             ),
         )
         for role in (
@@ -1183,7 +1183,7 @@ class DocsSkillTests(unittest.TestCase):
                 "scopes this preflight to the active bundle",
                 "Unrelated pre-existing structural findings do not block the bundle",
                 "Run unscoped docs validation after the accepted queue finishes",
-                "rerun versioned selection when candidate, evidence, queue, or risk input changed",
+                "always rerun full request-bound selection with `--require-actions-final`",
                 "Compare planned selected keys, not raw source or document counts",
                 "send managed Atom content or structure to the writer",
                 "repair operation state, expected keys, paths, inventory, or evidence projection through their owning flow without a writer",
@@ -1291,14 +1291,14 @@ class DocsSkillTests(unittest.TestCase):
             closure + flow,
             (
                 "forward-only semantic review invalidation state",
-                "Existing version-1 or unversioned operations continue without migration",
+                "Every post-Goal operation uses exact `context_selection.version: \"4\"`",
                 "Open an invalidation before changing a meaning that already contributed to a PASS",
                 "stable `bundle_id`",
                 "active bundles plus immutable `selection_retirements.retired_bundles`",
-                "For every version-4 invalidation, including late-discovery and general-correction invalidations",
+                "For every invalidation, including late-discovery and general-correction invalidations",
                 "each `stale_review_ids` entry that names a development or risk PASS requires its exact `(reviewer_role, stable bundle_id scope)` pair",
                 "current risk PASS left out of `stale_review_ids` adds no risk pair",
-                "Version 3 and version 2 keep their recorded domain-scoped invalidation behavior",
+                "Use this `semantic_review_closure.version: \"1\"` shape",
                 "semantic_invalidation_ids: []",
                 "once an affected PASS exists, invalidation is mandatory before correction",
                 "Change only affected `current` review passes to `stale`",
@@ -1361,7 +1361,7 @@ class DocsSkillTests(unittest.TestCase):
                 "Markdown formatting, graph path repair",
                 "structural preflight only",
                 "Source locator/evidence index correction with unchanged documented claim",
-                "versioned selection preflight or the unversioned recorded preflight",
+                "version-4 selection preflight, then narrowed source-evidence check",
                 "narrowed source-evidence check",
                 "reviews every selected domain bundle for `initial-baseline`",
                 "Targeted structural-only single-domain change",
@@ -1396,7 +1396,7 @@ class DocsSkillTests(unittest.TestCase):
                 "`generalize`: the underlying context is useful",
                 "`correct_selected_claim`: a retained important claim is false",
                 "Do not choose `correct_selected_claim` for a finding until removal and generalization",
-                "rerun selection preflight",
+                "rerun version-4 selection preflight",
             ),
         )
 
@@ -1624,18 +1624,18 @@ class DocsSkillTests(unittest.TestCase):
                 "complete pre-mutation `work-state.json`",
                 "partial hand-built or selection-invalid state extract",
                 "keep every unrelated top-level owner unchanged",
-                "restorable versioned routing contract",
-                "pre-mutation closure at the same contract version",
+                "restorable exact version-4 routing contract",
+                "Every snapshot preserves structurally valid pre-mutation closure",
                 "unrelated risk PASSes remain current",
                 "A later resolved invalidation cannot retroactively authorize the mutation",
                 "Review PASS and invalidation records from the snapshot remain in current state",
                 "open records may expand only at a newer basis or resolve",
-                "resolve each guarded path through the snapshot action/artifact `atom_key` to the exact snapshot queue `bundle_id`",
+                "Resolve each guarded path through the snapshot action/artifact `atom_key` to the exact snapshot queue `bundle_id`",
                 "stale current development and risk PASSes with that scope",
                 "never use its domain to stale another shard",
                 "approved-existing source key is not in the queue",
                 "retain only the existing final-gate guard",
-                "Version 3 and version 2 keep domain lookup",
+                "exact version-4 guarded-path-to-bundle mapping",
                 "newly retired current row uses a basis strictly above snapshot readiness",
                 "exactly matches one snapshot-active bundle/contract",
                 "remove only routes/dependencies that directly name that retired contract",
@@ -1926,7 +1926,7 @@ class DocsSkillTests(unittest.TestCase):
                 "request-bound final selection/docs/baseline check",
                 "rejects open invalidations",
                 "remaining `stale` PASSes",
-                "does not infer creation time or migrate old state",
+                "Once selection exists, a missing marker or `\"1\"`, `\"2\"`, or `\"3\"` is invalid",
                 "current `baseline`/`project-wide` PASS",
                 "--expect-atom-key",
                 "valid standard YAML",
@@ -1937,10 +1937,10 @@ class DocsSkillTests(unittest.TestCase):
                 "without duplicate JSON keys",
                 "no tab characters, fenced or indented code (including inside blockquote or list containers), multiline inline code, or raw HTML-like syntax",
                 "every risk trigger resolves its candidate and output/merge target",
-                '"context_selection"',
-                '"candidate_id"',
-                "an unversioned active request continues without selection validation",
-                "scope expansion still follows its normal approval and Goal boundary",
+                "`context_selection.version`",
+                "`candidate_id`",
+                "Before Goal handoff, bootstrap state may omit selection entirely",
+                "the workflow starts a new v4 request instead of migrating or mutating that state",
                 "whether a candidate's `write|merge|drop` selection",
                 "Never search for or invoke",
                 "The validator is read-only",
@@ -1958,7 +1958,8 @@ class DocsSkillTests(unittest.TestCase):
             (
                 '`context_selection.version: "4"`',
                 '`operation_metrics.version: "1"`',
-                "Existing version-3, version-2, version-1, and unversioned operations continue without migration",
+                "Every post-Goal operation uses exact `context_selection.version: \"4\"`",
+                "they are not older selection contracts",
                 "operation wall-clock as the primary observation",
                 "completed span/rerun counts as secondary workload observations",
                 "Do not turn either into a promised ETA or a validator performance threshold",
@@ -1969,14 +1970,14 @@ class DocsSkillTests(unittest.TestCase):
                 "a metric span cannot downgrade it to `docs`",
                 "--phase metrics-preterminal",
                 "--phase metrics-final",
-                "full version-4 selection/readiness/dispatch",
-                "Only then retire version-4 inventory/evidence",
+                "full selection/readiness/dispatch/retirement history",
+                "Only then retire inventory/evidence",
                 "whether active or finished and whether outcome is `PASS` or `FAIL`",
                 "active or retired stable `bundle_id`",
                 "The only non-bundle scope is `selection-readiness` on a `development-review` span",
                 "a `risk-review` span never uses `selection-readiness`",
                 "first-attempt FAIL span referenced by `semantic_fail_diagnostics` obeys the same rule",
-                "Version 3 retains domain-scoped reviewer spans",
+                "A pre-mutation snapshot contains the structurally valid version-4 selection and metrics record",
                 "strictly higher changed basis",
                 "immutable `pause_after_span_id`",
                 "immutable RFC3339 `paused_at`",
@@ -1994,7 +1995,7 @@ class DocsSkillTests(unittest.TestCase):
             ),
         )
 
-    def test_selection_contract_version_four_is_new_operation_only_and_legacy_work_is_not_migrated(self) -> None:
+    def test_selection_contract_requires_version_four_after_goal_without_migration(self) -> None:
         text = read(SKILL) + refs(
             "docs-generation-flow.md",
             "reviewer-perspectives.md",
@@ -2006,20 +2007,27 @@ class DocsSkillTests(unittest.TestCase):
             text,
             (
                 "selection contract version 4",
-                "Existing version-3 requests keep metrics and closure",
-                "version-2 requests keep closure without metrics",
-                "version-1 requests keep selection without closure",
-                "unversioned requests continue their recorded state without selection validation",
-                "Existing version-1 or unversioned operations use their recorded correction/review contract without adding closure state",
-                "A versioned operation reruns selection preflight first",
-                "versioned selection preflight or the unversioned recorded preflight",
+                "Only a pre-Goal bootstrap request may resume before selection exists",
+                "A pre-Goal bootstrap request with no `context_selection` may resume",
+                "create or resume only exact `context_selection.version: \"4\"`",
+                "do not mutate or migrate it; start a new version-4 request",
+                "The validator rejects older or unversioned post-Goal state and never migrates it",
+                "a missing or non-v4 marker is invalid and the agent starts a new v4 request instead of migrating it",
             ),
         )
+        for legacy_continuation in (
+            "requests keep metrics and closure",
+            "requests keep closure without metrics",
+            "requests keep selection without closure",
+            "continue their recorded state without selection validation",
+            "continue under their recorded contracts",
+        ):
+            self.assertNotIn(legacy_continuation, text)
 
     def test_normal_operation_links_risk_before_selection_validation(self) -> None:
         text = read(SKILL)
         self.assertIn(
-            "Before a version-4 queue, route every selected risk trigger as a local or shared-contract concern, including when one domain has several shards",
+            "Before the execution queue, route every selected risk trigger as a local or shared-contract concern, including when one domain has several shards",
             text,
         )
         self.assertLess(

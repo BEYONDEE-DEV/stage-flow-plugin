@@ -64,6 +64,32 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval", text)
         self.assertIn("Do not start code implementation until the user explicitly approves", text)
 
+    def test_linked_atomic_docs_request_reuse_requires_v4_after_goal(self) -> None:
+        skill = read(SKILL)
+        flow = read(FLOW)
+
+        for required in (
+            "initial implementation-basis docs, final docs, or compliance work",
+            "pre-Goal bootstrap state with no `context_selection`",
+            "post-Goal exact `context_selection.version: \"4\"`",
+            "Do not mutate or migrate a linked v1-v3/unversioned selection",
+            "create a new version-4 Atomic Docs request under the existing approval/Goal gates",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact `context_selection.version: \"4\"`",
+            "uses v1, v2, or v3, do not update or migrate it",
+            "A compliance-only operation creates a version-4 Atomic Docs request or resumes only the allowed pre-Goal/v4 state above",
+            "Recheck that the linked post-Goal Atomic Docs request still has exact `context_selection.version: \"4\"`",
+            "route the final update through a new version-4 request",
+            "Confirm the linked request still has exact post-Goal `context_selection.version: \"4\"`",
+        ):
+            self.assertIn(required, flow)
+        self.assertNotIn(
+            "A compliance-only operation creates or resumes an Atomic Docs request",
+            flow,
+        )
+
     def test_implementation_flow_requires_decision_complete_proportional_detail(self) -> None:
         text = read(FLOW)
 
@@ -160,7 +186,14 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section", text)
         self.assertIn("Add or refresh source evidence and validation basis", text)
         self.assertIn("Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes", text)
-        self.assertIn("Compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results", text)
+        self.assertIn(
+            "Confirm the linked request still has exact post-Goal `context_selection.version: \"4\"`",
+            text,
+        )
+        self.assertIn(
+            "then compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results",
+            text,
+        )
 
     def test_atomic_impl_openai_metadata_mentions_skill_name(self) -> None:
         text = read(OPENAI_YAML)
