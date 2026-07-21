@@ -28,19 +28,17 @@ The fixed-slot loop is:
 
 ```text
 create once
-  -> develop
-  -> submit Draft
   -> develop and validate
-  -> submit Ready at exact SHA
+  -> submit regular PR at exact SHA
        -> development owner: release -> recycle -> next independent task
-       -> integration session: exact-SHA validate -> approved merge queue
+       -> integration session: exact-SHA validate -> approved remote merge
 ```
 
 Keep three owners separate:
 
-- **Development owner**: owns one active local slot and only its task branches, pushes, Draft/Ready PR preparation, release, recycle, and active-task `sync`.
-- **Integration session**: runs outside development bundles from a user-confirmed original/root repository area; performs one-shot read-only PR preflight and approved queue registration. It never changes the slot manifest or development worktrees.
-- **GitHub**: owns PR state, merge queue, and source-branch updates in PR mode.
+- **Development owner**: owns one active local slot and only its task branches, validation, regular PR submission, release, recycle, correction, and active-task `sync`.
+- **Integration session**: runs outside development bundles from a user-confirmed original/root repository area; performs one-shot read-only PR preflight and the approved remote merge. It never changes the slot manifest or development worktrees.
+- **GitHub**: owns PR state and source-branch updates in PR mode; auto-merge or merge queue behavior applies only when confirmed repository policy requires it.
 
 Do not promise a daemon, scheduler, background watcher, or atomic transaction across repositories.
 
@@ -162,36 +160,34 @@ For a fixed slot, claim the manifest only as part of the exact approved create b
 
 ## Recycle
 
-Recycle reuses a fixed directory, not an old task branch. Before presenting any write plan, require:
+Recycle reuses a fixed directory. It normally starts a new task branch, but a correction may attach an explicitly confirmed existing PR head branch. Before presenting any write plan, require:
 
 - manifest state is `released`
 - requested new owner and task branch are explicit
 - every participating worktree is clean and has no merge/rebase/cherry-pick/revert/bisect in progress
 - prior local HEAD equals its pushed SHA
 - prior branch and PR identity are recorded
-- new branch source/base and remote are confirmed
+- the new branch source/base and remote are confirmed, or the correction PR, existing head branch, remote head, and source base are confirmed
 
-Validate both manifest and current Git state; neither is sufficient alone. Claim the slot for the exact new owner only in the approved batch. Plan repo commands independently and stop on first failure. Never auto-delete prior local/remote branches or remove the fixed worktree. If a different owner has already claimed it, stop rather than stealing or repairing the claim.
+Validate both manifest and current Git state; neither is sufficient alone. An existing correction branch must not be checked out in any other worktree, and the correction owner must re-submit every changed repo before release. Claim the slot for the exact new owner only in the approved batch. Plan repo commands independently and stop on first failure. Never auto-delete prior local/remote branches or remove the fixed worktree. If a different owner has already claimed it, stop rather than stealing or repairing the claim.
 
 ## Submit
 
 Only the active development owner may submit, and only its task branches.
 
-### Draft
+Preflight the complete repo batch and require the intended changes to be committed, the user-confirmed validation to have completed, and every push remote/refspec and PR base/head to be explicit. Show the push, regular non-Draft PR create/update, submitted-SHA comment, manifest record, and final release commands before approval. Do not pass `--draft` or run `gh pr ready`.
 
-Preflight the complete repo batch, verify the branch is committed and the push remote/refspec is explicit, then show push and Draft PR create/update commands for approval. Record branch, local head, pushed SHA, and PR identity in the manifest only after the remote operation succeeds.
-
-### Ready
-
-Require final tests, pushed current HEAD, correct PR base/head, non-Draft state, required reviews/checks, and a `merge-ready` label. The Ready declaration is a machine-readable PR comment:
+The remote handoff is a machine-readable PR comment:
 
 ```text
-<!-- stageflow-ready-sha: <full-head-sha> -->
+<!-- stageflow-submitted-sha: <full-head-sha> -->
 ```
 
-Show the exact label/comment/Ready commands and SHA before approval. Apply labels and finish checks/reviews first, then make the Ready comment the final PR update. Ready is bound to that immutable SHA, not the branch name. Freeze the task branch after Ready. Any later PR update, normal push, or force-push invalidates the declaration. Do not integrate again until validation is rerun and a new final comment declares the current full head SHA.
+For each repo, push first; create or update the regular PR; add the submitted-SHA comment; then record branch, local head, pushed SHA, and PR identity in the manifest. A record is allowed only after that repo's remote operations succeed. Release the slot only after every participating repo is recorded successfully. A partial push, PR, comment, or record failure leaves the slot active and reports completed, failed, and untouched repos as `recovery-required`.
 
-After Ready succeeds, the current development owner may release the slot immediately and recycle for the next **independent** task. Release does not mean merged, and it does not authorize integration to mutate local slot state.
+Submission is bound to the full SHA, not the branch name. A later branch push makes the current head differ from the latest submitted marker and blocks integration until the active correction owner validates and submits the new head. Reviews, status updates, and unrelated PR comments do not invalidate an unchanged head. After complete submit succeeds, the current development owner releases the slot and may recycle it immediately for the next **independent** task. Release does not mean merged, and it does not authorize integration to mutate local slot state.
+
+If a problem is found before integration, use a released slot or another explicitly confirmed safe worktree to attach the same PR head branch, fix it, validate it, and run submit again. If an auto-merge or queue request exists because repository policy required one, cancel or withdraw it through a separately approved remote plan before pushing a correction. If the PR is already merged, create a new correction branch and PR; never rewrite the merged submission or auto-revert it.
 
 ## Integrate
 
@@ -199,28 +195,31 @@ Run only in a separately confirmed integration location outside `worktrees/slot-
 
 Before any remote write:
 
-1. Confirm `gh auth status`, repository identity, PR number, expected source/base, and exact Ready SHA for every repo.
-2. Confirm repository policy actually requires GitHub merge queue. If this cannot be established, do not invoke `gh pr merge`, because it may merge directly; explain the limitation and offer the existing local `merge` flow.
+1. Confirm `gh auth status`, repository identity, PR number, expected source/base, and exact submitted SHA for every repo.
+2. Confirm the runtime merge policy. For direct merge, confirm exactly one allowed strategy flag: `--merge`, `--squash`, or `--rebase`. When repository policy requires a merge queue, confirm that fact and omit a direct strategy flag as required by `gh`; do not assume queue mode for other repositories.
 3. Run the read-only helper:
 
    ```bash
-   python3 "<skill-dir>/scripts/inspect_pr_readiness.py" \
+   python3 "<skill-dir>/scripts/inspect_pr_submission.py" \
      --repo "<owner/repo>" --pr "<number-or-url>" --base "<source-branch>"
    ```
 
-4. Require non-Draft, `merge-ready`, current head equal to the latest Ready comment SHA, the Ready comment timestamp equal to the PR's latest update timestamp, correct base, passing checks, required review approval, `mergeable=MERGEABLE`, and `mergeStateStatus=CLEAN`. Timestamp equality makes any later update fail closed, including a head that moves away and returns to an earlier SHA. When a post-Ready push or force-push is known or suspected, also inspect the GitHub timeline before accepting a fresh Ready declaration.
-5. Preflight every repo before enqueueing any PR. Present exact repository, PR, base, current head SHA, dependency stage, and command; receive approval for that exact batch.
-6. Enqueue with head protection:
+4. Require an open non-Draft PR, current head equal to the latest submitted-SHA comment, the correct base, and no known merge conflict. Do not independently require a `merge-ready` label, generic review approval, generic status checks, PR `updatedAt` equality, or `mergeStateStatus=CLEAN`. Inspect checks or reviews only when confirmed repository policy makes them relevant to explaining why a merge is blocked.
+5. Preflight every repo before merging any PR. Present exact repository, PR, base, current head SHA, dependency stage, confirmed policy and strategy, and command; receive approval for that exact batch.
+6. For direct merge, execute with head protection and the confirmed strategy:
 
    ```bash
-   gh pr merge "<pr>" --repo "<owner/repo>" --match-head-commit "<ready-sha>"
+   gh pr merge "<pr>" --repo "<owner/repo>" \
+     --match-head-commit "<submitted-sha>" "<confirmed-strategy-flag>"
    ```
 
-Re-inspect immediately before each enqueue. A moved head invalidates approval and readiness; stop and require a new Ready SHA. Integration does not release slots, edit development worktrees, locally merge source branches, or ask to push source branches afterward. GitHub owns the source update.
+Do not add `--auto`, `--admin`, or `--delete-branch`. If a confirmed merge queue is mandatory, use the queue-compatible command only after repository-required admission conditions are met; do not enable auto-merge as a workaround. If GitHub rejects a merge because of protection, checks, reviews, conflict, or policy, stop and report the exact blocker instead of bypassing it or claiming success.
+
+Re-inspect immediately before each merge. A moved head or newer submitted marker invalidates approval; stop and require a correction submit and a new integrate plan. Integration does not release slots, edit development worktrees, locally merge source branches, or ask to push source branches afterward. GitHub owns the source update created by the explicit merge command.
 
 ## Dependencies And Partial Remote Results
 
-Independent PRs may be prepared concurrently. For a dependent consumer, provider queue admission is not enough: verify the provider PR is actually merged into the expected source branch before enqueueing the consumer.
+Independent PRs may be prepared concurrently. For a dependent consumer, a provider merge request or queue admission is not enough: verify the provider PR is actually merged into the expected source branch before merging the consumer.
 
 Remote multi-repo work is not atomic. If one push/PR merge succeeds and a later repo fails, report:
 
