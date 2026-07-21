@@ -145,6 +145,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         for phrase in [
             "submit regular PR at exact SHA",
             "stageflow-submitted-sha",
+            "Write the title and all explanatory body prose in Korean",
+            "exact Korean title and body",
             "Do not pass `--draft` or run `gh pr ready`",
             "Release the slot only after every participating repo is recorded successfully",
             "Reviews, status updates, and unrelated PR comments do not invalidate an unchanged head",
@@ -156,6 +158,8 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             self.assertIn(phrase, reference)
 
         self.assertIn("Create or update regular non-Draft PRs", skill)
+        self.assertIn("Write every PR title and all explanatory prose in its body in Korean", skill)
+        self.assertIn("Show the exact Korean title and body before approval", skill)
         self.assertIn("latest submitted SHA", skill)
         self.assertIn("confirmed-strategy-flag", skill)
         self.assertNotIn("Draft submission", skill)

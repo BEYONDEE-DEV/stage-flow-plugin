@@ -175,7 +175,7 @@ Validate both manifest and current Git state; neither is sufficient alone. An ex
 
 Only the active development owner may submit, and only its task branches.
 
-Preflight the complete repo batch and require the intended changes to be committed, the user-confirmed validation to have completed, and every push remote/refspec and PR base/head to be explicit. Show the push, regular non-Draft PR create/update, submitted-SHA comment, manifest record, and final release commands before approval. Do not pass `--draft` or run `gh pr ready`.
+Preflight the complete repo batch and require the intended changes to be committed, the user-confirmed validation to have completed, and every push remote/refspec and PR base/head to be explicit. Compose the exact PR title and body before presenting the write plan. Write the title and all explanatory body prose in Korean. Keep literal code identifiers, paths, commands, URLs, quoted external text, and repository-required fixed template text unchanged; fill template answers in Korean. For an existing PR, inspect its current title and body and include any Korean rewrite in the approved plan instead of silently overwriting user-authored content. Show the push, regular non-Draft PR create/update with its exact Korean title and body, submitted-SHA comment, manifest record, and final release commands before approval. Do not pass `--draft` or run `gh pr ready`.
 
 The remote handoff is a machine-readable PR comment:
 
