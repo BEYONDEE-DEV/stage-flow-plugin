@@ -1,0 +1,20 @@
+{
+  "case_id": "GOLDEN-V5-001",
+  "context_selection": {
+    "version": "5"
+  },
+  "review_scope": {
+    "bundle_id": "BUNDLE-V5-001",
+    "risk_id": "RISK-V5-001",
+    "risk_kind": "permission-privacy"
+  },
+  "selected_claims": [
+    {
+      "claim_id": "CLAIM-V5-001",
+      "principal": "PRINCIPAL-V5-001",
+      "authorized_object_or_data": "OBJECT-V5-001-A",
+      "requested_object": "OBJECT-V5-001-A",
+      "projection_or_use": "contact-summary"
+    }
+  ]
+}

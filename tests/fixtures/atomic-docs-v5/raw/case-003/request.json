@@ -1,0 +1,12 @@
+{
+  "case_id": "GOLDEN-V5-003",
+  "context_selection": {
+    "version": "5"
+  },
+  "operation_phase": "final-request-bound",
+  "created_aids": [
+    "AID-V5-003-ALPHA",
+    "AID-V5-003-BETA"
+  ],
+  "managed_consumers": []
+}

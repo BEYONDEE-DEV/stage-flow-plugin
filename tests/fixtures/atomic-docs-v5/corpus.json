@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "description": "Sanitized Atomic Docs v5 semantic-integrity golden corpus.",
+  "cases": [
+    {
+      "case_id": "GOLDEN-V5-001",
+      "slug": "case-001",
+      "raw_root": "raw/case-001",
+      "raw_files": [
+        "contract.md",
+        "request.json",
+        "source.py"
+      ],
+      "expected": "expected/pii-resource-mismatch.json"
+    },
+    {
+      "case_id": "GOLDEN-V5-002",
+      "slug": "case-002",
+      "raw_root": "raw/case-002",
+      "raw_files": [
+        "contract.md",
+        "request.json",
+        "source.py"
+      ],
+      "expected": "expected/canonical-identifier-conflict.json"
+    },
+    {
+      "case_id": "GOLDEN-V5-003",
+      "slug": "case-003",
+      "raw_root": "raw/case-003",
+      "raw_files": [
+        "contract.md",
+        "request.json",
+        "source.py"
+      ],
+      "expected": "expected/mechanical-aid-orphans.json"
+    },
+    {
+      "case_id": "GOLDEN-V5-004",
+      "slug": "case-004",
+      "raw_root": "raw/case-004",
+      "raw_files": [
+        "contract.md",
+        "request.json",
+        "source.py"
+      ],
+      "expected": "expected/independent-claims-overmerged.json"
+    }
+  ]
+}

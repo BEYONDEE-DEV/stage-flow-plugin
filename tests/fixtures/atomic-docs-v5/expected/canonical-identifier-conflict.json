@@ -1,0 +1,39 @@
+{
+  "schema_version": "1",
+  "case_id": "GOLDEN-V5-002",
+  "expected_terminal_verdict": "FAIL",
+  "expected_findings": [
+    {
+      "finding_id": "FINDING-V5-002",
+      "claim_id": "CLAIM-V5-002",
+      "category": "canonical-identifier-conflict",
+      "trace_kind": "contract",
+      "authority_status": "verified",
+      "applicability_status": "verified",
+      "observed_conflict": true,
+      "resource_or_identifier": "programId",
+      "observed_identifier": "displayId",
+      "verdict": "bug_or_regression"
+    }
+  ],
+  "expected_receipt_observation": {
+    "reviewer_role": "risk",
+    "scope": "BUNDLE-V5-002",
+    "validation_question": "Does schedule_payload bind the outbound programId field to the verified canonical programId value?",
+    "observed_result": "The applicable owner contract requires programId, but source.py supplies displayId to the programId field.",
+    "verdict": "FAIL",
+    "report_binding": {
+      "report_kind": "findings-only",
+      "required_finding_ids": [
+        "FINDING-V5-002"
+      ],
+      "request_local_path_required": true,
+      "sha256_required": true
+    },
+    "cryptographic_semantic_proof_claimed": false
+  },
+  "forbidden_outcomes": [
+    "PASS",
+    "confirmation_needed"
+  ]
+}

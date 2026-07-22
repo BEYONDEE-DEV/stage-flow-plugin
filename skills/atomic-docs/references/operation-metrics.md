@@ -1,85 +1,91 @@
-# Operation Metrics
+# Operation Metrics And Event Journal
 
 ## Contents
 
 - [Responsibility](#responsibility)
-- [Metrics Shape](#metrics-shape)
-- [Recording Contract](#recording-contract)
+- [Authoritative Journal](#authoritative-journal)
+- [Event Shape And Hash](#event-shape-and-hash)
+- [Event Types](#event-types)
+- [State Projection](#state-projection)
 - [Completion Coverage](#completion-coverage)
 - [Final Validation Sequence](#final-validation-sequence)
-- [Snapshot Progression](#snapshot-progression)
+- [Rollback And Recovery](#rollback-and-recovery)
 - [Boundary](#boundary)
 
 ## Responsibility
 
-This reference is the normative owner of Atomic Docs operation timing and rerun-work records. `docs-generation-flow.md` decides when work runs, `reviewer-perspectives.md` decides which reviews are required, `semantic-review-closure.md` owns semantic invalidation, and `validation-contract.md` owns deterministic CLI checks. Metrics observe that flow; they do not authorize work or change review meaning.
+This reference is the normative owner of the v5 request-local event journal, canonical event hash, operation timing/work projection, terminal event order, and local rollback-detection boundary. `docs-generation-flow.md` decides when work runs, `reviewer-perspectives.md` decides which reviews are required, `shared-contract-readiness.md` owns dispatch cutoffs, `semantic-review-closure.md` owns semantic invalidation, and `validation-contract.md` owns deterministic CLI checks. Events observe that flow; they never authorize work or decide review meaning.
 
-## Metrics Shape
+## Authoritative Journal
 
-Every post-Goal operation uses exact `context_selection.version: "4"` with sibling `operation_metrics.version: "1"` and `semantic_review_closure.version: "1"`. Those `version: "1"` markers version the current metrics and closure sub-schemas; they are not older selection contracts. Readiness state is defined by `shared-contract-readiness.md`.
+After Goal handoff, create `.stageflow/atomic-docs/requests/<request-id>/operation-events.jsonl` before v5 selection validation. Treat it as the authoritative operation timing/work record. Append exactly one canonical JSON object plus LF per event. Never edit, reorder, remove, or finish an earlier event in place.
 
-```json
-{
-  "context_selection": {"version": "4", "candidates": []},
-  "operation_metrics": {
-    "version": "1",
-    "status": "active",
-    "started_at": "2026-07-16T09:00:00+09:00",
-    "spans": [
-      {
-        "span_id": "fulfillment-development-1",
-        "kind": "development-review",
-        "scope": "fulfillment-bundle",
-        "attempt_id": "fulfillment-attempt-1",
-        "status": "finished",
-        "started_at": "2026-07-16T09:10:00+09:00",
-        "finished_at": "2026-07-16T09:12:00+09:00",
-        "outcome": "PASS"
-      }
-    ]
-  }
-}
+Keep `work-state.json.operation_metrics` as the exact reducer projection of the complete valid journal. Do not treat that mutable projection as an independent metrics owner. After an interrupted append, validate the journal first and run the recorder's `sync` action to rebuild the projection; never make the validator repair state.
+
+## Event Shape And Hash
+
+Use only these outer keys in every event:
+
+```text
+version, sequence, request_id, event_type, payload, previous_hash, event_hash
 ```
 
-Operation and span times use RFC 3339 date-time syntax with `T` and a timezone. Operation status is `active|finished`. A finished operation adds `finished_at`; an active operation omits it. Span status is `active|finished`. A finished span adds `finished_at` and `outcome: PASS|FAIL|completed`; an active span omits both. `started_at` must not follow `finished_at`, and every span stays inside the operation interval when it is closed.
+Set exact `version: "1"`, a positive contiguous `sequence` starting at `1`, and the active lower-kebab-case `request_id`. Set the first `previous_hash` to exactly 64 lowercase `0` characters. Every later `previous_hash` equals the immediately preceding event's `event_hash`.
 
-Span IDs are unique lower-kebab-case values. Attempt IDs are lower-kebab-case values that may group the bundle, writer, and reviewers for one recorded attempt. Kinds are `bundle`, `writer`, `development-review`, `risk-review`, `integration-review`, `baseline-review`, or `validation`. Every `development-review` and `risk-review` span, whether active or finished and whether outcome is `PASS` or `FAIL`, uses an active or retired stable `bundle_id` as `scope`. The only non-bundle scope is `selection-readiness` on a `development-review` span; a `risk-review` span never uses `selection-readiness`. A first-attempt FAIL span referenced by `semantic_fail_diagnostics` obeys the same rule, while affected closure, project-wide, and validation use their controlled scopes. A rerun adds both `rerun_of` and a concise `rerun_reason`; `rerun_of` references an earlier span with the same kind and scope. Initial work omits both.
+Calculate `event_hash` as SHA-256 over the ASCII domain separator `stageflow.atomic-docs.operation-event.v1\0` followed by the UTF-8 canonical JSON bytes of the event with `event_hash` omitted. Canonicalize with sorted object keys, compact separators `,` and `:`, and no ASCII escaping. Store lowercase 64-hex hashes.
 
-## Recording Contract
+## Event Types
 
-Create the active operation record after Goal handoff and before version-4 selection validation. Start a span before its measured action and finish it immediately after the result is known. Record writer, applicable reviewer, validation, and correction attempts; do not create prose reports merely to explain metrics. Record the version-4 readiness PASS as the existing `development-review` kind with scope `selection-readiness`; do not create a new role or metric kind. A post-readiness late-contract episode records immutable `pause_after_span_id` pointing to an existing finished span in this append-only sequence plus immutable RFC3339 `paused_at`; the cutoff span has `finished_at <= paused_at`.
+Append only these event types and exact payloads:
 
-Use operation wall-clock as the primary observation and completed span/rerun counts as secondary workload observations. Do not turn either into a promised ETA or a validator performance threshold. A missing or slow timestamp never changes semantic reviewer judgment.
+- `operation-started`: `{started_at}`
+- `span-started`: `{span_id,kind,scope,attempt_id,basis_revision,started_at}` with optional paired `rerun_of` and `rerun_reason`
+- `span-finished`: `{span_id,finished_at,outcome}`
+- `operation-finished`: `{finished_at}`
 
-Rerun records name the prior span and actual reason selected under `reviewer-perspectives.md`. Metrics do not decide that a correction is risk-neutral and cannot replace an invalidation, reviewer PASS, or finding.
+Use RFC 3339 timestamps with `T` and a timezone. Use unique lower-kebab-case span IDs, scope values, and attempt IDs. Record immutable positive `basis_revision`: a `development-review` scoped `selection-readiness` uses the current selection-readiness basis, and every other span uses the semantic-closure basis current when it starts. The recorder rejects a supplied basis that differs from that state owner. Use span kinds `bundle`, `writer`, `development-review`, `risk-review`, `integration-review`, `baseline-review`, or `validation`. Represent a dedicated terminal challenger as `integration-review` with scope `terminal-current-basis`; its span ID equals the challenge review ID. Review spans use only `PASS|FAIL`; bundle/writer work uses `completed|FAIL`, and validation uses `PASS|FAIL`. A rerun includes both optional fields and references an earlier finished span with the same kind and scope; initial work includes neither.
+
+Append each start before its measured work and its finish immediately after the outcome is known. Do not synthesize a finished span as one event, append a finish without its unique start, finish twice, overlap another operation root, or append after `operation-finished`.
+
+## State Projection
+
+Reduce the journal deterministically to the existing exact `operation_metrics.version: "1"` shape: root `status`, `started_at`, optional `finished_at`, and ordered `spans`. Project a started span with its recorded `basis_revision`, its start event's positive `sequence` as immutable `started_sequence`, and `status: active`. Apply its matching finish as `status: finished` with the finish event's greater `finished_sequence`, `finished_at`, and `outcome`; an active span omits all three finish fields. Project operation finish the same way.
+
+Require projected timestamps, span identity/order, rerun linkage, status, and outcomes to match `work-state.json.operation_metrics` exactly. Reject a journal whose chain is valid but whose projection is stale, partially updated, reordered, or rewritten. Keep readiness/dispatch cutoffs pointed at projected span IDs and times.
+
+Every bundle/writer and bundle development/risk span uses an active or retired stable `bundle_id` as scope. Reserve `selection-readiness` so it can never be an active or retired bundle ID; only development readiness uses that scope. Risk review never uses `selection-readiness`. Integration review uses `affected-closure`, `project-wide`, or dedicated-challenge `terminal-current-basis`; baseline review uses `project-wide`. Validation uses its controlled lower-kebab scope, with final validation restricted to `docs|baseline`, and never records `metrics-preterminal|metrics-final`. Receipt-owned review/challenge spans equal their entry's basis; a successful bundle/writer pair shares one attempt ID and basis. A current-basis development/risk review follows the latest successful pair at that same basis; a retained unaffected lower-basis PASS still follows a successful pair at its own basis. Final validation uses the current semantic basis.
 
 ## Completion Coverage
 
-Keep the root active through selection, bundle work, and final validation. Each queue item has one successful `bundle` span and one successful `writer` span with its domain as `scope` and the same `attempt_id`. Multiple queue items in one domain use distinct attempts.
+Keep the operation root active through selection, bundle work, and final validation. Give every active queue item exactly one successful `bundle` span and one successful `writer` span with one shared attempt ID, one basis, and stable `bundle_id` scope at completion. In queue order, place each bundle's applicable development/risk reviews after its successful pair and finish them before dispatching the next sequential bundle. Derive a work span's readiness epoch from the latest finished receipt-bound readiness PASS before its `started_sequence`; never dispatch while that readiness span is active. Ready dispatch requires its current readiness review ID to be the latest finished readiness PASS. Apply the current queue adjacency and current risk route only to work anchored to that ID, so a late queue reorder is not retroactively imposed on an older epoch. Historical queue/risk order is not fully reconstructible without a preserved readiness-time queue manifest. Place the terminal challenge span after every basis-applicable required bundle review, after any selected final integration/baseline PASS when the challenge is dedicated, and, at the current basis, after the last bundle/writer correction. Challenge attempts follow both basis and non-overlapping journal order. Record every executed readiness, semantic review, challenge, correction, and validation. Each receipt entry points forward to an exact review span, and every finished review PASS span points back to exactly one receipt-bearing readiness, semantic, or dedicated challenge owner with the same kind, scope, and basis; reuse-final-review is the semantic owner's alias, not a second owner. Journal sequence is the sole causal ordering authority; RFC 3339 timestamps remain observations.
 
-For every current semantic review PASS at the latest closure basis, record a successful reviewer span whose `span_id` equals its `review_id`, with mapped reviewer kind and exact scope. Every risk-triggered bundle ID has a successful `risk-review` span. Older-basis carried or reused PASSes are not falsely reported as newly run, but any review actually executed in this operation is still recorded.
+Use operation wall-clock as the primary observation and completed review/event/rerun counts as secondary workload observations. Report actual values. Treat `+10–25%` only as a design guardrail, never an ETA, guarantee, validator threshold, readiness signal, or semantic quality rule.
 
 ## Final Validation Sequence
 
 For request-bound final docs or baseline validation:
 
-Derive the required phase from the accepted operation profile and current final-gate reviewer. `initial-baseline`, `baseline-diff-refresh`, or a current `baseline`/`project-wide` final PASS requires `baseline`; a metric span cannot downgrade it to `docs`.
+1. Start final `docs|baseline` validation only after every other span is finished. Append `span-started` for that one final `validation` span scoped `docs` or `baseline`; keep the root active.
+2. Retain inventory/evidence and receipt reports, run final selection with `--require-actions-final`, then run the request-bound unscoped docs/baseline validator. Keep only the root and this latest validation span active.
+3. Append `span-finished` with the actual `PASS|FAIL` outcome.
+4. After FAIL, keep the root active, append correction events, then start the same-basis retry with `rerun_of` naming the immediately prior failed same-kind/scope span and a non-empty `rerun_reason`. A first attempt at a greater semantic basis omits rerun provenance; a lower basis is a regression and fails.
+5. After PASS, run `--phase metrics-preterminal --request-id <request-id>` without recording that self-check. Require every span finished, the latest event to be that final validation finish with PASS, and the root active.
+6. Append `operation-finished`, rebuild the exact projection, and run `--phase metrics-final --request-id <request-id>` without recording that self-check. The recorder admits the finish, including pending-event recovery, only when the latest span is the current-basis successful final validation of the required `docs|baseline` scope. Require this to be the journal's terminal event and the projected root finished. Only then retire allowed temporary inputs.
 
-1. Start one `validation` span whose scope is `docs` or `baseline`; the operation root remains active.
-2. Retain inventory/evidence, run final selection with `--require-actions-final`, then run the request-bound unscoped docs/baseline validator; that call revalidates current routing, readiness, and ready dispatch. During this call, only the root and that final validation span may remain active, with the latest final validation as the last span.
-3. Record `PASS` or `FAIL` and finish the validation span.
-4. On `FAIL`, keep the root active, append correction and rerun spans, then start a new validation attempt.
-5. On `PASS`, run `--phase metrics-preterminal --request-id <request-id>` without recording that check. It reruns current unscoped docs/closure, applicable baseline structure, and full selection/readiness/dispatch/retirement history, then requires every span finished, the latest final validation as the last span with outcome `PASS`, and the root active.
-6. Finish the root and run `--phase metrics-final --request-id <request-id>` without recording that check. It reruns the same selection/history gate, requires no active span, the same last validation `PASS`, and a valid finished operation. Only then retire inventory/evidence.
+Derive `baseline` versus `docs` from the accepted profile and current final-gate reviewer; a metric event cannot downgrade the required phase. Never record `metrics-preterminal` or `metrics-final` spans because either self-record would create an unclosable cycle.
 
-The two terminal checks are read-only self-exclusions. Never record a `validation` span scoped `metrics-preterminal` or `metrics-final`; requiring either check to record itself would create an unclosable validation cycle. After a shared-root trigger FAIL, no later `bundle` or `writer` span may start until a readiness PASS finishes at a strictly higher changed basis and resolves the episode. For a post-readiness late-contract episode, no active or finished bundle/writer span may appear after `pause_after_span_id` while open or between that cutoff and the later matching readiness span while resolved. Independently reject any such span that began after `paused_at` before resume readiness, even if record order was changed to move the cutoff behind it; shared-root behavior is unchanged.
+## Rollback And Recovery
 
-## Snapshot Progression
+Validate the current journal's canonical hash chain and exact projection equality during guarded operation-state rollback checks. Compare the rollback snapshot only with projected-span progression: retain prior span identity and order, preserve finished span facts, allow active spans/root to finish, and append later projected spans. Reject sequence gaps, bad previous/event hashes, a partial rewrite inside the current chain, a projection mismatch, invalid start/finish order, or snapshot projection regression.
 
-Operation metrics are append-only through managed-artifact removal and merge rollback snapshots. A later state may append spans and may move an existing `active` span or root to `finished`. It must not remove or reorder earlier span IDs, rewrite identity, kind, scope, attempt, start, rerun reference/reason, reverse a finished state, or change a finished outcome/time.
+The rollback snapshot stores the projection, not historical journal bytes or a trusted hash head. It therefore does not prove a byte-equivalent retained journal prefix, valid-prefix continuity, or whole-request rollback history. Do not require or claim those properties without an external trusted anchor.
 
-A pre-mutation snapshot contains the structurally valid version-4 selection and metrics record. Later reviewer, correction, and validation spans may be appended without making the snapshot incomplete.
+Use the helper as `python3 <plugin-root>/scripts/record_atomic_docs_event.py --root <target-project-root> --request-id <request-id> <event-type|sync> ...`. Let it stage one pending canonical event, validate the prospective complete lifecycle and hash chain, atomically append it, then synchronize projection. Treat a present or symlinked pending-event path as fail-closed; recovery validates that pending event against the current journal before appending or recognizing a duplicate. Never append lifecycle-invalid pending data or use `sync` to bless an invalid chain.
 
 ## Boundary
 
-The validator checks version, keys, identifiers, controlled values, timestamp ordering, rerun references, allowed active spans for each phase, and append-only snapshot progression. It does not judge whether the measured work was necessary, whether risk meaning changed, whether an agent worked efficiently, or whether elapsed time is acceptable.
+The journal is locally tamper-evident only against the journal, projection, and rollback material that remain in the mutable request root. Without a trusted external anchor, it cannot detect adversarial replacement of the entire request with an older internally valid complete chain or valid prefix, and it is not immutable. Do not claim otherwise.
+
+The helper flushes every written file before append/replace completion. POSIX hosts also flush the parent directory. Python has no portable directory `fsync` on Windows, so Windows keeps binary-mode file flushes and atomic replacement but treats parent-directory metadata survival across sudden power loss as best-effort; restart recovery must validate the pending record, journal, and projection before continuing.
+
+The validator checks the current journal's canonical shape/hash chain, sequence, start/finish order, exact reducer projection equality, terminal order, controlled values, and snapshot projected-span progression. It does not authenticate a whole mutable request root or retained historical journal prefix, and it does not judge whether work was necessary, evidence was true, a reviewer was independent, or elapsed time was acceptable.

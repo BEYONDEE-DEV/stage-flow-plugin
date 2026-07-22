@@ -1,0 +1,29 @@
+{
+  "case_id": "GOLDEN-V5-004",
+  "context_selection": {
+    "version": "5"
+  },
+  "review_scope": {
+    "bundle_id": "BUNDLE-V5-004",
+    "risk_ids": [
+      "RISK-V5-004-A",
+      "RISK-V5-004-B"
+    ]
+  },
+  "selected_claims": [
+    {
+      "claim_id": "CLAIM-V5-004-A",
+      "risk_id": "RISK-V5-004-A",
+      "owner_contract": "CONTRACT-V5-004-A",
+      "consumer": "CONSUMER-V5-004-A",
+      "resolution_owner": "retention-owner"
+    },
+    {
+      "claim_id": "CLAIM-V5-004-B",
+      "risk_id": "RISK-V5-004-B",
+      "owner_contract": "CONTRACT-V5-004-B",
+      "consumer": "CONSUMER-V5-004-B",
+      "resolution_owner": "callback-owner"
+    }
+  ]
+}

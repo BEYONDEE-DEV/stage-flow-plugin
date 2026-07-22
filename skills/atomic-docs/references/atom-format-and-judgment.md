@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-This reference is the normative owner of selective atom IDs, required sections, section ownership, forbidden shapes, and atomicity. It owns where a judgment may appear inside an atom, while `change-judgment-policy.md` owns judgment labels, precedence, and evidence fields.
+This reference is the normative owner of selective AID definitions/references, request-created AID lifecycle, required sections, section ownership, forbidden shapes, and atomicity. It owns where a judgment may appear inside an atom, while `change-judgment-policy.md` owns judgment labels, precedence, and evidence fields.
 
 ## Atom Line ID Policy
 
@@ -41,6 +41,18 @@ Do not require AID values on frontmatter, `graph_edges`, blank lines, section he
 
 Preserve AID stability. If the same meaning line is edited, moved, split into another atom, merged into another atom, retained after an atom rename, or retained after a category/domain-path move, keep its existing AID when the meaning is still traceable. After a cross-atom move, the preserved AID prefix may identify the atom where the AID was created rather than the current owner; this is valid and must not be treated as an ownership mismatch. Category moves, file renames, path drift, atom slug changes, and cross-atom movement are not AID change reasons. Assign new AID values only to newly introduced referenceable meanings. Do not clean up, remove, or renumber existing AIDs automatically merely because the current policy is narrower. If migration is unavoidable and accepted, record it explicitly in the change plan and review findings. Resolve current ownership from the containing file's frontmatter `atom_key`, never from an older preserved AID prefix.
 
+## AID Definition And Reference
+
+Treat `[AID:<value>]` only as the unique definition of one independently referenceable meaning. Consume that meaning everywhere else with exact `[AID-REF:<value>]`; do not copy `[AID:<value>]` as a citation. A definition or a reference placed in that definition's same Markdown paragraph/list item never counts as its consumer. Keep the same wrapper-free `<value>` in both tokens.
+
+Build one semantic Markdown definition/reference index across the entire managed Atom set regardless of expected-key scope. Parse CommonMark blocks/inlines with the plugin-vendored `markdown-it-py` AST and its GFM table rule; fail closed when that bundled parser is missing or corrupt rather than falling back to a handwritten scanner or host site-package. Index only rendered prose. Ignore token-looking text in YAML frontmatter, fenced or indented code, inline code, HTML comments, link/image destinations and titles, reference definitions, HTML tag attributes, and `script|style|pre|textarea` bodies; image alt text and ordinary visible HTML body text remain prose. An unclosed HTML comment hides the remainder instead of creating a token.
+
+Use the nearest list item as one consumer block across its paragraph continuation, while each nested list item is distinct. Treat each GFM table row and each ordinary paragraph/heading as a separate block. A definition and reference in the same resulting block never establish consumption. Reject malformed AID-like tokens that remain in visible prose; Markdown syntax that does not parse as a link/code/comment remains visible rather than hiding a token. When a request ID is present, count only `inventory.md`, `evidence.md`, `post-write-review.md`, and the exact receipt-owned findings reports as request-local consumers. Arbitrary scratch, rollback, summary, or unowned Markdown never closes an orphan. Reject request-local definitions, every duplicate definition, and every indexed `[AID-REF:...]` with no definition immediately, including bundle-scoped validation. A short reference may add only the minimum local context needed to understand the owner; it must not restate the complete meaning.
+
+For every v5 operation, create top-level `created_aids` in `work-state.json` as the current set of active definitions created by this request, using unique wrapper-free AID values; initialize it as `[]`. Add a value when the request creates its definition. If semantic review rejects a new mechanical or invalid AID, remove its definition, references, and ledger value together before rerunning; removing only the ledger value while its definition remains fails the final baseline comparison. Do not list an existing preserved or moved definition as new, and do not infer creation from its historical prefix.
+
+During intermediate bundle validation, allow a listed `created_aids` definition to have no consumer yet because an accepted later bundle or Atomic Impl compliance row may add it. At the final request-bound selection/docs/baseline and terminal gates, require every listed value to have at least one actual `[AID-REF:<value>]` consumer in managed docs or a recognized request-local artifact. A planned consumer name, plain-text AID value, or definition token does not close the orphan. Do not apply this final orphan rule retroactively to existing AIDs absent from `created_aids`; duplicate and dangling checks still apply globally.
+
 ## Required Atom Sections
 
 Each atom file must preserve these sections:
@@ -53,7 +65,7 @@ Each atom file must preserve these sections:
 - `Planned Changes`
 - `Gaps`
 
-The headings provide a stable place for each kind of context; they are not a completeness checklist. Write only material context in its owning section. When no material meaning applies, use a concise empty/none statement rather than searching source for content to fill the heading. Another section may cite the owning AID, `atom_key`, or heading and add only the minimum local context needed to understand that reference. Repeating the same meaning across sections is invalid even when the wording differs.
+The headings provide a stable place for each kind of context; they are not a completeness checklist. Write only material context in its owning section. When no material meaning applies, use a concise empty/none statement rather than searching source for content to fill the heading. Another section may use `[AID-REF:...]`, `atom_key`, or the owning heading and add only the minimum local context needed to understand it. Repeating the same meaning across sections is invalid even when wording differs.
 
 | Section | Question and owned meaning | Must not own |
 | --- | --- | --- |
@@ -73,7 +85,7 @@ The headings provide a stable place for each kind of context; they are not a com
 
 Do not promote an observed anomaly, accidental fallback, security weakness, or source quirk into a normal `Outcome` or required `Rule`. Keep a non-blocking non-obvious observation in `Current Implementation` only when it helps understand a documented decision. If source contradicts an approved requirement or source-established current contract and blocks a stronger judgment, record only the differential fact and impact as the applicable `Gaps` item. Do not repeat the full observed behavior in both places.
 
-Every changed in-scope required AID used as an implementation basis must include an observable verification condition or a verifiable invariant in that same item. Include only the precondition, result, refusal/failure, state/effect, or exclusion needed to judge that change. This is a durable verification target, not a request to enumerate every input/state/failure combination or test execution step. Historical descriptions outside the implementation scope do not need acceptance detail added merely for completeness. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning.
+Every changed in-scope required AID used as an implementation basis must include an observable verification condition or a verifiable invariant in that same item. Include only the precondition, result, refusal/failure, state/effect, or exclusion needed to judge that change. This is a durable verification target, not a request to enumerate every input/state/failure combination or test execution step. Historical descriptions outside the implementation scope do not need acceptance detail added merely for completeness. Do not require a separate acceptance AID; assign another AID only when the verification condition is a separate independently reviewable meaning. Make every implementation-basis and compliance consumer use `[AID-REF:<value>]`.
 
 `Current Implementation` records source-observed context needed to find and understand the documented area. Include key entry points, storage or integration owners, and non-obvious constraints only when useful. Refer to the owning `Outcomes`, `Boundaries`, or `Rules` AID instead of restating its behavior. Do not mirror every source branch, method call, query predicate, DTO field, internal structure, failure path, or possible exploit/test scenario. A bare list of identifiers is not sufficient, but a concise explanation may point the reader back to source for exact behavior. Record execution order only when it is important contract or change-impact context.
 
