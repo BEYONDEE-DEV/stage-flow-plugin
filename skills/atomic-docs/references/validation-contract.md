@@ -89,10 +89,11 @@ The closure, receipts, challenge attempts, and handoff history are forward-only 
 
 - `inventory.md`, `evidence.md`, and `work-state.json` exist
 - exact selection version 5, a `source_commit_observed` that is a HEAD-reachable ancestor of the configured source repository, non-empty accepted scope, and candidate/evidence structures are well formed without duplicate JSON keys
+- `operation_profile` exists and is exactly one of `initial-baseline|baseline-diff-refresh|change-impact-refresh|targeted|inspection`
 - every candidate has a unique ID, exact accepted domain path, `write|merge|drop`, non-empty selection basis, and locator/digest/relevance/question evidence
 - evidence revision, candidate headings, and locator rows use constrained plain Markdown: no tab characters, fenced or indented code (including inside blockquote or list containers), multiline inline code, or raw HTML-like syntax
 - `write` owns valid planned Atom keys, `merge` resolves to a `write` key, and `drop` creates no key
-- bundle expected keys equal the `write` keys and stay under each key owner's approved domain
+- bundle expected keys equal the `write` keys and stay under each key owner's approved domain; every active expected key resolves to a current managed Atom at final request-bound checks
 - every risk trigger has unique `risk_id`, resolves candidate/output, and has one trace with owner/authority/applicability/consumer/resource/implementation/review binding; trace locators/digests and final owner/consumer Atoms occur in the referenced receipt manifest, pre-writer/intermediate traces may bind current same-basis readiness, final traces bind current receipt-bound semantic closure, and permission/privacy traces include the four-link chain
 - local/shared routes, contract/queue references, retirement history, stable review scopes, criteria-bound receipts, writer/primary/risk/final identity separation, challenge/handoff recovery, dispatch cutoffs, late-discovery links, journal-projected review order, and strictly higher-basis resume are structurally closed
 - optional artifact/action state satisfies removal/merge, exact v5 guarded-path-to-bundle mapping, snapshot projected-span progression, source/target identity, retained drop inventory, selected-route/trace closure, and incoming graph closure
@@ -100,13 +101,13 @@ The closure, receipts, challenge attempts, and handoff history are forward-only 
 
 Selection validation is the request-bound structural postcondition when a valid drop/delete leaves no managed Atom. If managed Atoms remain after an applied action, run unscoped docs validation too.
 
-Selection validation applies only to exact version 5 after Goal handoff. Final selection uses `--require-actions-final`; every request-bound docs/baseline and terminal call rejects non-v5 state. Final phases rerun current routing/traces/receipts/challenge/AID consumers/readiness/dispatch/journal/retirement gates. Keep inventory/evidence/reports until terminal PASS and require baseline for a baseline profile/final PASS.
+Selection validation applies only to exact version 5 after Goal handoff. Final selection uses `--require-actions-final`; every request-bound docs/baseline and terminal call rejects non-v5 state. Final phases rerun current routing/traces/receipts/challenge/AID consumers/readiness/dispatch/journal/retirement gates. Keep inventory/evidence/reports until terminal PASS. Derive the final validation phase only from the exact operation profile: the two baseline profiles require `baseline` plus a current `baseline`/`project-wide` final gate, while the other three profiles require `docs` and cannot use a baseline final gate; a non-baseline final gate, when required by affected work, uses `integration`/`affected-closure`.
 
 `docs` includes bootstrap checks. Without `--expect-atom-key`, it checks every `*-atom.md` under the managed docs root. With expected keys, it strictly checks those atoms and their references into the global identity/AID/graph index:
 
 - frontmatter is valid standard YAML with no duplicate mapping keys and contains one lower-kebab-case `atom_key`
 - `atom_key` values are globally unique
-- required atom sections exist exactly once: `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`
+- required atom sections exist exactly once as rendered top-level plain ATX `##` headings: `Intent`, `Outcomes`, `Boundaries`, `Rules`, `Current Implementation`, `Planned Changes`, and `Gaps`; heading-like text inside code fences or nested block containers does not count
 - every discovered definition has valid `[AID:<key>.<section-code>.<NNN>]` shape and is globally unique
 - an AID's section code matches the required section containing it
 - a preserved AID may retain a historical key prefix after its meaning moves to another atom
@@ -128,7 +129,7 @@ Semantic AID indexing uses the plugin-vendored `markdown-it-py`/`mdurl` runtime,
 }
 ```
 
-The baseline commit must resolve in the configured `source_root`. `coverage` values for domains, features, atoms, targeted work, or partial scope are invalid.
+The baseline commit must resolve in the configured `source_root`. For request-bound baseline and terminal validation it must exactly equal that request's `source_commit_observed`. `coverage` values for domains, features, atoms, targeted work, or partial scope are invalid.
 
 When docs runs without `--expect-atom-key` and with `--request-id`, or baseline runs with `--request-id`, the validator also requires final semantic review closure. Docs validation without a request ID remains structural-only and does not validate operation state.
 

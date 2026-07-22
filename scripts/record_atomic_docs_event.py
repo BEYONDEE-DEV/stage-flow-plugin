@@ -77,6 +77,14 @@ SPAN_KINDS = {
     "validation",
 }
 SPAN_OUTCOMES = {"PASS", "FAIL", "completed"}
+OPERATION_PROFILES = {
+    "initial-baseline",
+    "baseline-diff-refresh",
+    "change-impact-refresh",
+    "targeted",
+    "inspection",
+}
+BASELINE_OPERATION_PROFILES = {"initial-baseline", "baseline-diff-refresh"}
 LOWER_KEBAB_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LOWER_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 RFC3339_RE = re.compile(
@@ -443,24 +451,23 @@ def _validate_span_basis_against_state(
         )
 
 
+def _operation_profile(state: Mapping[str, Any]) -> str:
+    profile = state.get("operation_profile")
+    if not isinstance(profile, str) or profile not in OPERATION_PROFILES:
+        raise OperationEventError(
+            "v5 work-state operation_profile must be exactly one of "
+            "initial-baseline, baseline-diff-refresh, change-impact-refresh, "
+            "targeted, or inspection"
+        )
+    return profile
+
+
 def _required_final_scope(state: Mapping[str, Any]) -> str:
-    if state.get("operation_profile") in {"initial-baseline", "baseline-diff-refresh"}:
-        return "baseline"
-    closure = state.get("semantic_review_closure")
-    gate = closure.get("final_gate") if isinstance(closure, Mapping) else None
-    review_id = gate.get("review_id") if isinstance(gate, Mapping) else None
-    reviews = closure.get("review_passes") if isinstance(closure, Mapping) else None
-    if isinstance(reviews, list):
-        for review in reviews:
-            if (
-                isinstance(review, Mapping)
-                and review.get("review_id") == review_id
-                and review.get("status") == "current"
-                and review.get("reviewer_role") == "baseline"
-                and review.get("scope") == "project-wide"
-            ):
-                return "baseline"
-    return "docs"
+    return (
+        "baseline"
+        if _operation_profile(state) in BASELINE_OPERATION_PROFILES
+        else "docs"
+    )
 
 
 def _validate_event_against_state(
@@ -470,6 +477,21 @@ def _validate_event_against_state(
     events: Sequence[Mapping[str, Any]],
 ) -> None:
     _validate_span_basis_against_state(state, event_type, payload)
+    if event_type == "span-started":
+        projection = _reduce_validated_events(events)
+        active_final_validations = [
+            span.get("span_id")
+            for span in projection.get("spans", [])
+            if isinstance(span, Mapping)
+            and span.get("status") == "active"
+            and span.get("kind") == "validation"
+            and span.get("scope") in {"docs", "baseline"}
+        ]
+        if active_final_validations:
+            raise OperationEventError(
+                "no span may start while final docs/baseline validation is active: "
+                + ", ".join(str(span_id) for span_id in active_final_validations)
+            )
     if (
         event_type == "span-started"
         and payload.get("kind") == "validation"
@@ -555,6 +577,18 @@ def _reduce_validated_events(events: Sequence[Mapping[str, Any]]) -> dict[str, A
             started = _parse_rfc3339(payload["started_at"], f"span `{span_id}` started_at")
             if operation_started is not None and started < operation_started:
                 raise OperationEventError(f"span `{span_id}` starts before the operation")
+            active_final_validations = [
+                prior_id
+                for prior_id, prior in spans_by_id.items()
+                if prior.get("status") == "active"
+                and prior.get("kind") == "validation"
+                and prior.get("scope") in {"docs", "baseline"}
+            ]
+            if active_final_validations:
+                raise OperationEventError(
+                    "no span may start while final docs/baseline validation is active: "
+                    + ", ".join(active_final_validations)
+                )
             if payload["kind"] == "validation" and payload["scope"] in {
                 "docs",
                 "baseline",
@@ -953,6 +987,7 @@ def _load_v5_state(root: Path, request_id: str) -> dict[str, Any]:
             "event recording requires exact context_selection.version `5`; "
             "create a new v5 request instead of migrating older state"
         )
+    _operation_profile(state)
     state_request_id = state.get("request_id")
     if state_request_id is not None and state_request_id != request_id:
         raise OperationEventError(

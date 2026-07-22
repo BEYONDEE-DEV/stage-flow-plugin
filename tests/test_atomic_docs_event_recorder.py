@@ -45,6 +45,7 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
         self.write_state(
             {
                 "request_id": REQUEST_ID,
+                "operation_profile": "targeted",
                 "context_selection": {"version": "5", "candidates": []},
                 "selection_readiness": {"basis_revision": 1},
                 "semantic_review_closure": {"basis_revision": 1},
@@ -663,6 +664,25 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                 "started_at": "2026-07-21T21:03:00+09:00",
             },
         )
+        before_during_validation = self.journal_path.read_bytes()
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "while final docs/baseline validation is active",
+        ):
+            record_operation_event(
+                self.request_root,
+                REQUEST_ID,
+                "span-started",
+                {
+                    "span_id": "accounts-writer-during-validation",
+                    "kind": "writer",
+                    "scope": "accounts-bundle",
+                    "attempt_id": "accounts-attempt-during-validation",
+                    "basis_revision": 1,
+                    "started_at": "2026-07-21T21:03:30+09:00",
+                },
+            )
+        self.assertEqual(before_during_validation, self.journal_path.read_bytes())
         record_operation_event(
             self.request_root,
             REQUEST_ID,
@@ -734,6 +754,83 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
             REQUEST_ID,
             "operation-finished",
             {"finished_at": "2026-07-21T21:09:00+09:00"},
+        )
+        self.assertEqual("finished", self.read_state()["operation_metrics"]["status"])
+
+    def test_baseline_profile_alone_selects_terminal_validation_scope(self) -> None:
+        state = self.read_state()
+        state["operation_profile"] = "initial-baseline"
+        self.write_state(state)
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "operation-started",
+            {"started_at": "2026-07-21T21:00:00+09:00"},
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-started",
+            {
+                "span_id": "docs-validation-1",
+                "kind": "validation",
+                "scope": "docs",
+                "attempt_id": "docs-validation-attempt-1",
+                "basis_revision": 1,
+                "started_at": "2026-07-21T21:01:00+09:00",
+            },
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-finished",
+            {
+                "span_id": "docs-validation-1",
+                "finished_at": "2026-07-21T21:02:00+09:00",
+                "outcome": "PASS",
+            },
+        )
+        before = self.journal_path.read_bytes()
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "successful final `baseline` validation",
+        ):
+            record_operation_event(
+                self.request_root,
+                REQUEST_ID,
+                "operation-finished",
+                {"finished_at": "2026-07-21T21:03:00+09:00"},
+            )
+        self.assertEqual(before, self.journal_path.read_bytes())
+
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-started",
+            {
+                "span_id": "baseline-validation-1",
+                "kind": "validation",
+                "scope": "baseline",
+                "attempt_id": "baseline-validation-attempt-1",
+                "basis_revision": 1,
+                "started_at": "2026-07-21T21:03:00+09:00",
+            },
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-finished",
+            {
+                "span_id": "baseline-validation-1",
+                "finished_at": "2026-07-21T21:04:00+09:00",
+                "outcome": "PASS",
+            },
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "operation-finished",
+            {"finished_at": "2026-07-21T21:05:00+09:00"},
         )
         self.assertEqual("finished", self.read_state()["operation_metrics"]["status"])
 
@@ -1176,6 +1273,7 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                     json.dumps(
                         {{
                             "request_id": request_id,
+                            "operation_profile": "targeted",
                             "context_selection": {{"version": "5", "candidates": []}},
                             "selection_readiness": {{"basis_revision": 1}},
                             "semantic_review_closure": {{"basis_revision": 1}},
@@ -1384,6 +1482,72 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
         with self.assertRaisesRegex(OperationEventError, "after every other span finishes"):
             reduce_operation_events([first, active, overlapping_final])
 
+        final_validation = self.make_event(
+            [first],
+            "span-started",
+            {
+                "span_id": "docs-validation-1",
+                "kind": "validation",
+                "scope": "docs",
+                "attempt_id": "docs-validation-attempt-1",
+                "started_at": "2026-07-21T21:01:00+09:00",
+            },
+        )
+        overlapping_writer = self.make_event(
+            [first, final_validation],
+            "span-started",
+            {
+                "span_id": "overlapping-writer",
+                "kind": "writer",
+                "scope": "accounts-bundle",
+                "attempt_id": "overlapping-writer-attempt",
+                "started_at": "2026-07-21T21:01:30+09:00",
+            },
+        )
+        overlapping_writer_finished = self.make_event(
+            [first, final_validation, overlapping_writer],
+            "span-finished",
+            {
+                "span_id": "overlapping-writer",
+                "finished_at": "2026-07-21T21:02:00+09:00",
+                "outcome": "completed",
+            },
+        )
+        final_validation_finished = self.make_event(
+            [first, final_validation, overlapping_writer, overlapping_writer_finished],
+            "span-finished",
+            {
+                "span_id": "docs-validation-1",
+                "finished_at": "2026-07-21T21:03:00+09:00",
+                "outcome": "PASS",
+            },
+        )
+        invalid_operation_finish = self.make_event(
+            [
+                first,
+                final_validation,
+                overlapping_writer,
+                overlapping_writer_finished,
+                final_validation_finished,
+            ],
+            "operation-finished",
+            {"finished_at": "2026-07-21T21:04:00+09:00"},
+        )
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "while final docs/baseline validation is active",
+        ):
+            reduce_operation_events(
+                [
+                    first,
+                    final_validation,
+                    overlapping_writer,
+                    overlapping_writer_finished,
+                    final_validation_finished,
+                    invalid_operation_finish,
+                ]
+            )
+
         finish_operation = self.make_event(
             [first, active],
             "operation-finished",
@@ -1418,6 +1582,28 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                 "operation-started",
                 {"started_at": "2026-07-21T21:00:00+09:00"},
             )
+
+    def test_operation_profile_is_mandatory_and_closed(self) -> None:
+        original = self.read_state()
+        for profile in (None, "initial-basline", []):
+            with self.subTest(profile=profile):
+                state = copy.deepcopy(original)
+                if profile is None:
+                    state.pop("operation_profile")
+                else:
+                    state["operation_profile"] = profile
+                self.write_state(state)
+                with self.assertRaisesRegex(
+                    OperationEventError,
+                    "operation_profile must be exactly one of",
+                ):
+                    record_operation_event(
+                        self.request_root,
+                        REQUEST_ID,
+                        "operation-started",
+                        {"started_at": "2026-07-21T21:00:00+09:00"},
+                    )
+                self.assertFalse(self.journal_path.exists())
 
     def test_cli_records_and_sync_does_not_emit_an_event(self) -> None:
         command = [

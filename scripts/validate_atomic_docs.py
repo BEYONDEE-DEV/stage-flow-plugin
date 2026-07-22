@@ -105,6 +105,14 @@ AID_ID_RE = re.compile(
     r"(?P<number>\d{3})$"
 )
 POST_GOAL_SELECTION_VERSION = "5"
+OPERATION_PROFILES = {
+    "initial-baseline",
+    "baseline-diff-refresh",
+    "change-impact-refresh",
+    "targeted",
+    "inspection",
+}
+BASELINE_OPERATION_PROFILES = {"initial-baseline", "baseline-diff-refresh"}
 COMMIT_RE = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 RFC3339_RE = re.compile(
@@ -297,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     validation_scope=args.phase,
                 )
-        if args.phase == "baseline":
+        if args.phase == "baseline" and not args.request_id:
             validate_baseline(config, errors)
         if args.phase in {"metrics-preterminal", "metrics-final"} and args.request_id:
             if args.phase == "metrics-preterminal":
@@ -436,13 +444,13 @@ def validate_selection(
         state,
         errors,
     )
+    operation_profile = validate_operation_profile(state, errors)
 
     if require_final is None:
         require_final = require_actions_final
     required_final_role = None
     if (
         require_final
-        and metrics_mode in {"final-validation", "preterminal", "final"}
         and required_final_validation_scope(state) == "baseline"
     ):
         required_final_role = "baseline"
@@ -482,6 +490,27 @@ def validate_selection(
             )
         if evidence_text is not None:
             validate_evidence_revision(evidence_text, source_commit, errors)
+
+    required_scope = required_final_validation_scope(state)
+    if (
+        require_final
+        and validation_scope is not None
+        and validation_scope != required_scope
+    ):
+        errors.append(
+            f"operation profile `{operation_profile or '<invalid>'}` requires final "
+            f"`{required_scope}` validation, not `{validation_scope}`"
+        )
+    if require_final and required_scope == "baseline":
+        validate_baseline(
+            config,
+            errors,
+            expected_source_commit=(
+                source_commit
+                if source_commit is not None and COMMIT_RE.fullmatch(source_commit)
+                else None
+            ),
+        )
 
     raw_candidates = context_selection.get("candidates")
     if not isinstance(raw_candidates, list):
@@ -571,6 +600,12 @@ def validate_selection(
         errors.append(f"planned atom key `{key}` is missing from `bundle_queue.expected_atom_keys`")
     for key in sorted(queue_keys - planned_keys):
         errors.append(f"bundle queue atom key `{key}` has no write candidate")
+    if require_final:
+        managed_keys = current_managed_atom_keys(config)
+        for key in sorted(queue_keys - managed_keys):
+            errors.append(
+                f"final bundle queue expected atom key `{key}` does not exist in managed docs"
+            )
 
     risk_keys = validate_selection_risk_triggers(
         state.get("risk_triggers", []), candidate_targets, candidate_dispositions, errors
@@ -715,30 +750,29 @@ def validate_request_preterminal_artifacts(
             f"`{validation_scope}`"
         )
     validate_docs(config, errors, [])
-    if required_scope == "baseline":
-        validate_baseline(config, errors)
+
+
+def validate_operation_profile(
+    state: dict[str, Any], errors: list[str]
+) -> str | None:
+    profile = state.get("operation_profile")
+    if not isinstance(profile, str) or profile not in OPERATION_PROFILES:
+        errors.append(
+            "v5 work-state `operation_profile` must be exactly one of "
+            "`initial-baseline`, `baseline-diff-refresh`, `change-impact-refresh`, "
+            "`targeted`, or `inspection`"
+        )
+        return None
+    return profile
 
 
 def required_final_validation_scope(state: dict[str, Any]) -> str:
-    if state.get("operation_profile") in {"initial-baseline", "baseline-diff-refresh"}:
-        return "baseline"
-    closure = state.get("semantic_review_closure")
-    if not isinstance(closure, dict):
-        return "docs"
-    final_gate = closure.get("final_gate")
-    review_id = final_gate.get("review_id") if isinstance(final_gate, dict) else None
-    reviews = closure.get("review_passes")
-    if isinstance(reviews, list):
-        for review in reviews:
-            if (
-                isinstance(review, dict)
-                and review.get("review_id") == review_id
-                and review.get("status") == "current"
-                and review.get("reviewer_role") == "baseline"
-                and review.get("scope") == "project-wide"
-            ):
-                return "baseline"
-    return "docs"
+    profile = state.get("operation_profile")
+    return (
+        "baseline"
+        if isinstance(profile, str) and profile in BASELINE_OPERATION_PROFILES
+        else "docs"
+    )
 
 
 def validate_operation_metrics(
@@ -1942,6 +1976,23 @@ def validate_semantic_review_closure(
         if latest_review is not None and latest_review.get("status") == "current":
             errors.append(
                 "semantic review final gate must point to its latest current history PASS"
+            )
+
+    operation_profile = state.get("operation_profile")
+    if (
+        isinstance(operation_profile, str)
+        and operation_profile in OPERATION_PROFILES - BASELINE_OPERATION_PROFILES
+        and final_required is True
+        and final_review_id is not None
+    ):
+        final_review = passes_by_id.get(final_review_id)
+        if final_review is not None and (
+            final_review.get("reviewer_role") != "integration"
+            or final_review.get("scope") != "affected-closure"
+        ):
+            errors.append(
+                f"non-baseline operation profile `{operation_profile}` final gate "
+                "must reference an `integration`/`affected-closure` PASS"
             )
 
     if require_final:
@@ -9584,6 +9635,37 @@ def validate_docs(
     return selected, aid_count
 
 
+def current_managed_atom_keys(config: Config) -> set[str]:
+    """Return identities currently present in the managed corpus.
+
+    Final selection validation owns the queue-to-corpus existence invariant. Full
+    document validation remains responsible for reporting structural Atom errors.
+    """
+    paths = sorted(config.docs_root.rglob("*-atom.md")) if config.docs_root.is_dir() else []
+    atoms = (parse_atom(path, config, []) for path in paths)
+    return {atom.atom_key for atom in atoms if atom is not None}
+
+
+def top_level_level_two_headings(lines: list[str]) -> list[str]:
+    """Return plain ATX h2 headings that Markdown renders at document top level."""
+    if MarkdownIt is None:
+        return []
+    tokens = MarkdownIt("commonmark").enable("table").parse("\n".join(lines))
+    headings: list[str] = []
+    for token in tokens:
+        if (
+            token.type != "heading_open"
+            or token.tag != "h2"
+            or token.level != 0
+            or token.map is None
+        ):
+            continue
+        line_number = token.map[0]
+        if 0 <= line_number < len(lines) and lines[line_number].startswith("## "):
+            headings.append(lines[line_number][3:].strip())
+    return headings
+
+
 def parse_atom(path: Path, config: Config, errors: list[str]) -> Atom | None:
     label = rel(config.project_root, path)
     try:
@@ -9609,7 +9691,7 @@ def parse_atom(path: Path, config: Config, errors: list[str]) -> Atom | None:
         errors.append(f"`{label}` atom_key `{atom_key}` must be lower-kebab-case")
 
     body = lines[end + 1 :]
-    headings = [line[3:].strip() for line in body if line.startswith("## ")]
+    headings = top_level_level_two_headings(body)
     for section in REQUIRED_SECTIONS:
         count = headings.count(section)
         if count != 1:
@@ -10176,7 +10258,12 @@ def validate_graph(
                 )
 
 
-def validate_baseline(config: Config, errors: list[str]) -> None:
+def validate_baseline(
+    config: Config,
+    errors: list[str],
+    *,
+    expected_source_commit: str | None = None,
+) -> None:
     data = read_json(
         config.baseline_path,
         rel(config.project_root, config.baseline_path),
@@ -10198,6 +10285,11 @@ def validate_baseline(config: Config, errors: list[str]) -> None:
     if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
         errors.append("source baseline `source_commit` must be a 40- or 64-character Git hash")
         return
+    if expected_source_commit is not None and commit != expected_source_commit:
+        errors.append(
+            f"source baseline commit `{commit}` must equal request "
+            f"`source_commit_observed` `{expected_source_commit}`"
+        )
     if not git_commit_reachable_from_head(config.source_root, commit):
         errors.append(
             f"source baseline commit `{commit}` is not reachable from "

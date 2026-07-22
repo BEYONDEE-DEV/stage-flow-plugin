@@ -65,14 +65,14 @@ Use operation wall-clock as the primary observation and completed review/event/r
 
 For request-bound final docs or baseline validation:
 
-1. Start final `docs|baseline` validation only after every other span is finished. Append `span-started` for that one final `validation` span scoped `docs` or `baseline`; keep the root active.
+1. Start final `docs|baseline` validation only after every other span is finished. Append `span-started` for that one final `validation` span scoped `docs` or `baseline`; keep the root active, and append no other `span-started` event until that final validation span finishes.
 2. Retain inventory/evidence and receipt reports, run final selection with `--require-actions-final`, then run the request-bound unscoped docs/baseline validator. Keep only the root and this latest validation span active.
 3. Append `span-finished` with the actual `PASS|FAIL` outcome.
 4. After FAIL, keep the root active, append correction events, then start the same-basis retry with `rerun_of` naming the immediately prior failed same-kind/scope span and a non-empty `rerun_reason`. A first attempt at a greater semantic basis omits rerun provenance; a lower basis is a regression and fails.
 5. After PASS, run `--phase metrics-preterminal --request-id <request-id>` without recording that self-check. Require every span finished, the latest event to be that final validation finish with PASS, and the root active.
 6. Append `operation-finished`, rebuild the exact projection, and run `--phase metrics-final --request-id <request-id>` without recording that self-check. The recorder admits the finish, including pending-event recovery, only when the latest span is the current-basis successful final validation of the required `docs|baseline` scope. Require this to be the journal's terminal event and the projected root finished. Only then retire allowed temporary inputs.
 
-Derive `baseline` versus `docs` from the accepted profile and current final-gate reviewer; a metric event cannot downgrade the required phase. Never record `metrics-preterminal` or `metrics-final` spans because either self-record would create an unclosable cycle.
+Derive `baseline` versus `docs` only from the exact accepted `operation_profile`: `initial-baseline|baseline-diff-refresh` requires `baseline`, while `change-impact-refresh|targeted|inspection` requires `docs`. A final-gate reviewer or metric event cannot select or upgrade it and cannot downgrade the required phase. Never record `metrics-preterminal` or `metrics-final` spans because either self-record would create an unclosable cycle.
 
 ## Rollback And Recovery
 

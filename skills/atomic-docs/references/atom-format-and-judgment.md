@@ -55,7 +55,7 @@ During intermediate bundle validation, allow a listed `created_aids` definition 
 
 ## Required Atom Sections
 
-Each atom file must preserve these sections:
+Each atom file must preserve these sections. Each must appear exactly once as a rendered top-level plain ATX `##` heading. Heading-like text inside a code fence, indented code block, blockquote, list, or another nested block does not count:
 
 - `Intent`
 - `Outcomes`

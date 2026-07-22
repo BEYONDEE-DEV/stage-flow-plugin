@@ -69,17 +69,18 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_required_final_validation_scope_uses_operation_profile(self) -> None:
-        self.assertEqual(
-            "baseline",
-            required_final_validation_scope({"operation_profile": "initial-baseline"}),
-        )
-        self.assertEqual(
-            "baseline",
-            required_final_validation_scope(
-                {"operation_profile": "baseline-diff-refresh"}
-            ),
-        )
-        self.assertEqual("docs", required_final_validation_scope({}))
+        for profile in ("initial-baseline", "baseline-diff-refresh"):
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    "baseline",
+                    required_final_validation_scope({"operation_profile": profile}),
+                )
+        for profile in ("change-impact-refresh", "targeted", "inspection"):
+            with self.subTest(profile=profile):
+                self.assertEqual(
+                    "docs",
+                    required_final_validation_scope({"operation_profile": profile}),
+                )
 
     def test_git_locator_is_revision_lexical_and_ignores_worktree_symlink_retarget(self) -> None:
         owner_a = self.root / "owner-a.txt"
@@ -430,6 +431,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                     trigger.setdefault("route", "local")
             state.update(
                 {
+                    "operation_profile": "targeted",
                     "shared_contracts": [],
                     "contract_binding_traces": [],
                     "created_aids": [],
@@ -5899,6 +5901,41 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                 )
                 self.assertIn("create a new v5 request", result.stdout)
 
+    def test_selection_requires_an_exact_operation_profile(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "도메인 소유권을 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260720-180000-operation-profile",
+        )
+        original = self.read_selection_state(request_id)
+        for profile in (None, "initial-basline", []):
+            with self.subTest(profile=profile):
+                state = copy.deepcopy(original)
+                if profile is None:
+                    state.pop("operation_profile")
+                else:
+                    state["operation_profile"] = profile
+                self.write_selection_data(request_id, state)
+                result = self.run_validator(
+                    "selection",
+                    request_id=request_id,
+                    normalize_v5=False,
+                )
+                self.assertEqual(1, result.returncode)
+                self.assertIn(
+                    "v5 work-state `operation_profile` must be exactly one of",
+                    result.stdout,
+                )
+
     def test_selection_version_five_requires_closure_and_metrics(self) -> None:
         request_id = self.write_selection_state(
             [
@@ -6031,6 +6068,118 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                 result = self.run_validator("selection", request_id=request_id)
                 self.assertEqual(1, result.returncode)
                 self.assertIn(expected, result.stdout)
+
+    def test_final_phases_require_every_active_queue_atom_to_exist(self) -> None:
+        phase_cases = [
+            ("selection", "docs", "active-validation", True),
+            ("docs", "docs", "active-validation", False),
+            ("baseline", "baseline", "active-validation", False),
+            ("metrics-preterminal", "docs", "preterminal", False),
+            ("metrics-final", "docs", "finished", False),
+        ]
+        for phase, validation_scope, terminal_stage, require_actions_final in phase_cases:
+            with self.subTest(phase=phase):
+                request_id, _ = self.write_v4_final_state(
+                    f"20260722-final-queue-{phase}",
+                    validation_scope=validation_scope,
+                    terminal_stage=terminal_stage,
+                )
+                (self.docs / "programs" / "program-access-atom.md").unlink()
+                result = self.run_validator(
+                    phase,
+                    request_id=request_id,
+                    require_actions_final=require_actions_final,
+                )
+                self.assertEqual(1, result.returncode)
+                self.assertIn(
+                    "final bundle queue expected atom key `program-access` "
+                    "does not exist in managed docs",
+                    result.stdout,
+                )
+
+    def test_request_bound_baseline_requires_a_baseline_operation_profile(self) -> None:
+        request_id, state = self.write_v4_final_state(
+            "20260722-baseline-profile",
+            validation_scope="baseline",
+        )
+        state["operation_profile"] = "targeted"
+        self.write_selection_data(request_id, state)
+
+        result = self.run_validator("baseline", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "operation profile `targeted` requires final `docs` validation, "
+            "not `baseline`",
+            result.stdout,
+        )
+
+    def test_nonbaseline_profile_rejects_a_baseline_final_gate(self) -> None:
+        request_id, state = self.write_v4_final_state(
+            "20260722-nonbaseline-final-gate",
+            validation_scope="baseline",
+        )
+        state["operation_profile"] = "targeted"
+        validation = state["operation_metrics"]["spans"][-1]
+        validation["scope"] = "docs"
+        validation["attempt_id"] = "docs-final-attempt-1"
+        self.write_selection_data(request_id, state)
+
+        result = self.run_validator("docs", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "non-baseline operation profile `targeted` final gate must reference "
+            "an `integration`/`affected-closure` PASS",
+            result.stdout,
+        )
+
+    def test_baseline_profile_final_selection_requires_a_baseline_gate(self) -> None:
+        request_id, state = self.write_v4_final_state(
+            "20260722-baseline-final-selection-gate",
+            validation_scope="docs",
+        )
+        state["operation_profile"] = "initial-baseline"
+        self.write_baseline()
+        self.write_selection_data(request_id, state)
+
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            require_actions_final=True,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "semantic review final gate must reference a current "
+            "`baseline`/`project-wide` PASS",
+            result.stdout,
+        )
+
+    def test_request_bound_baseline_commit_matches_the_observed_revision(self) -> None:
+        request_id, _ = self.write_v4_final_state(
+            "20260722-baseline-revision",
+            validation_scope="baseline",
+        )
+        (self.root / "source.txt").write_text("source changed\n", encoding="utf-8")
+        self._git("add", "source.txt")
+        self._git("commit", "-m", "advance source after request selection")
+        later_commit = self._git("rev-parse", "HEAD").stdout.strip()
+        (self.docs / "source-baseline.json").write_text(
+            json.dumps(
+                {
+                    "version": "1",
+                    "source_commit": later_commit,
+                    "coverage": "project-wide",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("baseline", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            f"source baseline commit `{later_commit}` must equal request "
+            f"`source_commit_observed` `{self.commit}`",
+            result.stdout,
+        )
 
     def test_version_four_final_phases_revalidate_current_owner_readiness(self) -> None:
         phase_cases = [
@@ -7209,6 +7358,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             request_id="20260716-090001-final-metrics",
         )
         state = self.read_selection_state(request_id)
+        state["operation_profile"] = "initial-baseline"
         readiness_span = copy.deepcopy(state["operation_metrics"]["spans"][0])
         readiness_span.update(
             {
@@ -8882,6 +9032,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             "20260720-170008-v4-local-retirement"
         )
         atom = self.write_atom("accounts/access-policy-atom.md", "access-policy")
+        self.write_atom("accounts/program-access-atom.md", "program-access")
         state["accepted_scope"] = ["accounts"]
         state["context_selection"]["candidates"][1]["domain"] = "accounts"
         active_bundle = copy.deepcopy(state["bundle_queue"][0])
@@ -10626,6 +10777,39 @@ Prose
         result = self.run_validator("docs")
         self.assertEqual(1, result.returncode)
         self.assertIn("must contain exactly one `## Outcomes` section", result.stdout)
+
+    def test_required_sections_inside_a_code_fence_do_not_count(self) -> None:
+        atom = self.write_atom("domain/fenced-sections-atom.md", "fenced-sections")
+        lines = atom.read_text(encoding="utf-8").splitlines()
+        frontmatter_end = lines.index("---", 1)
+        fenced = [
+            *lines[: frontmatter_end + 1],
+            "",
+            "```markdown",
+            *lines[frontmatter_end + 1 :],
+            "```",
+        ]
+        atom.write_text("\n".join(fenced) + "\n", encoding="utf-8")
+
+        result = self.run_validator("docs")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must contain exactly one `## Intent` section", result.stdout)
+        self.assertIn("must contain exactly one `## Gaps` section", result.stdout)
+
+    def test_required_sections_nested_in_a_blockquote_do_not_count(self) -> None:
+        atom = self.write_atom("domain/quoted-sections-atom.md", "quoted-sections")
+        lines = atom.read_text(encoding="utf-8").splitlines()
+        frontmatter_end = lines.index("---", 1)
+        quoted_body = [f"> {line}" if line else ">" for line in lines[frontmatter_end + 1 :]]
+        atom.write_text(
+            "\n".join([*lines[: frontmatter_end + 1], *quoted_body]) + "\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_validator("docs")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("must contain exactly one `## Intent` section", result.stdout)
+        self.assertIn("must contain exactly one `## Gaps` section", result.stdout)
 
     def test_graph_target_must_exist_and_match_key(self) -> None:
         self.write_atom("domain/target-atom.md", "target")
