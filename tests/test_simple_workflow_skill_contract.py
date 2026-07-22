@@ -202,6 +202,23 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("same canonical request and fingerprint to be retried", self.text)
         self.assertIn("same request may be retried after external recovery", self.hooks_text)
 
+    def test_create_goal_absolute_root_bootstrap_contract_is_explicit(self) -> None:
+        skill = " ".join(self.text.split())
+        artifact = " ".join(self.artifact_text.split())
+        hooks = " ".join(self.hooks_text.split())
+        self.assertIn("record the resolved canonical absolute root as", skill)
+        self.assertIn("session-bound consistency assertion, not a discovery mechanism", skill)
+        self.assertIn("canonical host-native absolute", skill)
+        self.assertIn("each exactly once", skill)
+        self.assertIn("bootstraps `create_goal` discovery", skill)
+        self.assertIn("does not override canonical single-repo or bundle ownership", skill)
+        self.assertIn("fail closed and do not retry discovery from cwd", skill)
+        self.assertIn("UserPromptSubmit and Stop keep their existing non-blocking cwd behavior", skill)
+        self.assertIn('"workflow_root": "/absolute/path/to/project"', artifact)
+        self.assertIn("`--request` validation does not read or require a session pointer", artifact)
+        self.assertIn("exactly one canonical host-native absolute", hooks)
+        self.assertIn("Only candidate-free Goals prepass as unrelated", hooks)
+
     def test_plugin_manifest_exposes_simple_workflow_prompt(self) -> None:
         manifest = json.loads(PLUGIN_JSON.read_text(encoding="utf-8"))
         interface = manifest["interface"]

@@ -62,7 +62,8 @@ VALIDATOR_TEMPLATES = {
     "current": '''{
   "request_id": "20260609-1120-simple-workflow-plugin",
   "phase": "plan",
-  "activated_by": "explicit_skill_invocation"
+  "activated_by": "explicit_skill_invocation",
+  "workflow_root": "/absolute/path/to/project"
 }\n''',
     "state": '''{
   "request_id": "20260609-1120-simple-workflow-plugin",
@@ -207,6 +208,7 @@ def resolve(root: Path, current: bool, req: str | None, session_id: str, errors:
     if current or not request_id:
         cur_path = simple / "sessions" / safe(session_id) / "current.json"
         cur = read_json(cur_path, f"`{rel(root, cur_path)}`", errors)
+        validate_current_workflow_root(cur, root, errors)
         request_id = metadata_request_id(cur)
         validate_request_id_aliases(cur, "current.json", errors)
         if not request_id:
@@ -248,6 +250,25 @@ def resolve(root: Path, current: bool, req: str | None, session_id: str, errors:
     validate_metadata_phases(cur, state, index_entry, errors)
     validate_goal_metadata(state, request_dir, errors)
     return Ctx(root, simple, request_id, request_dir, index, index_entry, cur, state)
+
+
+def validate_current_workflow_root(current: dict[str, Any], root: Path, errors: list[str]) -> None:
+    if "workflow_root" not in current:
+        return
+    value = current.get("workflow_root")
+    if not isinstance(value, str) or not value.strip():
+        errors.append("`current.json` workflow_root must be a non-empty canonical absolute path")
+        return
+    raw = value.strip()
+    path = Path(raw)
+    if not path.is_absolute():
+        errors.append("`current.json` workflow_root must be absolute")
+        return
+    if raw != str(path) or path.resolve() != path:
+        errors.append("`current.json` workflow_root must use canonical path text without symlink aliases")
+        return
+    if path != root.resolve():
+        errors.append("`current.json` workflow_root must match the validator root")
 
 
 def validate(ctx: Ctx, phase: str, errors: list[str]) -> None:

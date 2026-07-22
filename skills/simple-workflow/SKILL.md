@@ -62,6 +62,11 @@ Use these modes and this precedence:
 4. Otherwise preserve the nearest single-repository root. Merely being inside a manifest-backed
    slot does not promote a new or pointerless single-repo request to the bundle.
 
+Whenever the agent creates or selects a request, record the resolved canonical absolute root as
+`workflow_root` in that session's `current.json`. This optional field is a
+session-bound consistency assertion, not a discovery mechanism: the pointer lives under the root it describes. Existing
+pointers without the field remain valid. Hooks read but never backfill or rewrite it.
+
 Never infer a bundle from a path shape such as `worktrees/<name>` or from an individual
 repository's `git rev-parse --show-toplevel`. In a confirmed multi-repo request, the bundle root—not
 any child Git top-level—is the target project for Simple Workflow purposes.
@@ -123,7 +128,8 @@ Keep fixed validator contract tokens unchanged when needed: headings, table colu
 At the start of a Simple Workflow turn, resolve the workflow root using `Workflow Root Ownership`,
 then inspect `<workflow-root>/.simple/sessions/<session-id>/current.json` when it exists. When the
 skill trigger applies and the pointer is missing, invalid, or completed, the skill-applying agent
-creates or selects a request under that same root before continuing. Hooks do not infer activation from prompt strings.
+creates or selects a request under that same root, writes its canonical absolute `workflow_root` to
+the selected session pointer, and then continues. Hooks do not infer activation from prompt strings.
 
 If an active session pointer exists for a request in `plan` or `review` phase, treat follow-up user messages as Simple Workflow continuation even when the prompt does not mention the plugin again. Short answers, confirmations, corrections, and renewed requests such as `응`, `맞아`, `그렇게 해줘`, or `수정해줘` must continue from the active request and follow the same `plan.md`, internal review, validator, and approval rules. A completed request must not capture unrelated follow-up prompts; explicit Simple Workflow invocation starts or selects another request.
 
@@ -185,6 +191,22 @@ Before calling `create_goal`, call `get_goal` and reconcile it with the selected
 - If another unfinished Goal exists, stop and report the conflict instead of replacing it.
 
 The plugin `PreToolUse(create_goal)` hook is a structural gate only. Scope the gate only to Goal objectives containing an exact `.simple/requests/<request-id>/plan.md` path; mentioning Simple Workflow or `.simple` as a topic is not enough. Unrelated Stageflow or other `create_goal` calls must prepass. For an in-scope call, deny the tool unless the path's request id exactly equals the selected request, the selected request is in `review`, metadata is coherent, plugin-bundled review validation passes, the review, current plan, and objective fingerprints match, the review verdict is exactly uppercase `PASS`, and local Goal status is `pending`. V2 additionally requires `approved`, with the approved plan fingerprint matching the same plan; legacy requests retain their existing single-fingerprint gate. Do not write `goal.md`.
+
+For every new Simple Workflow Goal, the objective must contain the canonical host-native absolute
+`<workflow-root>/.simple/requests/<request-id>/plan.md` and its `sha256:<64-hex>` fingerprint,
+each exactly once. Quote or backtick an absolute path that contains whitespace. The absolute plan
+path bootstraps `create_goal` discovery when the hook process cwd differs from the workflow root;
+it does not override canonical single-repo or bundle ownership. The hook binds the derived root to
+the same session/request, checks optional `current.json.workflow_root`, applies the existing
+resolver and duplicate policy, and only then runs the existing review/approval/fingerprint gate.
+
+If an absolute Simple Workflow-like candidate is malformed, repeated, missing, stale, unreadable,
+drive-relative, foreign to the execution host, non-canonical, symlinked, or conflicts with another
+root/owner/source, fail closed and do not retry discovery from cwd. Only a Goal with no Simple
+Workflow plan candidate prepasses as unrelated. Exact legacy relative
+`.simple/requests/<request-id>/plan.md` objectives remain compatible only when the existing cwd and
+session resolver already finds their root. This bootstrap applies only to `create_goal`;
+UserPromptSubmit and Stop keep their existing non-blocking cwd behavior.
 
 After `create_goal` succeeds for a v2 request, record the objective fingerprint as `goal_plan_fingerprint` and set `goal_status: active`; approval was already recorded and must not be rewritten. If `create_goal` fails, preserve `approved + pending` and retry with the same approval. If the post-success state write fails, use the matching active Goal request id and objective fingerprint returned by `get_goal` as authoritative on the next turn, repair `goal_plan_fingerprint` and Goal status, and never call `create_goal` again for recovery. Legacy requests keep the existing single-fingerprint behavior.
 

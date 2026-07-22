@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -12,12 +13,19 @@ from pathlib import Path
 from typing import Any
 
 PHASE_TO_VALIDATION = {"plan": "plan", "review": "review", "completed": "all"}
-SIMPLE_PLAN_PATH_RE = re.compile(
-    r"(?<![A-Za-z0-9_.-])\.simple[/\\]requests[/\\](?P<request_id>\d{8}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)[/\\]plan\.md"
-    r"(?=$|[\s`'\"<>()\[\]{},;:]|\.(?:$|\s))",
+REQUEST_ID_PATTERN = r"\d{8}-\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*"
+EXACT_PLAN_TOKEN_RE = re.compile(
+    rf"^(?P<path>(?:.*[/\\])?\.simple[/\\]requests[/\\](?P<request_id>{REQUEST_ID_PATTERN})[/\\]plan\.md)$",
     re.I,
 )
-OBJECTIVE_FINGERPRINT_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
+SIMPLE_PLAN_HINT_RE = re.compile(
+    r"(?:^|[/\\])\.simple[/\\]requests[/\\][^\s]*[/\\]plan(?:\.[^/\\\s]*)?",
+    re.I,
+)
+OBJECTIVE_FINGERPRINT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])sha256:([0-9a-fA-F]{64})(?=$|[\s`'\"<>()\[\]{},;:.])"
+)
+OBJECTIVE_FINGERPRINT_HINT_RE = re.compile(r"(?<![A-Za-z0-9_])sha256:", re.I)
 CONTINUATION_WARNING = (
     "Active Simple Workflow request exists; continue Simple Workflow rules even if the prompt did not mention the plugin."
 )
@@ -49,19 +57,55 @@ def main(argv=None) -> int:
     event = norm_event(args.event)
     payload = {} if args.resolve_root else read_payload()
     session_id = safe(args.session_id) if args.session_id else session_id_from(payload)
-    objective_request_id = ""
-    if event == "pre_tool_use" and is_create_goal_tool(payload):
-        objective_request_id = simple_goal_request_id(extract_goal_objective(payload))
+    create_goal_tool = event == "pre_tool_use" and is_create_goal_tool(payload)
+    objective_analysis = (
+        analyze_goal_objective(extract_goal_objective(payload))
+        if create_goal_tool
+        else {"in_scope": False}
+    )
+    objective_request_id = str(objective_analysis.get("request_id") or "")
     request_id = safe(args.request_id) if args.request_id else objective_request_id
     start = Path(args.start).resolve() if args.start else Path.cwd().resolve()
     explicit_root = Path(args.root).resolve() if args.root else None
-    resolution = resolve_workflow_root(
-        start,
-        explicit_root=explicit_root,
-        multi_repo=args.multi_repo,
-        session_id=session_id,
-        request_id=request_id,
-    )
+    if create_goal_tool and objective_analysis.get("error"):
+        result = objective_block_result(event, start, session_id, objective_analysis)
+        resolution: dict[str, Any] = {}
+    else:
+        absolute_plan = str(objective_analysis.get("absolute_plan_path") or "")
+        if create_goal_tool and absolute_plan:
+            resolution = resolve_objective_workflow_root(
+                start,
+                absolute_plan,
+                session_id,
+                request_id,
+                explicit_root=explicit_root,
+                multi_repo=args.multi_repo,
+            )
+        else:
+            resolution = resolve_workflow_root(
+                start,
+                explicit_root=explicit_root,
+                multi_repo=args.multi_repo,
+                session_id=session_id,
+                request_id=request_id,
+            )
+        if resolution.get("status") != "RESOLVED":
+            result = objective_block_result(
+                event,
+                start,
+                session_id,
+                objective_analysis,
+                str(resolution.get("reason") or "workflow root could not be resolved"),
+                resolution,
+            )
+        else:
+            result = check_hook(
+                event,
+                Path(str(resolution["workflow_root"])),
+                payload,
+                resolution=resolution,
+                objective_analysis=objective_analysis,
+            )
     if args.resolve_root:
         if resolution.get("status") == "RESOLVED" and request_id and resolution.get("is_bundle"):
             resolution["duplicate"] = inspect_duplicate_requests(
@@ -69,23 +113,6 @@ def main(argv=None) -> int:
             )
         print(json.dumps(resolution, ensure_ascii=False, sort_keys=True))
         return 0 if resolution.get("status") == "RESOLVED" else 2
-    if resolution.get("status") != "RESOLVED":
-        result = {
-            "schema_version": "2",
-            "event": event,
-            "status": "UNRESOLVED_ROOT",
-            "severity": "warning",
-            "reason": resolution.get("reason", "workflow root could not be resolved"),
-            "decision": "block" if event == "pre_tool_use" and objective_request_id else None,
-            "root_resolution": resolution,
-        }
-    else:
-        result = check_hook(
-            event,
-            Path(str(resolution["workflow_root"])),
-            payload,
-            resolution=resolution,
-        )
     if args.diagnostic:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
@@ -95,6 +122,281 @@ def main(argv=None) -> int:
     elif event == "stop" and result.get("severity") == "warning":
         print(f"Simple Workflow WARN: {result.get('reason', 'state check failed')}", file=sys.stderr)
     return 0
+
+
+def analyze_goal_objective(objective: str, *, host_style: str | None = None) -> dict[str, Any]:
+    """Classify Simple Workflow plan occurrences without trusting them as ownership."""
+    style = host_style or ("windows" if os.name == "nt" else "posix")
+    hinted: list[str] = []
+    exact: list[tuple[str, str]] = []
+    for raw_token in objective_tokens(objective):
+        token = trim_objective_token(raw_token)
+        if not SIMPLE_PLAN_HINT_RE.search(token):
+            continue
+        hinted.append(token)
+        match = EXACT_PLAN_TOKEN_RE.fullmatch(token)
+        if match:
+            exact.append((match.group("path"), match.group("request_id")))
+
+    if not hinted:
+        return {"in_scope": False, "fingerprint_occurrences": []}
+
+    fingerprint_hints = OBJECTIVE_FINGERPRINT_HINT_RE.findall(objective)
+    fingerprints = [value.lower() for value in OBJECTIVE_FINGERPRINT_RE.findall(objective)]
+    result: dict[str, Any] = {
+        "in_scope": True,
+        "plan_hint_occurrences": hinted,
+        "plan_occurrence_count": len(exact),
+        "fingerprint_hint_count": len(fingerprint_hints),
+        "fingerprint_occurrences": fingerprints,
+    }
+    if len(hinted) != 1 or len(exact) != 1:
+        result["error"] = (
+            "Simple Workflow create_goal objective must contain exactly one exact "
+            "`.simple/requests/<request-id>/plan.md` path occurrence"
+        )
+        return result
+    if len(fingerprint_hints) != 1 or len(fingerprints) != 1:
+        result["error"] = (
+            "Simple Workflow create_goal objective must contain exactly one `sha256:<64-hex>` fingerprint occurrence"
+        )
+        return result
+
+    plan_path, request_id = exact[0]
+    result.update(plan_path=plan_path, request_id=request_id, fingerprint=fingerprints[0])
+    path_kind = classify_plan_path(plan_path, style)
+    result["path_kind"] = path_kind
+    if path_kind == "native_absolute":
+        result["absolute_plan_path"] = plan_path
+    elif path_kind == "relative":
+        result["relative_plan_path"] = plan_path
+    elif path_kind == "drive_relative":
+        result["error"] = "Simple Workflow absolute plan path must not use a drive-relative form"
+    elif path_kind == "foreign_absolute":
+        result["error"] = "Simple Workflow absolute plan path must use the current host path format"
+    else:
+        result["error"] = (
+            "Simple Workflow plan path must be canonical absolute or the exact legacy relative "
+            "`.simple/requests/<request-id>/plan.md` path"
+        )
+    return result
+
+
+def objective_tokens(value: str) -> list[str]:
+    """Split objective text while preserving whitespace inside simple quotes/backticks."""
+    tokens: list[str] = []
+    index = 0
+    while index < len(value):
+        while index < len(value) and value[index].isspace():
+            index += 1
+        if index >= len(value):
+            break
+        if value[index] in {'"', "'", "`"}:
+            quote = value[index]
+            end = value.find(quote, index + 1)
+            if end < 0:
+                tokens.append(value[index + 1 :])
+                break
+            tokens.append(value[index + 1 : end])
+            index = end + 1
+            continue
+        end = index
+        while end < len(value) and not value[end].isspace():
+            end += 1
+        tokens.append(value[index:end])
+        index = end
+    return tokens
+
+
+def trim_objective_token(value: str) -> str:
+    token = value.strip().lstrip("([{<").rstrip(",;:)]}>")
+    if token.lower().endswith("plan.md."):
+        token = token[:-1]
+    return token
+
+
+def classify_plan_path(value: str, host_style: str) -> str:
+    windows_drive_absolute = bool(re.match(r"^[A-Za-z]:[/\\]", value))
+    windows_drive_relative = bool(re.match(r"^[A-Za-z]:(?![/\\])", value))
+    windows_unc = bool(re.match(r"^(?:\\\\|//)[^/\\]+[/\\][^/\\]+", value))
+    posix_absolute = value.startswith("/") and not windows_unc
+    exact_relative = bool(
+        re.fullmatch(
+            rf"\.simple[/\\]requests[/\\]{REQUEST_ID_PATTERN}[/\\]plan\.md",
+            value,
+            re.I,
+        )
+    )
+    if windows_drive_relative:
+        return "drive_relative"
+    if host_style == "windows":
+        if windows_drive_absolute or windows_unc:
+            return "native_absolute"
+        if posix_absolute:
+            return "foreign_absolute"
+    else:
+        if posix_absolute:
+            return "native_absolute"
+        if windows_drive_absolute or windows_unc:
+            return "foreign_absolute"
+    if exact_relative:
+        return "relative"
+    return "invalid_relative"
+
+
+def objective_block_result(
+    event: str,
+    start: Path,
+    session_id: str,
+    analysis: dict[str, Any],
+    reason: str | None = None,
+    resolution: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    in_scope = bool(analysis.get("in_scope"))
+    result: dict[str, Any] = {
+        "schema_version": "2",
+        "event": event,
+        "status": "BLOCKED" if event == "pre_tool_use" and in_scope else "UNRESOLVED_ROOT",
+        "severity": "warning",
+        "reason": reason or str(analysis.get("error") or "workflow root could not be resolved"),
+        "cwd": str(start),
+        "invocation_cwd": str(start),
+        "workflow_root": None,
+        "root_source": "objective_absolute" if analysis.get("absolute_plan_path") else "cwd_discovery",
+        "hook_scope": {
+            "session_id": session_id,
+            "state_dir": f".simple/hook-state/sessions/{session_id}/main",
+        },
+        "prompt_relevant": False,
+        "continuation_required": False,
+        "preflight_required": in_scope,
+        "request_creation_required": False,
+        "create_goal_tool": event == "pre_tool_use",
+        "simple_workflow_goal_candidate": in_scope,
+        "goal_objective_request_id": str(analysis.get("request_id") or ""),
+        "objective_analysis": analysis,
+    }
+    if event == "pre_tool_use" and in_scope:
+        result["decision"] = "block"
+    if resolution:
+        result["root_resolution"] = resolution
+    return result
+
+
+def resolve_objective_workflow_root(
+    invocation_start: Path,
+    plan_path_text: str,
+    session_id: str,
+    request_id: str,
+    *,
+    explicit_root: Path | None = None,
+    multi_repo: bool = False,
+) -> dict[str, Any]:
+    plan_path = Path(plan_path_text)
+    if not plan_path.is_absolute():
+        return unresolved_objective_root(invocation_start, "absolute objective plan path is not host-native absolute")
+    if plan_path_text != str(plan_path):
+        return unresolved_objective_root(invocation_start, "absolute objective plan path is not canonical text")
+    if plan_path.name.lower() != "plan.md" or len(plan_path.parents) < 4:
+        return unresolved_objective_root(invocation_start, "absolute objective plan path has an invalid exact shape")
+    request_dir = plan_path.parent
+    if (
+        request_dir.name != request_id
+        or request_dir.parent.name != "requests"
+        or request_dir.parent.parent.name != ".simple"
+    ):
+        return unresolved_objective_root(invocation_start, "absolute objective plan path does not match its request id")
+    if not plan_path.is_file():
+        return unresolved_objective_root(invocation_start, "absolute objective plan path is missing or stale")
+    try:
+        canonical_plan = plan_path.resolve(strict=True)
+        with canonical_plan.open("rb") as stream:
+            stream.read(1)
+    except OSError as exc:
+        return unresolved_objective_root(invocation_start, f"absolute objective plan path is unreadable: {exc}")
+    if canonical_plan != plan_path:
+        return unresolved_objective_root(
+            invocation_start,
+            "absolute objective plan path must be canonical and may not use symlink aliases or escapes",
+        )
+
+    derived_root = request_dir.parent.parent.parent
+    canonical_root = derived_root.resolve()
+    if canonical_root != derived_root or not path_contains(canonical_root, canonical_plan):
+        return unresolved_objective_root(
+            invocation_start,
+            "absolute objective plan path resolves outside its canonical workflow root",
+        )
+    if explicit_root is not None and explicit_root.resolve() != canonical_root:
+        return unresolved_objective_root(
+            invocation_start,
+            f"absolute objective root conflicts with explicit workflow root `{explicit_root.resolve()}`",
+        )
+
+    current_path = canonical_root / ".simple" / "sessions" / safe(session_id) / "current.json"
+    if not current_path.is_file():
+        return unresolved_objective_root(
+            invocation_start,
+            "absolute objective workflow root has no current pointer for this session",
+        )
+    current = read_json(current_path)
+    if metadata_request_id(current) != request_id:
+        return unresolved_objective_root(
+            invocation_start,
+            "absolute objective request id does not match this session current pointer",
+        )
+    workflow_root_error = workflow_root_assertion_error(current.get("workflow_root"), canonical_root)
+    if workflow_root_error:
+        return unresolved_objective_root(invocation_start, workflow_root_error)
+
+    ownership = resolve_workflow_root(
+        canonical_root,
+        explicit_root=explicit_root,
+        multi_repo=multi_repo,
+        session_id=session_id,
+        request_id=request_id,
+    )
+    if ownership.get("status") != "RESOLVED":
+        return ownership
+    ownership_root = Path(str(ownership["workflow_root"])).resolve()
+    if ownership_root != canonical_root:
+        return unresolved_objective_root(
+            invocation_start,
+            f"absolute objective root conflicts with canonical ownership root `{ownership_root}`",
+        )
+    ownership["ownership_source"] = ownership.get("source")
+    ownership["source"] = "objective_absolute"
+    ownership["start"] = str(invocation_start)
+    ownership["objective_plan_path"] = str(canonical_plan)
+    return ownership
+
+
+def workflow_root_assertion_error(value: Any, expected_root: Path) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return "session current workflow_root must be a non-empty canonical absolute path"
+    raw = value.strip()
+    path = Path(raw)
+    if not path.is_absolute():
+        return "session current workflow_root must be absolute"
+    if raw != str(path) or path.resolve() != path:
+        return "session current workflow_root must use canonical path text without symlink aliases"
+    if path != expected_root.resolve():
+        return "session current workflow_root does not match the canonical objective root"
+    return None
+
+
+def unresolved_objective_root(start: Path, reason: str) -> dict[str, Any]:
+    return {
+        "status": "UNRESOLVED",
+        "start": str(start),
+        "root_kind": "objective",
+        "source": "objective_absolute",
+        "is_bundle": False,
+        "manifest": None,
+        "reason": reason,
+    }
 
 
 def resolve_workflow_root(
@@ -311,12 +613,16 @@ def check_hook(
     payload: dict[str, Any],
     *,
     resolution: dict[str, Any] | None = None,
+    objective_analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     create_goal_tool = event == "pre_tool_use" and is_create_goal_tool(payload)
     goal_objective = extract_goal_objective(payload) if create_goal_tool else ""
-    objective_request_id = simple_goal_request_id(goal_objective) if create_goal_tool else ""
-    objective_fingerprint = goal_objective_fingerprint(goal_objective) if create_goal_tool else ""
-    simple_goal_candidate = create_goal_tool and bool(objective_request_id)
+    analysis = objective_analysis or (
+        analyze_goal_objective(goal_objective) if create_goal_tool else {"in_scope": False}
+    )
+    objective_request_id = str(analysis.get("request_id") or "")
+    objective_fingerprint = str(analysis.get("fingerprint") or "")
+    simple_goal_candidate = create_goal_tool and bool(analysis.get("in_scope"))
     session_id = session_id_from(payload)
     current_path = root / ".simple" / "sessions" / safe(session_id) / "current.json"
     result: dict[str, Any] = {
@@ -338,6 +644,7 @@ def check_hook(
         "create_goal_tool": create_goal_tool,
         "simple_workflow_goal_candidate": simple_goal_candidate,
         "goal_objective_request_id": objective_request_id,
+        "objective_plan_path": str(analysis.get("plan_path") or ""),
     }
     if event not in {"user_prompt_submit", "pre_tool_use", "stop"}:
         result.update(status="PREPASS", severity="info", reason="event does not require Simple Workflow checks")
@@ -345,6 +652,8 @@ def check_hook(
     if event == "pre_tool_use" and not create_goal_tool:
         result.update(status="PREPASS", severity="info", reason="tool is outside the Simple Workflow goal gate")
         return result
+    if simple_goal_candidate and analysis.get("error"):
+        return block(result, str(analysis["error"]))
     if not current_path.is_file():
         if simple_goal_candidate:
             return block(result, "create_goal requires an active Simple Workflow review request")
@@ -651,13 +960,11 @@ def extract_goal_objective(payload: dict[str, Any]) -> str:
 
 
 def simple_goal_request_id(objective: str) -> str:
-    match = SIMPLE_PLAN_PATH_RE.search(objective)
-    return match.group("request_id") if match else ""
+    return str(analyze_goal_objective(objective).get("request_id") or "")
 
 
 def goal_objective_fingerprint(objective: str) -> str:
-    match = OBJECTIVE_FINGERPRINT_RE.search(objective)
-    return match.group(1).lower() if match else ""
+    return str(analyze_goal_objective(objective).get("fingerprint") or "")
 
 
 def is_create_goal_tool(payload: dict[str, Any]) -> bool:

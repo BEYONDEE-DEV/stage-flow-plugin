@@ -42,9 +42,18 @@ copy; unrelated Goal calls prepass. The plugin never moves, merges, aligns, or d
 {
   "request_id": "20260609-1120-simple-workflow-plugin",
   "phase": "plan",
-  "activated_by": "explicit_skill_invocation"
+  "activated_by": "explicit_skill_invocation",
+  "workflow_root": "/absolute/path/to/project"
 }
 ```
+
+`workflow_root` is optional for existing pointers and required by the agent when it creates or
+selects a new pointer. It is the canonical host-native absolute root that owns this request's
+`.simple` tree. The field is a consistency assertion after a root has been located, not a global
+session locator. `--current` validation accepts a missing legacy field, but when present requires
+canonical absolute path text equal to the validator root; relative values, another root, symlink
+aliases, and non-canonical spellings are invalid. `--request` validation does not read or require a
+session pointer. Hooks never migrate or rewrite this field.
 
 `.simple/requests/<request-id>/state.json`
 

@@ -16,6 +16,23 @@ child remains at its nearest repository root unless the exact bundle has the sam
 pointer. No `worktrees/<name>` path heuristic or child `git rev-parse --show-toplevel` result can
 promote a multi-repo request.
 
+For `PreToolUse(create_goal)`, a new Goal objective supplies one additional bootstrap that does not
+depend on hook cwd: exactly one canonical host-native absolute
+`<workflow-root>/.simple/requests/<request-id>/plan.md` occurrence and exactly one fingerprint.
+Paths containing whitespace must be quoted or backticked. The checker verifies exact path shape,
+file existence/readability, canonical containment, no symlink alias/escape, the same session and
+request pointer, and optional `current.json.workflow_root`. It then runs the existing resolver from
+that location; the objective is accepted only when the resolver returns the same canonical
+single-repository or bundle owner. Thus the absolute path bootstraps discovery but never overrides
+ownership or duplicate policy.
+
+Any Simple Workflow-like absolute candidate that is malformed, repeated, ambiguous, missing,
+stale, drive-relative, foreign to the execution host, non-canonical, symlinked, or inconsistent
+fails closed without cwd fallback. The same path or fingerprint repeated twice is also invalid.
+Only candidate-free Goals prepass as unrelated. An exact relative plan objective remains a legacy
+fallback only when cwd/session discovery already finds the root. UserPromptSubmit and Stop have no
+objective and retain their existing non-blocking cwd behavior; no global session registry is added.
+
 It keeps the session pointer model:
 
 ```text

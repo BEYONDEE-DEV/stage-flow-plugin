@@ -86,7 +86,47 @@ class ValidatorTests(unittest.TestCase):
             stderr=subprocess.STDOUT,
         )
         self.assertIn('"intent_challenge_version": 1', state.stdout)
+        current = subprocess.run(
+            [sys.executable, str(VALIDATOR), "--print-template", "current"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        self.assertIn('"workflow_root": "/absolute/path/to/project"', current.stdout)
         self.assertIn("## Intent Challenge Check", review.stdout)
+
+    def test_current_workflow_root_is_optional_and_must_match_canonical_root(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", approval_status="approved", goal_status="pending")
+            current_path = root / ".simple" / "sessions" / SESSION_ID / "current.json"
+            self.validate(root, "review")
+
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["workflow_root"] = str(root)
+            write_json(current_path, current)
+            self.validate(root, "review")
+
+            for value, expected in (
+                ("relative/project", "must be absolute"),
+                (str(root.parent), "must match the validator root"),
+                (str(root) + "/", "canonical path text"),
+            ):
+                with self.subTest(value=value):
+                    current["workflow_root"] = value
+                    write_json(current_path, current)
+                    self.assertIn(expected, self.validate(root, "review", False).stdout)
+
+    def test_current_workflow_root_rejects_symlink_alias_but_request_mode_is_unchanged(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", approval_status="approved", goal_status="pending")
+            alias = root / "root-alias"
+            alias.symlink_to(root, target_is_directory=True)
+            current_path = root / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["workflow_root"] = str(alias)
+            write_json(current_path, current)
+            self.assertIn("symlink aliases", self.validate(root, "review", False).stdout)
+            self.run_validator(root, "--request", REQUEST_ID, "--phase", "review")
 
     def test_plan_requires_sections_korean_and_exact_coverage_header(self) -> None:
         with temp_project() as td:

@@ -233,6 +233,191 @@ class HookCheckTests(unittest.TestCase):
                 result = self.run_hook(root, goal_payload(objective="Stageflow implementation request"), "pre_tool_use")
                 self.assertEqual(result["status"], "PREPASS")
 
+    def test_absolute_objective_bootstraps_child_root_from_parent_start(self) -> None:
+        with temp_project() as td:
+            parent = Path(td)
+            child = parent / "nested" / "repo with spaces"
+            (child / ".git").mkdir(parents=True)
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            current_path = child / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["workflow_root"] = str(child)
+            write_json(current_path, current)
+
+            allowed = self.run_discovered_hook(parent, absolute_goal_payload(child, quoted=True), "pre_tool_use")
+            self.assertEqual(allowed["status"], "CREATE_GOAL_ALLOWED")
+            self.assertEqual(allowed["workflow_root"], str(child))
+            self.assertEqual(allowed["root_source"], "objective_absolute")
+            self.assertEqual(allowed["invocation_cwd"], str(parent))
+
+            relative = self.run_discovered_hook(parent, goal_payload(child), "pre_tool_use")
+            self.assertEqual(relative["status"], "BLOCKED")
+            self.assertIn("active Simple Workflow", relative["reason"])
+
+    def test_absolute_objective_is_backward_compatible_without_stored_root(self) -> None:
+        with temp_project() as td:
+            parent = Path(td)
+            child = parent / "nested" / "repo"
+            (child / ".git").mkdir(parents=True)
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            result = self.run_discovered_hook(parent, absolute_goal_payload(child), "pre_tool_use")
+            self.assertEqual(result["status"], "CREATE_GOAL_ALLOWED")
+
+    def test_absolute_objective_cardinality_and_malformed_candidates_fail_closed(self) -> None:
+        with temp_project() as td:
+            parent = Path(td)
+            child = parent / "repo"
+            (child / ".git").mkdir(parents=True)
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            plan = child / ".simple" / "requests" / REQUEST_ID / "plan.md"
+            fingerprint = sha256(plan)
+            absolute = str(plan)
+            relative = f".simple/requests/{REQUEST_ID}/plan.md"
+            cases = {
+                "same path repeated": f"{absolute} {absolute} sha256:{fingerprint}",
+                "absolute and relative": f"{absolute} {relative} sha256:{fingerprint}",
+                "same fingerprint repeated": f"{absolute} sha256:{fingerprint} sha256:{fingerprint}",
+                "different fingerprints": f"{absolute} sha256:{fingerprint} sha256:{'0' * 64}",
+                "malformed second fingerprint": f"{absolute} sha256:{fingerprint} sha256:not-a-hash",
+                "too-long fingerprint": f"{absolute} sha256:{fingerprint}f",
+                "suffix candidate": f"{absolute}.bak sha256:{fingerprint}",
+                "extra path segment": f"{plan.parent / 'extra' / 'plan.md'} sha256:{fingerprint}",
+                "missing fingerprint": absolute,
+            }
+            for name, objective in cases.items():
+                with self.subTest(name=name):
+                    result = self.run_discovered_hook(
+                        parent,
+                        goal_payload(objective=objective),
+                        "pre_tool_use",
+                    )
+                    self.assertEqual(result["status"], "BLOCKED")
+                    self.assertIn("exactly one", result["reason"])
+
+    def test_absolute_objective_path_and_session_conflicts_fail_without_cwd_fallback(self) -> None:
+        with temp_project() as td:
+            parent = Path(td)
+            child = parent / "repo"
+            (child / ".git").mkdir(parents=True)
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            plan = child / ".simple" / "requests" / REQUEST_ID / "plan.md"
+            fingerprint = sha256(plan)
+
+            missing = plan.with_name("plan-missing.md")
+            missing_objective = str(missing).replace("plan-missing.md", "plan.md")
+            plan.rename(plan.with_name("saved-plan.md"))
+            blocked_missing = self.run_discovered_hook(
+                parent,
+                goal_payload(objective=f"{missing_objective} sha256:{fingerprint}"),
+                "pre_tool_use",
+            )
+            self.assertIn("missing or stale", blocked_missing["reason"])
+            plan.with_name("saved-plan.md").rename(plan)
+
+            current_path = child / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["workflow_root"] = str(parent)
+            write_json(current_path, current)
+            blocked_root = self.run_discovered_hook(parent, absolute_goal_payload(child), "pre_tool_use")
+            self.assertIn("workflow_root does not match", blocked_root["reason"])
+
+            current["workflow_root"] = str(child)
+            current["request_id"] = "20260722-1200-other-request"
+            write_json(current_path, current)
+            blocked_request = self.run_discovered_hook(parent, absolute_goal_payload(child), "pre_tool_use")
+            self.assertIn("request id does not match", blocked_request["reason"])
+
+            current["request_id"] = REQUEST_ID
+            write_json(current_path, current)
+            recovered = self.run_discovered_hook(parent, absolute_goal_payload(child), "pre_tool_use")
+            self.assertEqual(recovered["status"], "CREATE_GOAL_ALLOWED")
+
+            explicit_conflict = subprocess.run(
+                [
+                    sys.executable,
+                    str(HOOK_CHECK),
+                    "--root",
+                    str(parent),
+                    "--event",
+                    "pre_tool_use",
+                    "--diagnostic",
+                ],
+                cwd=parent,
+                input=json.dumps(absolute_goal_payload(child)),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(explicit_conflict.returncode, 0, explicit_conflict.stderr)
+            explicit_result = json.loads(explicit_conflict.stdout)
+            self.assertEqual(explicit_result["status"], "BLOCKED")
+            self.assertIn("explicit workflow root", explicit_result["reason"])
+
+    def test_absolute_objective_rejects_symlink_alias_and_ownership_override(self) -> None:
+        with temp_project() as td:
+            parent = Path(td)
+            child = parent / "repo"
+            (child / ".git").mkdir(parents=True)
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            alias = parent / "repo-alias"
+            alias.symlink_to(child, target_is_directory=True)
+            alias_plan = alias / ".simple" / "requests" / REQUEST_ID / "plan.md"
+            result = self.run_discovered_hook(
+                parent,
+                goal_payload(
+                    objective=f"{alias_plan} sha256:{sha256(child / '.simple' / 'requests' / REQUEST_ID / 'plan.md')}"
+                ),
+                "pre_tool_use",
+            )
+            self.assertIn("symlink aliases", result["reason"])
+
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="review", approval_status="approved", goal_status="pending")
+            make_v2_project(child, phase="review", approval_status="approved", goal_status="pending")
+            conflict = self.run_discovered_hook(child.parent, absolute_goal_payload(child), "pre_tool_use")
+            self.assertEqual(conflict["status"], "BLOCKED")
+            self.assertIn("canonical ownership root", conflict["reason"])
+
+    def test_absolute_objective_preserves_canonical_bundle_duplicate_policy(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="review", approval_status="approved", goal_status="pending")
+
+            canonical = self.run_discovered_hook(child, absolute_goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(canonical["status"], "CREATE_GOAL_ALLOWED")
+            self.assertEqual(canonical["workflow_root"], str(bundle))
+            self.assertEqual(canonical["root_kind"], "bundle")
+
+            canonical_request = bundle / ".simple" / "requests" / REQUEST_ID
+            duplicate_request = child / ".simple" / "requests" / REQUEST_ID
+            copy_request_artifacts(canonical_request, duplicate_request)
+            identical = self.run_discovered_hook(child, absolute_goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(identical["status"], "CREATE_GOAL_ALLOWED")
+            self.assertEqual(identical["duplicate"]["status"], "identical")
+
+            duplicate_state_path = duplicate_request / "state.json"
+            duplicate_state = json.loads(duplicate_state_path.read_text(encoding="utf-8"))
+            duplicate_state["diverged"] = True
+            write_json(duplicate_state_path, duplicate_state)
+            divergent = self.run_discovered_hook(child, absolute_goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(divergent["status"], "BLOCKED")
+            self.assertEqual(divergent["duplicate"]["status"], "divergent")
+
+    def test_plan_path_host_classification_is_explicit(self) -> None:
+        module = load_hook_check_module()
+        fingerprint = "1" * 64
+        posix = f"/tmp/project/.simple/requests/{REQUEST_ID}/plan.md sha256:{fingerprint}"
+        windows = rf"C:\project\.simple\requests\{REQUEST_ID}\plan.md sha256:{fingerprint}"
+        unc = rf"\\server\share\.simple\requests\{REQUEST_ID}\plan.md sha256:{fingerprint}"
+        drive_relative = rf"C:project\.simple\requests\{REQUEST_ID}\plan.md sha256:{fingerprint}"
+        self.assertEqual(module.analyze_goal_objective(posix, host_style="posix")["path_kind"], "native_absolute")
+        self.assertEqual(module.analyze_goal_objective(windows, host_style="windows")["path_kind"], "native_absolute")
+        self.assertEqual(module.analyze_goal_objective(unc, host_style="windows")["path_kind"], "native_absolute")
+        self.assertIn("current host", module.analyze_goal_objective(windows, host_style="posix")["error"])
+        self.assertIn("current host", module.analyze_goal_objective(posix, host_style="windows")["error"])
+        self.assertIn("drive-relative", module.analyze_goal_objective(drive_relative, host_style="windows")["error"])
+
     def test_manifest_resolution_separates_multi_repo_and_single_repo_modes(self) -> None:
         with temp_project() as td:
             _, bundle, child = make_slot_fixture(Path(td))
@@ -355,7 +540,7 @@ class HookCheckTests(unittest.TestCase):
             other = objective.replace(REQUEST_ID, "20260710-1200-other")
             self.assertIn("selected request id", self.run_hook(root, goal_payload(objective=other), "pre_tool_use")["reason"])
             suffix = objective.replace("plan.md", "plan.md.bak")
-            self.assertEqual(self.run_hook(root, goal_payload(objective=suffix), "pre_tool_use")["status"], "PREPASS")
+            self.assertEqual(self.run_hook(root, goal_payload(objective=suffix), "pre_tool_use")["status"], "BLOCKED")
             prefixed = objective.replace(".simple/", "not.simple/")
             self.assertEqual(self.run_hook(root, goal_payload(objective=prefixed), "pre_tool_use")["status"], "PREPASS")
 
@@ -451,6 +636,12 @@ def goal_payload(
         "tool_name": tool_name,
         "tool_input": {"objective": objective},
     }
+
+
+def absolute_goal_payload(root: Path, *, quoted: bool = False) -> dict[str, object]:
+    plan = root / ".simple" / "requests" / REQUEST_ID / "plan.md"
+    path = f"`{plan}`" if quoted else str(plan)
+    return goal_payload(objective=f"{path} Reviewed Plan Fingerprint sha256:{sha256(plan)}")
 
 
 def load_hook_check_module():
