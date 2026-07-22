@@ -207,6 +207,44 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         )
         self.assertNotIn("mixed multi-repo states are unsupported", skill)
 
+    def test_submit_recovers_one_exactly_proven_omitted_merged_pr(self) -> None:
+        skill = read(SKILL)
+        reference = read(REFERENCE)
+
+        for phrase in [
+            "exactly proven single-generation merged-PR reconciliation",
+            "Do not ask for manual manifest editing",
+            "Before taking the submit lock",
+            "the successor head is an ancestor of local `HEAD`",
+            "narrowly recoverable omitted successor",
+            "nonlinear or incompletely proven lost manifest history",
+            "a second later PR for the same exact base/head is ambiguous",
+        ]:
+            self.assertIn(phrase, skill)
+        for phrase in [
+            "every exact-pair PR with a number greater than the recorded PR is later history",
+            "A PR from another slot has a different fixed task head",
+            "exactly one later PR exists for that exact base/head",
+            "no second later exact-base/head PR exists in any state or ancestry relationship",
+            "remote task branch equals the successor head",
+            "successor head is an ancestor of or equal to local task `HEAD`",
+            "local-only next-work commits are preserved",
+            "GitHub compare API",
+            "proof completes before acquiring the operation lock",
+            "Do not use the cwd-dependent, default-limited `gh pr list`",
+            'gh api --method GET --paginate --slurp "repos/<owner>/<repo>/pulls"',
+            '-f head="<owner>:<task>" -f per_page=100',
+            "Flatten every returned page",
+            "verify each result's repository identity and exact base/head",
+            "gh pr view --repo <owner/repo>",
+            "reconcile-batch",
+            "Do not repair more than one omitted generation in one submit",
+            "internal `last_reconciliation` receipt",
+            "predecessor PR differs from the stored receipt fails before any repository advances",
+        ]:
+            self.assertIn(phrase, reference)
+        self.assertNotIn("local task `HEAD` equals the successor merge commit", reference)
+
     def test_create_is_one_time_idempotent_initialization(self) -> None:
         skill = read(SKILL)
         reference = read(REFERENCE)
@@ -1112,6 +1150,212 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             self.assertEqual(status["repositories"]["service-a"]["generation"], 0)
             self.assertIsNone(status["repositories"]["service-a"]["pr"])
 
+    def test_reconcile_batch_requires_exact_current_pr_and_is_retry_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a", "task-a", "main", "origin",
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-a", "0", "17",
+            )
+            wrong_pr = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "1", "16", "19",
+                check=False,
+            )
+            first = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "1", "17", "19",
+            )
+            repeated = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "1", "17", "19",
+            )
+
+            self.assertEqual(wrong_pr.returncode, 2)
+            self.assertIn("current PR mismatch", wrong_pr.stderr)
+            self.assertEqual(json.loads(first.stdout)["result"], json.loads(repeated.stdout)["result"])
+            identity = json.loads(first.stdout)["result"]["repositories"]["service-a"]
+            self.assertEqual(identity["generation"], 2)
+            self.assertEqual(identity["pr"], "19")
+            self.assertEqual(
+                identity["last_reconciliation"],
+                {
+                    "from_generation": 1,
+                    "from_pr": "17",
+                    "to_generation": 2,
+                    "to_pr": "19",
+                },
+            )
+
+            before_wrong_retry = (root / ".stageflow-worktrees" / "slots.json").read_bytes()
+            wrong_retry = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "1", "16", "19",
+                check=False,
+            )
+            self.assertEqual(wrong_retry.returncode, 2)
+            self.assertIn("recovery retry does not match its receipt", wrong_retry.stderr)
+            self.assertEqual(
+                (root / ".stageflow-worktrees" / "slots.json").read_bytes(),
+                before_wrong_retry,
+            )
+
+    def test_reconcile_batch_requires_lock_and_rejects_generation_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-a", "task-a", "main", "origin",
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-a", "0", "17",
+            )
+            self.run_manifest(root, "unlock", "--slot", "slot-1", "--token", "submit-a")
+            no_lock = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "1", "17", "19",
+                check=False,
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            wrong_generation = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-recovery", "service-a", "2", "17", "19",
+                check=False,
+            )
+
+            self.assertEqual(no_lock.returncode, 2)
+            self.assertIn("not locked", no_lock.stderr)
+            self.assertEqual(wrong_generation.returncode, 2)
+            self.assertIn("generation mismatch", wrong_generation.stderr)
+
+    def test_reconcile_batch_updates_multiple_repositories_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-2"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-2",
+                "--path", str(path),
+                "--repository", "service-newer", "task-newer", "main", "origin",
+                "--repository", "service-older", "task-older", "main", "origin",
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-2", "--token", "submit-b")
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-update", "service-newer", "0", "20",
+                "--repository-update", "service-older", "0", "10",
+            )
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-update", "service-newer", "1", "22",
+            )
+
+            before_invalid = (root / ".stageflow-worktrees" / "slots.json").read_bytes()
+            invalid = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-recovery", "service-newer", "2", "22", "24",
+                "--repository-recovery", "service-older", "2", "10", "12",
+                check=False,
+            )
+            self.assertEqual(invalid.returncode, 2)
+            self.assertIn("generation mismatch", invalid.stderr)
+            self.assertEqual(
+                (root / ".stageflow-worktrees" / "slots.json").read_bytes(),
+                before_invalid,
+            )
+
+            recovered = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-recovery", "service-newer", "2", "22", "24",
+                "--repository-recovery", "service-older", "1", "10", "12",
+            )
+            repositories = json.loads(recovered.stdout)["result"]["repositories"]
+            self.assertEqual(repositories["service-newer"]["generation"], 3)
+            self.assertEqual(repositories["service-newer"]["pr"], "24")
+            self.assertEqual(repositories["service-older"]["generation"], 2)
+            self.assertEqual(repositories["service-older"]["pr"], "12")
+
+            before_mixed_retry = (root / ".stageflow-worktrees" / "slots.json").read_bytes()
+            mixed_wrong_retry = self.run_manifest(
+                root,
+                "reconcile-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-recovery", "service-newer", "2", "WRONG", "24",
+                "--repository-recovery", "service-older", "2", "12", "14",
+                check=False,
+            )
+            self.assertEqual(mixed_wrong_retry.returncode, 2)
+            self.assertIn("recovery retry does not match its receipt", mixed_wrong_retry.stderr)
+            self.assertEqual(
+                (root / ".stageflow-worktrees" / "slots.json").read_bytes(),
+                before_mixed_retry,
+            )
+
+            advanced = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-2",
+                "--token", "submit-b",
+                "--repository-update", "service-newer", "3", "26",
+            )
+            self.assertNotIn(
+                "last_reconciliation",
+                json.loads(advanced.stdout)["result"]["repositories"]["service-newer"],
+            )
+
     def test_legacy_lifecycle_manifest_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1341,6 +1585,45 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                     result = self.run_manifest(root, "status", check=False)
                     self.assertEqual(result.returncode, 2)
                     self.assertIn(error, result.stderr)
+
+    def test_schema_v3_rejects_null_or_malformed_reconciliation_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            manifest_path = state / "slots.json"
+            base_identity = {
+                "branch": "task-a",
+                "source_branch": "main",
+                "remote": "origin",
+                "generation": 2,
+                "pr": "19",
+            }
+            for receipt in [
+                None,
+                {},
+                {
+                    "from_generation": 1,
+                    "from_pr": "17",
+                    "to_generation": 3,
+                    "to_pr": "19",
+                },
+            ]:
+                with self.subTest(receipt=receipt):
+                    identity = dict(base_identity, last_reconciliation=receipt)
+                    manifest = {
+                        "schema_version": 3,
+                        "slots": {
+                            "slot-1": {
+                                "path": str((root / "worktrees" / "slot-1").resolve()),
+                                "repositories": {"service-a": identity},
+                            }
+                        },
+                    }
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                    result = self.run_manifest(root, "status", check=False)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("invalid reconciliation receipt", result.stderr)
 
     def test_schema_version_must_be_an_exact_integer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

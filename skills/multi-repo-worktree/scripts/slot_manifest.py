@@ -46,7 +46,10 @@ def empty_manifest() -> dict[str, Any]:
 def validate_repository(name: str, identity: Any, slot_name: str) -> None:
     if not isinstance(name, str) or not name or not isinstance(identity, dict):
         raise ManifestError(f"slot {slot_name!r} has an invalid repository identity")
-    if set(identity) != {"branch", "source_branch", "remote", "generation", "pr"}:
+    required_fields = {"branch", "source_branch", "remote", "generation", "pr"}
+    if not required_fields.issubset(identity) or set(identity) - (
+        required_fields | {"last_reconciliation"}
+    ):
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has unexpected fields")
     if not isinstance(identity["branch"], str) or not identity["branch"]:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch")
@@ -72,6 +75,37 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation 0 must not have a PR")
     if identity["generation"] > 0 and pr is None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation requires a PR")
+    if "last_reconciliation" in identity:
+        receipt = identity["last_reconciliation"]
+        if not isinstance(receipt, dict) or set(receipt) != {
+            "from_generation",
+            "from_pr",
+            "to_generation",
+            "to_pr",
+        }:
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} has an invalid reconciliation receipt"
+            )
+        from_generation = receipt["from_generation"]
+        to_generation = receipt["to_generation"]
+        from_pr = receipt["from_pr"]
+        to_pr = receipt["to_pr"]
+        if (
+            type(from_generation) is not int
+            or from_generation <= 0
+            or type(to_generation) is not int
+            or to_generation != from_generation + 1
+            or not isinstance(from_pr, str)
+            or not from_pr
+            or not isinstance(to_pr, str)
+            or not to_pr
+            or from_pr == to_pr
+            or identity["generation"] != to_generation
+            or pr != to_pr
+        ):
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} has an invalid reconciliation receipt"
+            )
 
 
 def validate_manifest_v3(data: Any) -> dict[str, Any]:
@@ -300,6 +334,19 @@ def parse_repository_updates(values: list[list[str]]) -> list[tuple[str, int, st
     return updates
 
 
+def parse_repository_recoveries(values: list[list[str]]) -> list[tuple[str, int, str, str]]:
+    recoveries: list[tuple[str, int, str, str]] = []
+    for repo, expected_generation_text, expected_pr, recovered_pr in values:
+        try:
+            expected_generation = int(expected_generation_text)
+        except ValueError as exc:
+            raise ManifestError(
+                f"repository {repo!r} expected generation must be an integer"
+            ) from exc
+        recoveries.append((repo, expected_generation, expected_pr, recovered_pr))
+    return recoveries
+
+
 def initialize(
     data: dict[str, Any],
     name: str,
@@ -498,6 +545,71 @@ def record_batch(
     for repo, expected_generation, pr in pending:
         repositories[repo]["generation"] = expected_generation + 1
         repositories[repo]["pr"] = pr
+        repositories[repo].pop("last_reconciliation", None)
+    return slot
+
+
+def reconcile_batch(
+    data: dict[str, Any],
+    name: str,
+    repository_recoveries: list[tuple[str, int, str, str]],
+) -> dict[str, Any]:
+    if not repository_recoveries:
+        raise ManifestError("at least one repository PR recovery is required")
+    recoveries: dict[str, tuple[int, str, str]] = {}
+    for repo, expected_generation, expected_pr, recovered_pr in repository_recoveries:
+        if not repo or not expected_pr or not recovered_pr:
+            raise ManifestError("repository and PR values must not be empty")
+        if type(expected_generation) is not int or expected_generation <= 0:
+            raise ManifestError("recovery expected generation must be a positive integer")
+        if expected_pr == recovered_pr:
+            raise ManifestError(f"repository {repo!r} recovered PR matches its current PR")
+        if repo in recoveries:
+            raise ManifestError(f"duplicate repository PR recovery: {repo}")
+        recoveries[repo] = (expected_generation, expected_pr, recovered_pr)
+
+    slot = require_slot(data, name)
+    require_complete_context(slot, name)
+    repositories = slot["repositories"]
+    missing = sorted(set(recoveries) - set(repositories))
+    if missing:
+        raise ManifestError(f"slot {name!r} has no repository binding for: {', '.join(missing)}")
+
+    pending: list[tuple[str, int, str]] = []
+    for repo, (expected_generation, expected_pr, recovered_pr) in recoveries.items():
+        identity = repositories[repo]
+        if identity["generation"] == expected_generation + 1 and identity["pr"] == recovered_pr:
+            expected_receipt = {
+                "from_generation": expected_generation,
+                "from_pr": expected_pr,
+                "to_generation": expected_generation + 1,
+                "to_pr": recovered_pr,
+            }
+            if identity.get("last_reconciliation") != expected_receipt:
+                raise ManifestError(f"repository {repo!r} recovery retry does not match its receipt")
+            continue
+        if identity["generation"] != expected_generation:
+            raise ManifestError(
+                f"repository {repo!r} generation mismatch: "
+                f"expected {expected_generation}, found {identity['generation']}"
+            )
+        if identity["pr"] != expected_pr:
+            raise ManifestError(
+                f"repository {repo!r} current PR mismatch: "
+                f"expected {expected_pr!r}, found {identity['pr']!r}"
+            )
+        pending.append((repo, expected_generation, recovered_pr))
+
+    for repo, expected_generation, recovered_pr in pending:
+        expected_pr = recoveries[repo][1]
+        repositories[repo]["generation"] = expected_generation + 1
+        repositories[repo]["pr"] = recovered_pr
+        repositories[repo]["last_reconciliation"] = {
+            "from_generation": expected_generation,
+            "from_pr": expected_pr,
+            "to_generation": expected_generation + 1,
+            "to_pr": recovered_pr,
+        }
     return slot
 
 
@@ -557,6 +669,21 @@ def parser() -> argparse.ArgumentParser:
         metavar=("REPO", "EXPECTED_GENERATION", "PR"),
         help="Repository, current generation, and new PR; repeat for every updated repository",
     )
+
+    reconcile = subparsers.add_parser(
+        "reconcile-batch",
+        help="Atomically recover exactly proven missing merged PR generations",
+    )
+    reconcile.add_argument("--slot", required=True)
+    reconcile.add_argument("--token", required=True)
+    reconcile.add_argument(
+        "--repository-recovery",
+        action="append",
+        required=True,
+        nargs=4,
+        metavar=("REPO", "EXPECTED_GENERATION", "EXPECTED_PR", "RECOVERED_PR"),
+        help="Repository, current generation/PR, and proven successor PR; repeat as needed",
+    )
     return result
 
 
@@ -589,12 +716,19 @@ def main() -> int:
                 elif args.command == "bind-context":
                     contexts = parse_repository_contexts(args.repository_context)
                     payload = bind_context(data, args.slot, contexts)
-                else:
+                elif args.command == "record-batch":
                     require_operation_lock(args.root, args.slot, args.token)
                     payload = record_batch(
                         data,
                         args.slot,
                         parse_repository_updates(args.repository_update),
+                    )
+                else:
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = reconcile_batch(
+                        data,
+                        args.slot,
+                        parse_repository_recoveries(args.repository_recovery),
                     )
                 write_manifest(path, data)
         print(json.dumps({"ok": True, "result": payload}, ensure_ascii=False, sort_keys=True))

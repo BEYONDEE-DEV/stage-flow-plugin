@@ -81,6 +81,8 @@ While PR 1 is OPEN, every commit pushed to its fixed head branch becomes part of
 
 Generation `0` requires `pr: null` and proves that no PR has been recorded yet. Every positive generation requires a non-empty current PR. Do not infer `NONE` merely from a missing field. A new schema-3 `create` requires non-empty source branch and remote for every repository.
 
+After `reconcile-batch`, the affected repository also carries an internal `last_reconciliation` receipt containing the exact from/to generation and PR values. It exists only to prove an exact crash retry and must match the current generation/PR. A later successful `record-batch` clears it; a later reconciliation replaces it. The skill never asks the user to edit this receipt.
+
 The helper reads a schema-2 permanent manifest as schema 3 with paired `source_branch: null` and `remote: null` legacy context without writing the file. `status`, inspection, and dry-run must leave manifest bytes unchanged. Before a selected legacy slot performs a routine write, prove every missing context from exact recorded-PR base plus one repository-matching remote, or ask once for only the unproven facts. Then fill the complete selected slot atomically with `bind-context`; sibling legacy slots may remain nullable. Never partially bind a slot or overwrite a non-null context. Legacy schema 1 manifests used task ownership and release semantics; fail closed with the helper's explicit legacy error.
 
 Use the helper relative to the loaded skill directory:
@@ -110,10 +112,15 @@ python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   --repository-update "<repo-b>" "<current-generation-b>" "<new-pr-b>"
 
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  reconcile-batch --slot "<slot>" --token "<unique-submit-token>" \
+  --repository-recovery "<repo-a>" "<current-generation>" \
+  "<recorded-pr>" "<proven-successor-merged-pr>"
+
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   unlock --slot "<slot>" --token "<unique-submit-token>"
 ```
 
-`initialize` writes the entire repository binding atomically. An exact repeated call is idempotent and preserves generation/current PR; a different path, repository set, task/source branch, or remote fails closed. An exact retry may fill null context promoted from schema 2. `bind-context` requires every repository in the selected slot, writes them atomically, and is exact-retry idempotent. `record-batch` and operation-lock acquisition require complete context; `record-batch` requires the exact operation lock, validates every participating repository against the expected generation carried by its own `--repository-update`, and updates all new PR pointers in one atomic manifest write. It may therefore advance generation `0` for one repository and generation `1` for another in the same call. Repeating the exact successful update is idempotent, including a retry where some listed updates were already recorded exactly.
+`initialize` writes the entire repository binding atomically. An exact repeated call is idempotent and preserves generation/current PR; a different path, repository set, task/source branch, or remote fails closed. An exact retry may fill null context promoted from schema 2. `bind-context` requires every repository in the selected slot, writes them atomically, and is exact-retry idempotent. `record-batch`, `reconcile-batch`, and operation-lock acquisition require complete context and the exact operation lock. `record-batch` validates every participating repository against the expected generation carried by its own `--repository-update`, updates all newly created or adopted OPEN PR pointers atomically, and clears any obsolete reconciliation receipt for those repositories. `reconcile-batch` additionally compares the exact current PR before advancing one generation to an externally proven omitted MERGED successor and records the exact transition receipt; it does not prove GitHub or Git facts itself. The submit flow must establish the proof below before calling it. Both batch writes are exact-retry idempotent, and a retry whose predecessor PR differs from the stored receipt fails before any repository advances.
 
 The operation lock is separate from slot ownership. Acquire it after complete preflight and before the first submit mutation. A competing token fails immediately. After execution has stopped mutating state, capture the final inspection/report and unlock with the exact token even when recovery is required. A crashed process may leave a lock: show `lock-status`, verify no submit is still running, and ask one explicit recovery question before exact-token unlock; never steal or expire it automatically.
 
@@ -159,7 +166,7 @@ Before any write, block the whole plan on:
 - an existing slot operation lock from another token
 - `CLOSED`, missing/inaccessible recorded PR, Draft PR, head/base mismatch, unknown API state, unexpected remote divergence, or ambiguous retry candidate
 
-Fetch is a Git write because it updates shared remote-tracking refs. Finish local/path/branch/manifest/GitHub preflight before fetch. After fetching all repos, pin every fetched SHA and finish ancestry, divergence, and conflict preflight before changing local branches.
+Fetch is a Git write because it updates shared remote-tracking refs. Finish local/path/branch/manifest/GitHub preflight before fetch. Omitted-PR recovery additionally requires its complete GitHub API, `ls-remote`, and local-graph proof before acquiring the operation lock. After fetching all repos, pin every fetched SHA and revalidate ancestry, divergence, and conflict facts before changing local branches or the manifest.
 
 ## Create
 
@@ -191,16 +198,39 @@ Use the manifest and read-only GitHub queries to classify each changed repositor
 
 ```bash
 gh pr view "<recorded-pr>" --repo "<owner/repo>" \
-  --json number,state,isDraft,headRefName,headRefOid,baseRefName,mergedAt,url
+  --json number,state,isDraft,headRefName,headRefOid,baseRefName,createdAt,mergedAt,mergeCommit,url
 ```
 
-Classify only:
+Before treating later same-branch history as unsupported manifest loss, list every PR for the exact recorded base/head pair. PR numbers are repository-wide monotonic identifiers, so every exact-pair PR with a number greater than the recorded PR is later history. A PR from another slot has a different fixed task head and is outside this candidate set even when it uses the same repository and source branch. A repository has one narrowly recoverable omitted successor only when all of these facts hold together:
+
+- the recorded current PR is exact `MERGED`, ready, and matches the manifest base/head;
+- exactly one later PR exists for that exact base/head, it has a different head OID descended from the recorded head OID, and it is ready `MERGED` with a non-null merge commit;
+- no second later exact-base/head PR exists in any state or ancestry relationship; an `OPEN`, `CLOSED`, Draft, `MERGED`, or nonlinear later PR is ambiguity, not an ignorable non-candidate;
+- `git ls-remote` proves that the remote task branch equals the successor head and captures the current remote source SHA;
+- the recorded head is an ancestor of the successor head, and the successor head is an ancestor of or equal to local task `HEAD`, so local-only next-work commits are preserved;
+- the GitHub compare API reports the successor merge commit as an ancestor of or equal to the captured remote source SHA; and
+- all of this proof completes before acquiring the operation lock, without fetch, manifest mutation, staging, commit, branch change, or remote publication;
+- after acquiring the submit lock and fetching the stored remote, the pinned task/source refs and local graph reproduce the same proof; and
+- immediate reinspection shows the manifest generation/current PR, GitHub PR identities, remote task ref, local `HEAD`, and pinned source SHA are unchanged.
+
+Do not use the cwd-dependent, default-limited `gh pr list` for this proof. Query the exact repository and exhaust every REST page:
+
+```bash
+gh api --method GET --paginate --slurp "repos/<owner>/<repo>/pulls" \
+  -f state=all -f base="<source>" -f head="<owner>:<task>" -f per_page=100
+```
+
+Flatten every returned page, then verify each result's repository identity and exact base/head before counting later PR numbers. Use `gh pr view --repo <owner/repo>` including `createdAt` and `mergeCommit` for the recorded PR and the sole successor. Before the lock, use `git -C <development-worktree> ls-remote --heads <remote>`, local `git merge-base --is-ancestor`, and `gh api repos/<owner>/<repo>/compare/<successor-merge-sha>...<remote-source-sha>`; accept compare status only when it is `ahead` or `identical`. Any missing page/object, second later exact-pair PR, mismatched repository/base/head, nonlinear later history, remote task mismatch, successor head not contained by local `HEAD`, or remote/pinned source that lacks the merge commit is unsupported and blocks the entire batch. Do not repair more than one omitted generation in one submit.
+
+After the full proof succeeds, call `reconcile-batch` with the exact generation, recorded PR, and successor PR. Re-read the manifest, re-query the successor, classify the repository as the newly recorded `MERGED` generation, and continue the normal `Submit MERGED` flow in the same operation. If later commit, merge, push, or PR creation fails, keep the factual reconciliation and report it as completed recovery state rather than rolling it back.
+
+Classify only after any exact reconciliation:
 
 - `NONE`: manifest generation is exactly `0`, current PR is `null`, and no conflicting PR exists for the fixed head branch.
 - `OPEN`: the recorded PR state is `OPEN`, `isDraft` is false, and its base/head branches exactly match the manifest source/fixed task branches.
 - `MERGED`: the recorded PR state is `MERGED`, `mergedAt` is non-null, and its base/head branches exactly match.
 
-Treat a non-merged `CLOSED` PR as unsupported, not as `MERGED` or `NONE`. Classifications and generations belong to individual repositories: allow any mix of otherwise valid `NONE`, `OPEN`, and `MERGED` repositories in one submit. Complete this whole-batch read-only preflight, send one non-blocking execution summary that names each repository's classification and state-specific effects, acquire the operation lock, and re-run the relevant checks before staging or fetching. The explicit `submit` request already authorizes the routine commit, fetch, merge, push, PR, and manifest writes described by each classified flow. Never propose bypassing the skill merely because supported repository states differ.
+Treat a non-merged `CLOSED` PR as unsupported, not as `MERGED` or `NONE`. An exactly recoverable omitted successor is a pre-classification recovery state, not a fourth persistent PR classification. Classifications and generations belong to individual repositories: allow any mix of otherwise valid `NONE`, `OPEN`, and `MERGED` repositories in one submit. Complete the whole-batch local/GitHub/remote proof without mutation, send one non-blocking execution summary that names each repository's classification or recoverable state and effects, acquire the operation lock, fetch and revalidate every recovery fact, reconcile, then re-run the relevant checks before staging. The explicit `submit` request already authorizes the routine reconciliation, commit, fetch, merge, push, PR, and manifest writes described by each flow. Never propose bypassing the skill merely because supported repository states differ.
 
 Inspect staged, unstaged, and non-ignored untracked paths. A dirty repo is eligible only when every changed path and patch is clearly part of the current user task and validation covers that content. Any unrelated, generated, secret-bearing, ignored-only, or ambiguous change blocks the whole batch before staging and triggers one consolidated content-scope question. Existing staged changes are not automatically trusted; inspect them under the same rule.
 
