@@ -1,0 +1,40 @@
+{
+  "schema_version": "1",
+  "case_id": "GOLDEN-V5-003",
+  "expected_terminal_verdict": "FAIL",
+  "expected_findings": [
+    {
+      "finding_id": "FINDING-V5-003-ALPHA",
+      "category": "orphan-aid",
+      "aid": "AID-V5-003-ALPHA",
+      "gate": "final-request-bound"
+    },
+    {
+      "finding_id": "FINDING-V5-003-BETA",
+      "category": "orphan-aid",
+      "aid": "AID-V5-003-BETA",
+      "gate": "final-request-bound"
+    }
+  ],
+  "expected_receipt_observation": {
+    "reviewer_role": "development",
+    "scope": "final-request-bound",
+    "validation_question": "Does every AID created by this v5 request have a managed or request-local [AID-REF:<aid>] consumer at the final gate?",
+    "observed_result": "AID-V5-003-ALPHA and AID-V5-003-BETA are defined, but neither has a managed or request-local reference consumer.",
+    "verdict": "FAIL",
+    "report_binding": {
+      "report_kind": "findings-only",
+      "required_finding_ids": [
+        "FINDING-V5-003-ALPHA",
+        "FINDING-V5-003-BETA"
+      ],
+      "request_local_path_required": true,
+      "sha256_required": true
+    },
+    "cryptographic_semantic_proof_claimed": false
+  },
+  "required_consumer_marker": "[AID-REF:<aid>]",
+  "forbidden_outcomes": [
+    "PASS"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "corpus.json": "22ded4241b1dd045ad84203b920ee32cf9c4a847f185d21d425b139113bffd99",
+    "expected/canonical-identifier-conflict.json": "7a59dbaab93252e337d2ec91eaba6bc5a240a30c5448ae3f23f1aca3e8fa0789",
+    "expected/independent-claims-overmerged.json": "37e6ff63b4ee8a3ab15cebeabb0333a37d7e77faebefbdc7cb0e5d57ab7c4da5",
+    "expected/mechanical-aid-orphans.json": "a0531843acbde713c5753617ba69cb4b6e1d49f1a9dc9914880d654a335aba54",
+    "expected/pii-resource-mismatch.json": "eaab57e8cb407284ac6c6b967466c1fb69ba18a7d7d3a493984aeca80ebddd30",
+    "raw/case-001/contract.md": "80e15ba7d3ec840f36ffea3c9f2b035a20220f6cdace99d4e9f6c7658a4dfad1",
+    "raw/case-001/request.json": "07c9dfd8307a7e663f01dfaebaaa9a4f4a02a2fd0626c54b695bf877906a83ad",
+    "raw/case-001/source.py": "757433513d7cf0e7a7d52697bdb42f9b3f381babd43b3f537a6e742570fd352a",
+    "raw/case-002/contract.md": "2d37e5ac8cb381b5c979527daaa23d1dd7fd1b513ad00c9fd2d219cb03967c70",
+    "raw/case-002/request.json": "6efbb5484068a5877cf9c5ad5aabb57db7f486f5ef5124561397ff4074513ea9",
+    "raw/case-002/source.py": "078f00ee9294ec72118c94462c054f3e0f21e38f8dbb223d5066c707905c5da5",
+    "raw/case-003/contract.md": "c0796513e4c2bd9a76354242e3f2a65fcb9f01472e633dad3cb7530740c519ad",
+    "raw/case-003/request.json": "bd094fbe2c6ddbd7dc6644a6c819169fb83c26f261114afd1a4c5b41bc9964b3",
+    "raw/case-003/source.py": "f8624c5fc9ebfed0003b4c45a472bebff4665aa0fd5204e2bf04992fe5fdd3bd",
+    "raw/case-004/contract.md": "6880f54730237ef51767cad0ba33c39ab3c5ebe1d52cf1e39fb9d4a5a6d42486",
+    "raw/case-004/request.json": "34fc2a143537638ec6ae4e95d452d46b5eb6fe7ccbe2aedfdebdd112f1658c6b",
+    "raw/case-004/source.py": "dd38c5cf581ef40f359478a82f38a38833d48f9eaeb76b89a391eab6a769f54b"
+  }
+}

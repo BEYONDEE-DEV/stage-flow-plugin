@@ -1,0 +1,58 @@
+{
+  "schema_version": "1",
+  "case_id": "GOLDEN-V5-004",
+  "expected_terminal_verdict": "FAIL",
+  "expected_findings": [
+    {
+      "finding_id": "FINDING-V5-004-A",
+      "claim_id": "CLAIM-V5-004-A",
+      "risk_id": "RISK-V5-004-A",
+      "category": "retention-contract-conflict",
+      "resolution_owner": "retention-owner",
+      "verdict": "bug_or_regression"
+    },
+    {
+      "finding_id": "FINDING-V5-004-B",
+      "claim_id": "CLAIM-V5-004-B",
+      "risk_id": "RISK-V5-004-B",
+      "category": "unsigned-callback-conflict",
+      "resolution_owner": "callback-owner",
+      "verdict": "bug_or_regression"
+    }
+  ],
+  "expected_receipt_observation": {
+    "reviewer_role": "risk",
+    "scope": "BUNDLE-V5-004",
+    "validation_question": "Do the retention and callback conflicts remain separate findings with their authoritative resolution owners?",
+    "observed_result": "The 72-hour retention and unsigned callback violate independent contracts owned by retention-owner and callback-owner.",
+    "verdict": "FAIL",
+    "report_binding": {
+      "report_kind": "findings-only",
+      "required_finding_ids": [
+        "FINDING-V5-004-A",
+        "FINDING-V5-004-B"
+      ],
+      "request_local_path_required": true,
+      "sha256_required": true
+    },
+    "cryptographic_semantic_proof_claimed": false
+  },
+  "required_finding_partition": [
+    [
+      "CLAIM-V5-004-A"
+    ],
+    [
+      "CLAIM-V5-004-B"
+    ]
+  ],
+  "forbidden_groupings": [
+    {
+      "type": "single-merged-gap",
+      "label": "Gap",
+      "claim_ids": [
+        "CLAIM-V5-004-A",
+        "CLAIM-V5-004-B"
+      ]
+    }
+  ]
+}

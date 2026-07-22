@@ -67,4 +67,4 @@ For `repository` mode, the config shape is the same except `storage_mode` is `re
 - Do not silently create a real submodule, remote repository, repository-local docs directory, or migration. Those are separate user requests.
 - Do not write managed docs outside the confirmed managed docs root.
 - If the stored source commit hash is not reachable from `source_root`, report uncertainty and ask whether to rebaseline or inspect from the current source state.
-- Run the plugin-bundled validator from `<plugin-root>/scripts/validate_atomic_docs.py`; do not look for a validator under the target project's `scripts/` directory.
+- Run the plugin-bundled validator with `python3 <plugin-root>/scripts/validate_atomic_docs.py`; do not look for a validator under the target project's `scripts/` directory.

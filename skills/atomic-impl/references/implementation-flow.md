@@ -23,8 +23,8 @@ Before writing implementation code, ensure the requested behavior has an accepte
 - If atomic-docs config or managed docs root is missing, follow the `atomic-docs` storage-mode and docs-root setup rules. Stop after the accepted bootstrap/criteria step requires user review.
 - If `project/atomization-criteria.md` is missing, draft or update only the criteria document allowed by `atomic-docs`, run criteria review, summarize it, and stop for criteria approval.
 - If criteria is approved but docs write scope is not accepted, ask the user to choose or confirm the docs write scope in plain language.
-- If docs generation requires a Codex Goal, create or reuse the Goal as required by `atomic-docs` before writing project/common/domain docs, atom files, graph edges, source-baseline metadata, or operation-local inventory.
-- Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact `context_selection.version: "4"`. If post-Goal state is missing that marker or uses v1, v2, or v3, do not update or migrate it; create a new version-4 Atomic Docs request through the same scope approval and Goal gates.
+- Before Goal handoff, allow only the Atomic Docs bootstrap state and domain-only `inventory.md` proposal. If docs generation requires a Codex Goal, create or reuse it as required by `atomic-docs` before expanding that inventory with detailed evidence/candidates or writing project/common/domain docs, atom files, graph edges, or source-baseline metadata.
+- Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact string `context_selection.version: "5"`. Reject missing, non-string, v1-v4, future, unknown, or unversioned post-Goal markers. Do not update, resume, migrate, backfill, or dual-read rejected state; create a new version-5 Atomic Docs request through the same scope approval and Goal gates.
 - Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval unless the approved docs paths and write actions are named.
 
 ## 3. Write Requirements As Implementation-Basis Docs
@@ -35,7 +35,7 @@ For each meaningful behavior, preserve:
 
 - the atom's reason in `Intent`, normal observable result in `Outcomes`, accepted local scope/handoffs in `Boundaries`, and confirmed or inferred conditions/contracts in `Rules`
 - an observable verification condition or verifiable invariant inside each changed in-scope required AID meaning item; do not require a separate acceptance AID unless it is an independently reviewable meaning
-- only the current-to-required delta as `Planned Changes` until it is implemented and approved by the user; reference owning AIDs instead of repeating the complete requirement
+- only the current-to-required delta as `Planned Changes` until it is implemented and approved by the user; consume each owning definition with `[AID-REF:<value>]` instead of repeating the complete requirement
 - existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists
 - input conditions, validation/refusal/defaulting, permissions, and branches when they change a product decision or observable result
 - state transitions, persistence effects, external calls, events, and side effects when they are part of the required contract
@@ -51,7 +51,7 @@ Avoid endpoint lists, source identifier lists, class-role summaries, or method-c
 
 After the docs write/review gates pass, summarize the docs for the user before coding.
 
-The required domain development-quality reviewer and any applicable risk/contract reviewer must have PASSed using the docs, requirements, and relevant source evidence. The implementation-basis docs review must FAIL and the code stage must not begin if a changed in-scope required behavior lacks its required AID or that AID lacks a same-item observable verification condition or invariant. If implementation would still require an unstated product decision, return to docs writing rather than approving implementation. Needing source for internal mechanics is expected.
+The required domain development-quality reviewer and any applicable risk/contract reviewer must have receipt-bound PASSed using docs, requirements, and relevant source evidence. The implementation-basis docs review must FAIL and the code stage must not begin if a changed in-scope required behavior lacks its required AID definition, an explicit implementation-basis `[AID-REF:...]` consumer, or a same-item observable verification condition/invariant. If implementation would still require an unstated product decision, return to docs writing rather than approving implementation. Needing source for internal mechanics is expected.
 
 The summary must include:
 
@@ -82,13 +82,15 @@ After implementation, validate and review the real affected flow before any fina
 4. Fix implementation issues that are in scope and caused by the change, then rerun validation and both reviews.
 5. If the implementation changed from the approved plan, introduced extra behavior, or revealed a pre-existing issue, report it to the user before treating it as approved.
 
-Use the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` for the implementation review record. Draft one `## 구현 검증` section with `docs basis` and `implementation basis` once, followed by changed in-scope required AID rows:
+Use the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md` for the implementation review record. Draft one `## 구현 검증` section with `docs basis` and `implementation basis` once, followed by changed in-scope required AID reference rows:
 
 ```text
 관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap
 ```
 
-Do not create a separate trace file or copy this table into atoms, project inventory, or `work-state.json`. A compliance-only operation creates a version-4 Atomic Docs request or resumes only the allowed pre-Goal/v4 state above and uses the same path. If either basis changes, recheck only affected rows.
+Put exact `[AID-REF:...]` in every first-column cell; a plain AID value or definition token is not a compliance consumer.
+
+Do not create a separate trace file or copy this table into atoms, project inventory, or `work-state.json`. A compliance-only operation creates a version-5 Atomic Docs request or resumes only the allowed pre-Goal/v5 state above and uses the same path. If either basis changes, recheck only affected rows.
 
 The post-implementation user summary must include:
 
@@ -104,7 +106,7 @@ Ask whether to approve the implementation result and final docs update. Do not u
 
 After the user approves the implementation result, update atomic docs through the existing `atomic-docs` gates.
 
-- Recheck that the linked post-Goal Atomic Docs request still has exact `context_selection.version: "4"`; if not, do not mutate it and route the final update through a new version-4 request.
+- Recheck that the linked post-Goal Atomic Docs request still has exact string `context_selection.version: "5"`; if not, do not mutate or resume it and route the final update through a new version-5 request.
 - Keep docs write scope, writer/reviewer cycle, post-write gate, judgment labels, source evidence, AID, `atom_key`, and graph rules intact.
 - Remove each completed delta from `Planned Changes`, add a concise realization under `Current Implementation`, and keep the durable requirement in its owning `Outcomes`, `Boundaries`, or `Rules` section.
 - Add or refresh source evidence and validation basis for the implemented behavior.
@@ -117,8 +119,8 @@ After the user approves the implementation result, update atomic docs through th
 
 After final docs update, validate the real affected flow rather than only checking files.
 
-1. Confirm the linked request still has exact post-Goal `context_selection.version: "4"`, then compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
+1. Confirm the linked request still has exact post-Goal string `context_selection.version: "5"`, then compare the confirmed user requirement, approved implementation result, final atomic docs, actual diff, and validation results.
 2. Check for missing documented behavior, undocumented implementation behavior, stale docs, unresolved blocking gaps, or validation that does not prove the real flow.
-3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used for that compliance result. Compliance must FAIL when any required row or evidence cell is missing.
+3. Finalize the linked `post-write-review.md` `## 구현 검증` section. Every changed in-scope required AID needs one resolvable `[AID-REF:...]` row, implementation evidence, validation evidence, and a verdict or gap before `matches_confirmed_intent` may be used. Compliance must FAIL when any definition/reference, required row, or evidence cell is missing.
 4. If the code differs from the final docs, update docs through the atomic-docs gate or revise code to match the docs before reporting completion.
 5. Summarize the final docs/code compliance result, validations run, final docs paths, and remaining out-of-scope or pre-existing issues.

@@ -1,0 +1,19 @@
+{
+  "case_id": "GOLDEN-V5-002",
+  "context_selection": {
+    "version": "5"
+  },
+  "review_scope": {
+    "bundle_id": "BUNDLE-V5-002",
+    "risk_id": "RISK-V5-002",
+    "risk_kind": "contract"
+  },
+  "selected_claims": [
+    {
+      "claim_id": "CLAIM-V5-002",
+      "owner_contract": "CONTRACT-V5-002",
+      "consumer": "CONSUMER-V5-002",
+      "resource_or_identifier": "programId"
+    }
+  ]
+}

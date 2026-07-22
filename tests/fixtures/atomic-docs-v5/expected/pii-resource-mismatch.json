@@ -1,0 +1,41 @@
+{
+  "schema_version": "1",
+  "case_id": "GOLDEN-V5-001",
+  "expected_terminal_verdict": "FAIL",
+  "expected_findings": [
+    {
+      "finding_id": "FINDING-V5-001",
+      "claim_id": "CLAIM-V5-001",
+      "category": "resource-binding-conflict",
+      "disposition": "conflict",
+      "trace_kind": "permission-privacy",
+      "observed_conflict": true,
+      "permission_privacy": {
+        "principal": "PRINCIPAL-V5-001",
+        "authorized_object_or_data": "OBJECT-V5-001-A",
+        "loaded_object": "OBJECT-V5-001-B",
+        "projection_or_use": "contact-summary"
+      }
+    }
+  ],
+  "expected_receipt_observation": {
+    "reviewer_role": "risk",
+    "scope": "BUNDLE-V5-001",
+    "validation_question": "Does PRINCIPAL-V5-001 project contact-summary only from the authorized and requested object?",
+    "observed_result": "The authorization checks OBJECT-V5-001-A, but source.py loads OBJECT-V5-001-B for contact-summary.",
+    "verdict": "FAIL",
+    "report_binding": {
+      "report_kind": "findings-only",
+      "required_finding_ids": [
+        "FINDING-V5-001"
+      ],
+      "request_local_path_required": true,
+      "sha256_required": true
+    },
+    "cryptographic_semantic_proof_claimed": false
+  },
+  "forbidden_outcomes": [
+    "PASS",
+    "Rule"
+  ]
+}

@@ -63,26 +63,29 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("If docs generation requires a Codex Goal", text)
         self.assertIn("Do not treat Stageflow plan approval, chat approval, or code implementation approval as managed-docs-root approval", text)
         self.assertIn("Do not start code implementation until the user explicitly approves", text)
+        self.assertIn("Before Goal handoff, allow only the Atomic Docs bootstrap state and domain-only `inventory.md` proposal", text)
+        self.assertIn("before expanding that inventory with detailed evidence/candidates", text)
 
-    def test_linked_atomic_docs_request_reuse_requires_v4_after_goal(self) -> None:
+    def test_linked_atomic_docs_request_reuse_requires_v5_after_goal(self) -> None:
         skill = read(SKILL)
         flow = read(FLOW)
 
         for required in (
             "initial implementation-basis docs, final docs, or compliance work",
             "pre-Goal bootstrap state with no `context_selection`",
-            "post-Goal exact `context_selection.version: \"4\"`",
-            "Do not mutate or migrate a linked v1-v3/unversioned selection",
-            "create a new version-4 Atomic Docs request under the existing approval/Goal gates",
+            "post-Goal exact string `context_selection.version: \"5\"`",
+            "Reject missing, non-string, v1-v4, future, unknown, or unversioned post-Goal selection",
+            "do not mutate, resume, migrate, backfill, or dual-read it",
+            "Create a new version-5 Atomic Docs request under the existing approval/Goal gates",
         ):
             self.assertIn(required, skill)
         for required in (
-            "Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact `context_selection.version: \"4\"`",
-            "uses v1, v2, or v3, do not update or migrate it",
-            "A compliance-only operation creates a version-4 Atomic Docs request or resumes only the allowed pre-Goal/v4 state above",
-            "Recheck that the linked post-Goal Atomic Docs request still has exact `context_selection.version: \"4\"`",
-            "route the final update through a new version-4 request",
-            "Confirm the linked request still has exact post-Goal `context_selection.version: \"4\"`",
+            "Resume a linked request only when it is pre-Goal bootstrap state with no `context_selection`, or post-Goal state with exact string `context_selection.version: \"5\"`",
+            "Reject missing, non-string, v1-v4, future, unknown, or unversioned post-Goal markers",
+            "A compliance-only operation creates a version-5 Atomic Docs request or resumes only the allowed pre-Goal/v5 state above",
+            "Recheck that the linked post-Goal Atomic Docs request still has exact string `context_selection.version: \"5\"`",
+            "route the final update through a new version-5 request",
+            "Confirm the linked request still has exact post-Goal string `context_selection.version: \"5\"`",
         ):
             self.assertIn(required, flow)
         self.assertNotIn(
@@ -98,13 +101,14 @@ class AtomicImplSkillTests(unittest.TestCase):
             "normal observable result in `Outcomes`",
             "accepted local scope/handoffs in `Boundaries`",
             "only the current-to-required delta as `Planned Changes`",
-            "reference owning AIDs instead of repeating the complete requirement",
+            "consume each owning definition with `[AID-REF:<value>]` instead of repeating the complete requirement",
             "existing source-observed behavior as `Current Implementation` only when source evidence proves it already exists",
             "when they change a product decision or observable result",
             "when they are part of the required contract",
             "only when fields, routes, states, payloads, or save/delete scope affect required behavior or verification",
             "when the requirement assigns a specific outcome",
             "source evidence, judgment labels, `Gaps`, related `atom_key`, AID, and graph relationships",
+            "[AID-REF:<value>]",
             "Avoid endpoint lists, source identifier lists, class-role summaries, or method-call sequences",
             "avoid copying behavior-neutral source detail",
         ]:
@@ -130,6 +134,7 @@ class AtomicImplSkillTests(unittest.TestCase):
             "code implementation must not begin",
             "changed in-scope required behavior lacks its required AID",
             "same-item observable verification condition or invariant",
+            "explicit implementation-basis `[AID-REF:...]` consumer",
             "looser context depth of ordinary Atomic Docs does not apply",
             "code stage must not begin",
         ):
@@ -144,12 +149,13 @@ class AtomicImplSkillTests(unittest.TestCase):
             "implementation basis",
             "관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap",
             "changed in-scope required AID",
+            "[AID-REF:...]",
             "Do not create a separate trace file",
             "recheck only affected rows",
             "Draft one `## 구현 검증` section",
             "Preserve the draft `## 구현 검증` section",
             "Finalize the linked `post-write-review.md` `## 구현 검증` section",
-            "Compliance must FAIL when any required row or evidence cell is missing",
+            "Compliance must FAIL when any definition/reference, required row, or evidence cell is missing",
             "Final docs/code compliance must FAIL",
         ):
             self.assertIn(required, text)
@@ -187,7 +193,7 @@ class AtomicImplSkillTests(unittest.TestCase):
         self.assertIn("Add or refresh source evidence and validation basis", text)
         self.assertIn("Do not record out-of-plan changes as confirmed behavior unless the user explicitly approved those changes", text)
         self.assertIn(
-            "Confirm the linked request still has exact post-Goal `context_selection.version: \"4\"`",
+            "Confirm the linked request still has exact post-Goal string `context_selection.version: \"5\"`",
             text,
         )
         self.assertIn(

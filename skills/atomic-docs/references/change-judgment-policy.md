@@ -11,7 +11,7 @@ The labels in this file are reusable controlled vocabulary. Explanatory prose in
 Use this controlled vocabulary when classifying source behavior against atomic docs:
 
 - `matches_confirmed_intent`: observed implementation matches confirmed desired `Intent`, `Outcomes`, `Boundaries`, `Rules`, accepted criteria, and any approved required change for the documented source basis
-- `bug_or_regression`: observed implementation conflicts with confirmed desired `Intent`, `Outcomes`, `Boundaries`, `Rules`, acceptance criteria, or a reviewed source-established current contract whose applicable source basis has not gone stale
+- `bug_or_regression`: observed implementation conflicts with confirmed desired `Intent`, `Outcomes`, `Boundaries`, `Rules`, acceptance criteria, or a reviewed authoritative current contract whose revision and target applicability are verified and have not gone stale
 - `missing_required_behavior`: confirmed required behavior is absent from `Current Implementation`
 - `unapproved_implemented_behavior`: behavior exists despite a specific confirmed governance boundary, approval requirement, or approved plan that required authorization before implementation; general absence of user approval is not enough
 - `out_of_scope_behavior`: behavior is implemented or requested despite a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary
@@ -25,12 +25,12 @@ Ordinary source refresh may document a source-established current contract witho
 
 ## Decision Order
 
-Apply the first matching judgment that is supported by evidence:
+Apply the first matching judgment that is supported by evidence. Before using either `confirmation_needed` step, inspect any selected `shared-contract-readiness.md` binding trace. When its `observed_conflict` is true and its authoritative revision and target applicability are both `verified`, do not treat a missing consumer-local restatement as uncertainty; skip the absence/conflict uncertainty steps and continue to the first supported substantive label below, usually `bug_or_regression`. Verified statuses without an observed conflict do not force that label. Keep all earlier stale/deferral precedence and later confirmed boundary/approval labels intact.
 
 1. If the docs baseline is older than the source behavior being judged and the diff has not been refreshed, use `docs_stale`.
 2. If the user or approved workflow explicitly chose to decide the relevant policy, boundary, condition, API contract, or permission mapping later, use `deferred_decision`.
-3. If the relevant service logic is absent from natural-language docs and that absence prevents the accepted implementation or review judgment, use `confirmation_needed`.
-4. If reachable evidence conflicts, cannot establish a behavior-affecting local/external contract, or leaves a specific decision ambiguous, use `confirmation_needed`.
+3. If the relevant service logic is absent from natural-language docs and that absence prevents the accepted implementation or review judgment, use `confirmation_needed`; do not apply this merely because the consumer has no local copy when a binding trace records `observed_conflict: true` with verified authority and applicability.
+4. If reachable evidence conflicts, cannot establish a behavior-affecting local/external contract, or leaves contract authority or target applicability ambiguous, use `confirmation_needed`.
 5. If behavior violates a confirmed non-goal, excluded behavior, adjacent-domain boundary, or policy boundary, use `out_of_scope_behavior`.
 6. If behavior violates a specific confirmed approval-before-implementation requirement or approved plan gate, use `unapproved_implemented_behavior`.
 7. If confirmed required behavior is missing from `Current Implementation`, use `missing_required_behavior`.
@@ -41,9 +41,11 @@ Do not create `confirmation_needed`, `unapproved_implemented_behavior`, or `impl
 
 Do not use `confirmation_needed` for an answer the user has already resolved. If the user confirms a future implementation or behavior change, record the concrete future behavior as `approved_required_change` or `approved_optional_change`; when current source does not implement that confirmed future behavior, use `missing_required_behavior` for the mismatch. If the user chooses to decide the policy or mapping later, record `deferred_decision` and exclude it from `confirmation_needed` counts.
 
+Treat a binding trace as evidence only when its receipt-bound reviewer reopened the declared authority revision, applicability basis, consumer, resource/identifier, and observed implementation. Use `confirmation_needed` when authority or applicability is `unresolved`, even if an owner contract exists. `observed_conflict` records the reviewer's finding; structural validation checks its type and label consistency but never infers a conflict, upgrades either status, or guesses which contract governs the target.
+
 ## Evidence Requirements
 
-Every judgment item must name the atom path, stable `atom_key` when available, source evidence, judgment label, reason, affected behavior, and the confirmed or inferred basis for the judgment. Include related AID values when they exist and are independently referenceable. Otherwise identify the exact owning section and affected behavior instead of creating an AID solely for the judgment. The basis may be confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, approved required `Planned Changes`, source baseline metadata, or explicit user approval. Refer to the owning AID or section instead of repeating its complete behavior in the finding.
+Every judgment item must name the atom path, stable `atom_key` when available, source evidence, judgment label, reason, affected behavior, and confirmed or inferred basis. Include related AID values when they exist and consume them as `[AID-REF:<value>]`. Otherwise identify the exact owning section and affected behavior instead of creating an AID solely for judgment. The basis may be confirmed `Intent`, `Outcomes`, `Boundaries`, or `Rules`, approved required `Planned Changes`, source baseline metadata, or explicit user approval. Refer to the owning AID or section instead of repeating its complete behavior in the finding.
 
 Judgments such as `matches_confirmed_intent`, `bug_or_regression`, and `missing_required_behavior` must identify the specific natural-language intent, outcome, boundary, rule, current implementation, planned change, or gap that supports them. Use its AID when one already exists or the meaning independently needs one. For an ordinary docs judgment without an AID, the stable `atom_key`, exact owning section, and affected behavior are sufficient only when they identify an unambiguous natural-language basis. Path-only, slug-only, identifier-only, or ambiguous section references are insufficient; use `confirmation_needed` or a coverage gap instead of a stronger judgment. Atomic Impl and explicit compliance operations continue to require AID-backed rows for changed in-scope required decisions.
 
@@ -63,7 +65,7 @@ If observed code conflicts with confirmed `Intent`, `Outcomes`, `Boundaries`, or
 
 ## Explicit Implementation Compliance
 
-Only Atomic Impl or an explicit docs/code compliance operation writes the lightweight implementation-verification table. Use `## 구현 검증` in `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record `docs basis` and `implementation basis` once for the operation, then one row per changed in-scope required AID:
+Only Atomic Impl or an explicit docs/code compliance operation writes the lightweight implementation-verification table. Use `## 구현 검증` in `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record `docs basis` and `implementation basis` once for the operation, then one row per changed in-scope required AID. Put its explicit reference token in the first column:
 
 ```text
 관련 AID | 구현 근거 | 검증 근거 | 판정 또는 gap
