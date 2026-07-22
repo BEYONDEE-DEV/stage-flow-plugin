@@ -287,6 +287,19 @@ def parse_repository_contexts(values: list[list[str]]) -> dict[str, dict[str, st
     return contexts
 
 
+def parse_repository_updates(values: list[list[str]]) -> list[tuple[str, int, str]]:
+    updates: list[tuple[str, int, str]] = []
+    for repo, expected_generation_text, pr in values:
+        try:
+            expected_generation = int(expected_generation_text)
+        except ValueError as exc:
+            raise ManifestError(
+                f"repository {repo!r} expected generation must be an integer"
+            ) from exc
+        updates.append((repo, expected_generation, pr))
+    return updates
+
+
 def initialize(
     data: dict[str, Any],
     name: str,
@@ -440,20 +453,19 @@ def release_operation_lock(root: Path, slot: str, token: str) -> dict[str, Any]:
 def record_batch(
     data: dict[str, Any],
     name: str,
-    expected_generation: int,
-    repository_prs: list[tuple[str, str]],
+    repository_updates: list[tuple[str, int, str]],
 ) -> dict[str, Any]:
-    if expected_generation < 0:
-        raise ManifestError("expected generation must be non-negative")
-    if not repository_prs:
+    if not repository_updates:
         raise ManifestError("at least one repository PR update is required")
-    updates: dict[str, str] = {}
-    for repo, pr in repository_prs:
+    updates: dict[str, tuple[int, str]] = {}
+    for repo, expected_generation, pr in repository_updates:
         if not repo or not pr:
             raise ManifestError("repository and PR must not be empty")
+        if type(expected_generation) is not int or expected_generation < 0:
+            raise ManifestError("expected generation must be a non-negative integer")
         if repo in updates:
             raise ManifestError(f"duplicate repository PR update: {repo}")
-        updates[repo] = pr
+        updates[repo] = (expected_generation, pr)
 
     slot = require_slot(data, name)
     require_complete_context(slot, name)
@@ -462,15 +474,14 @@ def record_batch(
     if missing:
         raise ManifestError(f"slot {name!r} has no repository binding for: {', '.join(missing)}")
 
-    if all(
-        repositories[repo]["generation"] == expected_generation + 1
-        and repositories[repo]["pr"] == pr
-        for repo, pr in updates.items()
-    ):
-        return slot
-
-    for repo in updates:
+    pending: list[tuple[str, int, str]] = []
+    for repo, (expected_generation, pr) in updates.items():
         identity = repositories[repo]
+        if (
+            identity["generation"] == expected_generation + 1
+            and identity["pr"] == pr
+        ):
+            continue
         if identity["generation"] != expected_generation:
             raise ManifestError(
                 f"repository {repo!r} generation mismatch: "
@@ -480,8 +491,11 @@ def record_batch(
             raise ManifestError(f"repository {repo!r} initial generation already has a PR")
         if expected_generation > 0 and identity["pr"] is None:
             raise ManifestError(f"repository {repo!r} generation has no current PR")
+        if expected_generation > 0 and identity["pr"] == pr:
+            raise ManifestError(f"repository {repo!r} new PR matches its current PR")
+        pending.append((repo, expected_generation, pr))
 
-    for repo, pr in updates.items():
+    for repo, expected_generation, pr in pending:
         repositories[repo]["generation"] = expected_generation + 1
         repositories[repo]["pr"] = pr
     return slot
@@ -535,14 +549,13 @@ def parser() -> argparse.ArgumentParser:
     record = subparsers.add_parser("record-batch", help="Atomically advance repository PR generations")
     record.add_argument("--slot", required=True)
     record.add_argument("--token", required=True)
-    record.add_argument("--expected-generation", required=True, type=int)
     record.add_argument(
-        "--repository-pr",
+        "--repository-update",
         action="append",
         required=True,
-        nargs=2,
-        metavar=("REPO", "PR"),
-        help="Repository and its new PR identity; repeat for every updated repository",
+        nargs=3,
+        metavar=("REPO", "EXPECTED_GENERATION", "PR"),
+        help="Repository, current generation, and new PR; repeat for every updated repository",
     )
     return result
 
@@ -581,8 +594,7 @@ def main() -> int:
                     payload = record_batch(
                         data,
                         args.slot,
-                        args.expected_generation,
-                        [tuple(item) for item in args.repository_pr],
+                        parse_repository_updates(args.repository_update),
                     )
                 write_manifest(path, data)
         print(json.dumps({"ok": True, "result": payload}, ensure_ascii=False, sort_keys=True))

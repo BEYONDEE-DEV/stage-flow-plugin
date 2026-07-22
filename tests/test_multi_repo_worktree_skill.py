@@ -160,10 +160,10 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "generated Korean commit message",
             'add -A --',
             'commit -m "<generated-Korean-commit-message>"',
-            "Complete the local commit phase for every repo before the first remote write",
+            "Complete the local commit phase for every repo and the pinned-base merge plus validation for every `MERGED` repo before the first remote write",
             "Do not pass `--draft`",
-            "Do not advance generation or create another PR",
-            "Only after every repo passes may one `record-batch` atomically advance",
+            "Do not add an `OPEN` repository to `record-batch`, advance its generation, or create another PR",
+            "Only after every repository passes its own state-specific verification may one `record-batch` atomically advance",
             "Files changed",
             "Old commits from an earlier squash merge may remain",
             "Adopt only one ready OPEN result",
@@ -174,11 +174,38 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("same-branch push", skill)
         self.assertIn("Korean ready PR creation or update", skill)
         self.assertIn("`OPEN` pushes to the same PR", skill)
-        self.assertIn("`MERGED` fetches and pins the base", skill)
+        self.assertIn("`MERGED` fetches and pins its base", skill)
         self.assertIn("Never enable auto-merge or run a remote PR merge command", skill)
         self.assertIn("without rewriting its title/body", skill)
         self.assertIn("Never run `gh pr edit` during routine `submit`", reference)
         self.assertNotIn('git -C "<development-worktree>" add .', reference)
+
+    def test_submit_supports_mixed_repository_states_and_generations(self) -> None:
+        skill = read(SKILL)
+        reference = read(REFERENCE)
+
+        for phrase in [
+            "supported classifications and generations may differ within one batch",
+            "using each repository's own expected generation",
+            "A mix of otherwise valid `NONE`, `OPEN`, and `MERGED` repositories is not a blocker",
+        ]:
+            self.assertIn(phrase, skill)
+
+        for phrase in [
+            "allow any mix of otherwise valid `NONE`, `OPEN`, and `MERGED` repositories",
+            "Never propose bypassing the skill merely because supported repository states differ",
+            "Repositories may have different expected generations",
+            "Omit `OPEN` and no-op repositories",
+            "An absent operation lock means the slot is available",
+            '--repository-update "<repo-a>" "<current-generation-a>" "<new-pr-a>"',
+        ]:
+            self.assertIn(phrase, reference)
+
+        self.assertNotIn(
+            "changed repositories with different generation or `NONE`/`OPEN`/`MERGED` classifications",
+            reference,
+        )
+        self.assertNotIn("mixed multi-repo states are unsupported", skill)
 
     def test_create_is_one_time_idempotent_initialization(self) -> None:
         skill = read(SKILL)
@@ -602,8 +629,7 @@ class SlotManifestTests(unittest.TestCase):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
+                "--repository-update", "service-a", "0", "17",
             )
             after_pr = self.run_manifest(
                 root,
@@ -902,9 +928,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
-                "--repository-pr", "service-b", "23",
+                "--repository-update", "service-a", "0", "17",
+                "--repository-update", "service-b", "0", "23",
                 check=False,
             )
             self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
@@ -913,9 +938,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
-                "--repository-pr", "service-b", "23",
+                "--repository-update", "service-a", "0", "17",
+                "--repository-update", "service-b", "0", "23",
             )
 
             self.assertEqual(no_lock.returncode, 2)
@@ -944,24 +968,21 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
+                "--repository-update", "service-a", "0", "17",
             )
             repeated = self.run_manifest(
                 root,
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
+                "--repository-update", "service-a", "0", "17",
             )
             second = self.run_manifest(
                 root,
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "1",
-                "--repository-pr", "service-a", "18",
+                "--repository-update", "service-a", "1", "18",
             )
 
             self.assertEqual(json.loads(first.stdout)["result"], json.loads(repeated.stdout)["result"])
@@ -976,6 +997,70 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                     "pr": "18",
                 },
             )
+
+    def test_record_batch_atomically_advances_mixed_repository_generations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "worktrees" / "slot-1"
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(path),
+                "--repository", "service-none", "task-none", "main", "origin",
+                "--repository", "service-merged", "task-merged", "main", "origin",
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "submit-a")
+            self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-merged", "0", "23",
+            )
+
+            before_invalid = (
+                root / ".stageflow-worktrees" / "slots.json"
+            ).read_bytes()
+            invalid = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-none", "0", "17",
+                "--repository-update", "service-merged", "0", "24",
+                check=False,
+            )
+            self.assertEqual(invalid.returncode, 2)
+            self.assertIn("generation mismatch", invalid.stderr)
+            self.assertEqual(
+                (root / ".stageflow-worktrees" / "slots.json").read_bytes(),
+                before_invalid,
+            )
+
+            mixed = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-none", "0", "17",
+                "--repository-update", "service-merged", "1", "24",
+            )
+            repeated = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-none", "0", "17",
+                "--repository-update", "service-merged", "1", "24",
+            )
+
+            self.assertEqual(json.loads(mixed.stdout)["result"], json.loads(repeated.stdout)["result"])
+            repositories = json.loads(mixed.stdout)["result"]["repositories"]
+            self.assertEqual(repositories["service-none"]["generation"], 1)
+            self.assertEqual(repositories["service-none"]["pr"], "17")
+            self.assertEqual(repositories["service-merged"]["generation"], 2)
+            self.assertEqual(repositories["service-merged"]["pr"], "24")
 
     def test_record_batch_rejects_generation_or_repository_mismatch_without_partial_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -995,9 +1080,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "0",
-                "--repository-pr", "service-a", "17",
-                "--repository-pr", "missing", "23",
+                "--repository-update", "service-a", "0", "17",
+                "--repository-update", "missing", "0", "23",
                 check=False,
             )
             wrong_generation = self.run_manifest(
@@ -1005,8 +1089,16 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "record-batch",
                 "--slot", "slot-1",
                 "--token", "submit-a",
-                "--expected-generation", "1",
-                "--repository-pr", "service-a", "17",
+                "--repository-update", "service-a", "1", "17",
+                check=False,
+            )
+            duplicate = self.run_manifest(
+                root,
+                "record-batch",
+                "--slot", "slot-1",
+                "--token", "submit-a",
+                "--repository-update", "service-a", "0", "17",
+                "--repository-update", "service-a", "0", "18",
                 check=False,
             )
             status = json.loads(self.run_manifest(root, "status", "--slot", "slot-1").stdout)["result"]
@@ -1015,6 +1107,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             self.assertIn("no repository binding", unknown.stderr)
             self.assertEqual(wrong_generation.returncode, 2)
             self.assertIn("generation mismatch", wrong_generation.stderr)
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertIn("duplicate repository PR update", duplicate.stderr)
             self.assertEqual(status["repositories"]["service-a"]["generation"], 0)
             self.assertIsNone(status["repositories"]["service-a"]["pr"])
 
