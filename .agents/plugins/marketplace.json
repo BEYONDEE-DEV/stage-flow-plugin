@@ -1,7 +1,7 @@
 {
-  "name": "stage-flow-local",
+  "name": "stage-flow",
   "interface": {
-    "displayName": "Stage Flow Local"
+    "displayName": "Stage Flow"
   },
   "plugins": [
     {

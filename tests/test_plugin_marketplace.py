@@ -12,8 +12,8 @@ class PluginMarketplaceTests(unittest.TestCase):
         marketplace = json.loads((ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
         plugin_manifest = json.loads((ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(marketplace["name"], "stage-flow-local")
-        self.assertEqual(marketplace["interface"]["displayName"], "Stage Flow Local")
+        self.assertEqual(marketplace["name"], "stage-flow")
+        self.assertEqual(marketplace["interface"]["displayName"], "Stage Flow")
 
         self.assertEqual(len(marketplace["plugins"]), 1)
         entry = marketplace["plugins"][0]

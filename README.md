@@ -6,7 +6,7 @@ It also bundles Simple Workflow as a lightweight `plan.md`-centered workflow alo
 
 ## Installation
 
-The plugin name is `stageflow`, and the marketplace name is `stage-flow-local`.
+The plugin name is `stageflow`, and the marketplace name is `stage-flow`.
 
 ### Method 1: Use a Local Clone
 
@@ -17,7 +17,7 @@ git clone git@github.com:BEYONDEE-DEV/stage-flow-plugin.git
 cd stage-flow-plugin
 
 codex plugin marketplace add "$(pwd)"
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 If you prefer HTTPS:
@@ -27,7 +27,7 @@ git clone https://github.com/BEYONDEE-DEV/stage-flow-plugin.git
 cd stage-flow-plugin
 
 codex plugin marketplace add "$(pwd)"
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 ### Method 2: Use the Git Marketplace Directly
@@ -36,14 +36,14 @@ Use this when you want to install the plugin without keeping a local clone.
 
 ```bash
 codex plugin marketplace add git@github.com:BEYONDEE-DEV/stage-flow-plugin.git --ref main
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 If you prefer HTTPS:
 
 ```bash
 codex plugin marketplace add https://github.com/BEYONDEE-DEV/stage-flow-plugin.git --ref main
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 ## Verify Installation
@@ -55,7 +55,7 @@ codex plugin list
 You should see:
 
 ```text
-stageflow@stage-flow-local  installed, enabled
+stageflow@stage-flow  installed, enabled
 ```
 
 ## Included Workflows
@@ -70,14 +70,14 @@ For a local clone:
 
 ```bash
 git pull
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 For a Git marketplace install:
 
 ```bash
 codex plugin marketplace upgrade
-codex plugin add stageflow@stage-flow-local
+codex plugin add stageflow@stage-flow
 ```
 
 After installing or updating, start a new Codex thread so newly loaded skills and tools are available.
