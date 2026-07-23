@@ -20,8 +20,8 @@ if os.name == "nt":
 else:
     import fcntl
 
-SCHEMA_VERSION = 4
-LEGACY_PERMANENT_SCHEMA_VERSIONS = {2, 3}
+SCHEMA_VERSION = 5
+LEGACY_PERMANENT_SCHEMA_VERSIONS = {2, 3, 4}
 MANIFEST_RELATIVE_PATH = Path(".stageflow-worktrees") / "slots.json"
 LOCKS_RELATIVE_PATH = Path(".stageflow-worktrees") / "operation-locks"
 GENERATION_WORKTREES_RELATIVE_PATH = Path(".stageflow-worktrees") / "generation-worktrees"
@@ -58,6 +58,35 @@ def is_object_id(value: Any) -> bool:
     )
 
 
+KNOWN_TRANSFER_SUBJECT_PLACEHOLDERS = (
+    "<source-branch>",
+    "<source_branch>",
+    "<branch-family>",
+    "<target>",
+    "<repo>",
+    "<repository>",
+    "<source>",
+    "<source-tree>",
+    "<result-tree>",
+    "<task-summary>",
+    "<task_summary>",
+)
+
+
+def normalize_transfer_subject(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ManifestError("transfer subject must be a string")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ManifestError("transfer subject must not contain control characters")
+    normalized = value.strip(" ")
+    if not normalized:
+        raise ManifestError("transfer subject must not be blank")
+    folded = normalized.casefold()
+    if any(placeholder in folded for placeholder in KNOWN_TRANSFER_SUBJECT_PLACEHOLDERS):
+        raise ManifestError("transfer subject contains an unresolved workflow placeholder")
+    return normalized
+
+
 def validate_submission(name: str, identity: dict[str, Any], slot_name: str) -> None:
     submission = identity["submission"]
     generation = identity["generation"]
@@ -86,8 +115,13 @@ def validate_submission(name: str, identity: dict[str, Any], slot_name: str) -> 
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid submission evidence")
 
 
-def validate_rotation(name: str, rotation: Any, slot_name: str) -> None:
-    if not isinstance(rotation, dict) or set(rotation) != {
+def validate_rotation(
+    name: str,
+    rotation: Any,
+    slot_name: str,
+    legacy_schema: int | None = None,
+) -> None:
+    legacy_fields = {
         "phase",
         "from_branch",
         "from_branch_generation",
@@ -98,7 +132,10 @@ def validate_rotation(name: str, rotation: Any, slot_name: str) -> None:
         "target_branch_generation",
         "result_tree_sha",
         "temporary_worktree",
-    }:
+    }
+    current_fields = legacy_fields | {"source_tree_sha", "transfer_subject"}
+    allowed_fields = legacy_fields if legacy_schema == 4 else current_fields
+    if not isinstance(rotation, dict) or set(rotation) != allowed_fields:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
     if rotation["phase"] not in {"planned", "branch-created", "switched"}:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation phase")
@@ -116,10 +153,34 @@ def validate_rotation(name: str, rotation: Any, slot_name: str) -> None:
         or rotation["target_branch_generation"] != rotation["from_branch_generation"] + 1
         or not all(
             is_object_id(rotation[field])
-            for field in ("from_head_sha", "boundary_sha", "source_sha", "result_tree_sha")
+            for field in (
+                "from_head_sha",
+                "boundary_sha",
+                "source_sha",
+                "result_tree_sha",
+            )
         )
     ):
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
+    if legacy_schema == 4:
+        return
+    if not is_object_id(rotation["source_tree_sha"]):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
+    subject = rotation["transfer_subject"]
+    empty_transfer = rotation["source_tree_sha"] == rotation["result_tree_sha"]
+    if empty_transfer:
+        if subject is not None:
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} empty rotation must not have a subject"
+            )
+    elif subject is None:
+        raise ManifestError(
+            f"slot {slot_name!r} repository {name!r} non-empty rotation requires a subject"
+        )
+    elif normalize_transfer_subject(subject) != subject:
+        raise ManifestError(
+            f"slot {slot_name!r} repository {name!r} transfer subject is not normalized"
+        )
 
 
 def validate_repository(name: str, identity: Any, slot_name: str) -> None:
@@ -179,7 +240,7 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
     if identity["generation"] == 0 and identity["submission"] is not None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation 0 has a submission")
     if "rotation" in identity:
-        validate_rotation(name, identity["rotation"], slot_name)
+        validate_rotation(name, identity["rotation"], slot_name, identity.get("legacy_schema"))
         rotation = identity["rotation"]
         if (
             rotation["from_branch"] != identity["branch"]
@@ -246,7 +307,7 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
                 != identity["submission"]["continuation_boundary_sha"]
                 or receipt["observed_head_sha"] != identity["submission"]["observed_head_sha"]
             )
-        elif "legacy_schema" not in identity:
+        elif identity.get("legacy_schema") not in {2, 3}:
             invalid_evidence = True
         if (
             type(from_generation) is not int
@@ -267,7 +328,7 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
             )
 
 
-def validate_manifest_v4(data: Any) -> dict[str, Any]:
+def validate_manifest_v5(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -324,6 +385,13 @@ def promote_legacy_manifest(data: Any, version: int) -> dict[str, Any]:
         for repo, identity in repositories.items():
             if not isinstance(repo, str) or not repo or not isinstance(identity, dict):
                 raise ManifestError(f"slot {name!r} has an invalid repository identity")
+            if version == 4:
+                candidate = dict(identity)
+                if "legacy_schema" not in candidate:
+                    candidate["legacy_schema"] = 4
+                validate_repository(repo, candidate, name)
+                promoted_repositories[repo] = candidate
+                continue
             if version == 2:
                 if set(identity) != {"branch", "generation", "pr"}:
                     raise ManifestError(f"slot {name!r} repository {repo!r} has unexpected fields")
@@ -358,7 +426,7 @@ def promote_legacy_manifest(data: Any, version: int) -> dict[str, Any]:
             "path": slot["path"],
             "repositories": promoted_repositories,
         }
-    return validate_manifest_v4(promoted)
+    return validate_manifest_v5(promoted)
 
 
 def validate_manifest(data: Any) -> dict[str, Any]:
@@ -366,7 +434,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         raise ManifestError("manifest must be a JSON object")
     version = data.get("schema_version")
     if type(version) is int and version == SCHEMA_VERSION:
-        return validate_manifest_v4(data)
+        return validate_manifest_v5(data)
     if type(version) is int and version in LEGACY_PERMANENT_SCHEMA_VERSIONS:
         return promote_legacy_manifest(data, version)
     raise ManifestError(
@@ -446,7 +514,7 @@ def write_json_atomic(path: Path, data: Any, prefix: str) -> None:
 
 
 def write_manifest(path: Path, data: dict[str, Any]) -> None:
-    validate_manifest_v4(data)
+    validate_manifest_v5(data)
     write_json_atomic(path, data, "slots.")
 
 
@@ -598,12 +666,18 @@ def parse_repository_corrections(values: list[list[str]]) -> list[tuple[str, int
     return corrections
 
 
-def parse_repository_rotations(values: list[list[str]]) -> list[tuple[str, str, int, str, str, str, str, int, str, str]]:
-    rotations: list[tuple[str, str, int, str, str, str, str, int, str, str]] = []
+def parse_repository_rotations(
+    values: list[list[str]],
+) -> list[tuple[str, str, int, str, str, str, str, str, int, str, str | None, str]]:
+    rotations: list[
+        tuple[str, str, int, str, str, str, str, str, int, str, str | None, str]
+    ] = []
     for value in values:
-        if len(value) != 10:
+        if len(value) != 12:
             raise ManifestError(
-                "repository rotation requires REPO FROM_BRANCH FROM_GENERATION FROM_HEAD BOUNDARY SOURCE TARGET TARGET_GENERATION RESULT_TREE TEMPORARY_WORKTREE"
+                "repository rotation requires REPO FROM_BRANCH FROM_GENERATION FROM_HEAD "
+                "BOUNDARY SOURCE SOURCE_TREE TARGET TARGET_GENERATION RESULT_TREE "
+                "SUBJECT_OR_DASH TEMPORARY_WORKTREE"
             )
         (
             repo,
@@ -612,9 +686,11 @@ def parse_repository_rotations(values: list[list[str]]) -> list[tuple[str, str, 
             from_head,
             boundary,
             source,
+            source_tree,
             target,
             target_generation_text,
             result_tree,
+            subject_text,
             temporary_worktree,
         ) = value
         try:
@@ -630,13 +706,21 @@ def parse_repository_rotations(values: list[list[str]]) -> list[tuple[str, str, 
                 from_head,
                 boundary,
                 source,
+                source_tree,
                 target,
                 target_generation,
                 result_tree,
+                None if subject_text == "-" else normalize_transfer_subject(subject_text),
                 temporary_worktree,
             )
         )
     return rotations
+
+
+def parse_repository_rotation_subjects(
+    values: list[list[str]],
+) -> list[tuple[str, str, int, str, str, str, str, str, int, str, str | None, str]]:
+    return parse_repository_rotations(values)
 
 
 def migrate_batch(
@@ -660,6 +744,10 @@ def migrate_batch(
         identity = repositories[repo]
         if identity["generation"] != generation or identity["pr"] != pr:
             raise ManifestError(f"repository {repo!r} migration identity mismatch")
+        if identity.get("legacy_schema") == 4 and "rotation" in identity:
+            raise ManifestError(
+                f"repository {repo!r} active rotation requires migrate-rotation-subject"
+            )
         if not family or type(branch_generation) is not int or branch_generation <= 0 or not is_object_id(base_sha):
             raise ManifestError(f"repository {repo!r} has invalid migration evidence")
         candidate = dict(identity)
@@ -693,6 +781,163 @@ def migrate_batch(
             continue
         if "legacy_schema" not in identity:
             raise ManifestError(f"repository {repo!r} migration is already complete with different evidence")
+        pending.append((repo, candidate))
+    for repo, candidate in pending:
+        repositories[repo] = candidate
+    return slot
+
+
+def migrate_rotation_subjects(
+    data: dict[str, Any],
+    name: str,
+    migrations: list[
+        tuple[str, str, int, str, str, str, str, str, int, str, str | None, str]
+    ],
+    root: Path,
+) -> dict[str, Any]:
+    if not migrations:
+        raise ManifestError("at least one rotation subject migration is required")
+    slot = require_slot(data, name)
+    require_complete_context(slot, name)
+    repositories = slot["repositories"]
+    seen: set[str] = set()
+    pending: list[tuple[str, dict[str, Any]]] = []
+    for (
+        repo,
+        from_branch,
+        from_generation,
+        from_head,
+        boundary,
+        source,
+        source_tree,
+        target,
+        target_generation,
+        result_tree,
+        transfer_subject,
+        temporary_worktree,
+    ) in migrations:
+        if repo in seen:
+            raise ManifestError(f"duplicate rotation subject migration: {repo}")
+        seen.add(repo)
+        if repo not in repositories:
+            raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+        identity = repositories[repo]
+        rotation = identity.get("rotation")
+        if rotation is None:
+            raise ManifestError(f"repository {repo!r} has no rotation journal")
+        expected_temporary = generation_worktree_path(root, name, repo, target)
+        if temporary_worktree != str(expected_temporary):
+            raise ManifestError(
+                f"repository {repo!r} rotation temporary worktree is not deterministic"
+            )
+        old_identity = {
+            "from_branch": from_branch,
+            "from_branch_generation": from_generation,
+            "from_head_sha": from_head,
+            "boundary_sha": boundary,
+            "source_sha": source,
+            "target_branch": target,
+            "target_branch_generation": target_generation,
+            "result_tree_sha": result_tree,
+            "temporary_worktree": temporary_worktree,
+        }
+        if any(rotation.get(field) != value for field, value in old_identity.items()):
+            raise ManifestError(f"repository {repo!r} rotation subject migration identity mismatch")
+        migrated_rotation = dict(rotation)
+        migrated_rotation["source_tree_sha"] = source_tree
+        migrated_rotation["transfer_subject"] = transfer_subject
+        validate_rotation(repo, migrated_rotation, name)
+        if "legacy_schema" not in identity:
+            if rotation == migrated_rotation:
+                continue
+            raise ManifestError(
+                f"repository {repo!r} rotation subject migration is already complete "
+                "with different evidence"
+            )
+        if identity["legacy_schema"] != 4:
+            raise ManifestError(
+                f"repository {repo!r} requires generation evidence migration before rotation"
+            )
+        repository_path = (Path(slot["path"]) / repo).resolve()
+        try:
+            from prepare_generation_branch import (
+                TransitionError,
+                inspect_legacy_repository_state,
+            )
+
+            git_state = inspect_legacy_repository_state(
+                repo=repository_path,
+                source_revision=source,
+                result_tree_revision=result_tree,
+                branch_family=identity["branch_family"],
+                target_generation=target_generation,
+                temporary_worktree=Path(temporary_worktree),
+                workspace_root=root,
+                slot=name,
+                repository=repo,
+            )
+        except (TransitionError, OSError) as exc:
+            raise ManifestError(
+                f"repository {repo!r} rotation Git evidence is invalid: {exc}"
+            ) from exc
+        if git_state["source_tree_sha"] != source_tree:
+            raise ManifestError(
+                f"repository {repo!r} source tree does not match the exact source commit"
+            )
+        if not git_state["development_clean"]:
+            raise ManifestError(
+                f"repository {repo!r} development worktree is not clean during migration"
+            )
+        phase = rotation["phase"]
+        target_exists = git_state["target_status"] == "existing"
+        expected_subject = transfer_subject
+        if target_exists:
+            if git_state["temporary_status"] != "absent":
+                raise ManifestError(
+                    f"repository {repo!r} target and temporary worktree coexist"
+                )
+            if git_state["target_subject"] != expected_subject:
+                raise ManifestError(
+                    f"repository {repo!r} published target subject is not suitable "
+                    "for migration"
+                )
+        elif phase != "planned":
+            raise ManifestError(
+                f"repository {repo!r} persisted rotation phase requires an exact target"
+            )
+        elif (
+            git_state["temporary_status"] == "completed"
+            and git_state["temporary_subject"] != expected_subject
+        ):
+            raise ManifestError(
+                f"repository {repo!r} temporary commit subject requires safe recreation"
+            )
+
+        old_development = (
+            git_state["development_branch"] == from_branch
+            and git_state["development_head_sha"] == from_head
+        )
+        target_development = (
+            target_exists
+            and git_state["development_branch"] == target
+            and git_state["development_head_sha"] == git_state["target_sha"]
+        )
+        if phase == "planned" and not old_development:
+            raise ManifestError(
+                f"repository {repo!r} planned rotation development state changed"
+            )
+        if phase == "branch-created" and not (old_development or target_development):
+            raise ManifestError(
+                f"repository {repo!r} branch-created development state is invalid"
+            )
+        if phase == "switched" and not target_development:
+            raise ManifestError(
+                f"repository {repo!r} switched development state is invalid"
+            )
+        candidate = dict(identity)
+        candidate["rotation"] = migrated_rotation
+        candidate.pop("legacy_schema")
+        validate_repository(repo, candidate, name)
         pending.append((repo, candidate))
     for repo, candidate in pending:
         repositories[repo] = candidate
@@ -736,7 +981,9 @@ def record_corrections(
 def begin_rotations(
     data: dict[str, Any],
     name: str,
-    rotations: list[tuple[str, str, int, str, str, str, str, int, str, str]],
+    rotations: list[
+        tuple[str, str, int, str, str, str, str, str, int, str, str | None, str]
+    ],
     root: Path,
 ) -> dict[str, Any]:
     if not rotations:
@@ -752,9 +999,11 @@ def begin_rotations(
         from_head,
         boundary,
         source,
+        source_tree,
         target,
         target_generation,
         result_tree,
+        transfer_subject,
         temporary_worktree,
     ) in rotations:
         if repo in seen:
@@ -771,9 +1020,11 @@ def begin_rotations(
             "from_head_sha": from_head,
             "boundary_sha": boundary,
             "source_sha": source,
+            "source_tree_sha": source_tree,
             "target_branch": target,
             "target_branch_generation": target_generation,
             "result_tree_sha": result_tree,
+            "transfer_subject": transfer_subject,
             "temporary_worktree": temporary_worktree,
         }
         validate_rotation(repo, rotation, name)
@@ -803,6 +1054,7 @@ def advance_rotation(data: dict[str, Any], name: str, repo: str, expected: str, 
     if repo not in slot["repositories"]:
         raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
     identity = slot["repositories"][repo]
+    require_generation_evidence(identity, repo)
     rotation = identity.get("rotation")
     if rotation is None:
         raise ManifestError(f"repository {repo!r} has no rotation journal")
@@ -828,6 +1080,7 @@ def complete_rotation(
     if repo not in slot["repositories"]:
         raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
     identity = slot["repositories"][repo]
+    require_generation_evidence(identity, repo)
     if (
         not is_object_id(source_sha)
         or not is_object_id(target_head_sha)
@@ -1264,6 +1517,33 @@ def parser() -> argparse.ArgumentParser:
         metavar=("REPO", "GENERATION", "PR", "FAMILY", "BRANCH_GENERATION", "BASE_SHA", "HEAD", "BOUNDARY", "OBSERVED"),
     )
 
+    migrate_subject = subparsers.add_parser(
+        "migrate-rotation-subject",
+        help="Atomically backfill exact schema 4 rotation tree and subject evidence",
+    )
+    migrate_subject.add_argument("--slot", required=True)
+    migrate_subject.add_argument("--token", required=True)
+    migrate_subject.add_argument(
+        "--repository-subject",
+        action="append",
+        required=True,
+        nargs=12,
+        metavar=(
+            "REPO",
+            "FROM_BRANCH",
+            "FROM_GENERATION",
+            "FROM_HEAD",
+            "BOUNDARY",
+            "SOURCE",
+            "SOURCE_TREE",
+            "TARGET",
+            "TARGET_GENERATION",
+            "RESULT_TREE",
+            "SUBJECT_OR_DASH",
+            "TEMPORARY_WORKTREE",
+        ),
+    )
+
     correction = subparsers.add_parser(
         "record-correction",
         help="Atomically advance observed heads without moving continuation boundaries",
@@ -1285,8 +1565,21 @@ def parser() -> argparse.ArgumentParser:
         "--repository-rotation",
         action="append",
         required=True,
-        nargs=10,
-        metavar=("REPO", "FROM_BRANCH", "FROM_GENERATION", "FROM_HEAD", "BOUNDARY", "SOURCE", "TARGET", "TARGET_GENERATION", "RESULT_TREE", "TEMPORARY_WORKTREE"),
+        nargs=12,
+        metavar=(
+            "REPO",
+            "FROM_BRANCH",
+            "FROM_GENERATION",
+            "FROM_HEAD",
+            "BOUNDARY",
+            "SOURCE",
+            "SOURCE_TREE",
+            "TARGET",
+            "TARGET_GENERATION",
+            "RESULT_TREE",
+            "SUBJECT_OR_DASH",
+            "TEMPORARY_WORKTREE",
+        ),
     )
 
     advance = subparsers.add_parser("advance-rotation", help="Advance one exact rotation journal phase")
@@ -1365,6 +1658,14 @@ def main() -> int:
                         data,
                         args.slot,
                         parse_repository_migrations(args.repository_migration),
+                    )
+                elif args.command == "migrate-rotation-subject":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = migrate_rotation_subjects(
+                        data,
+                        args.slot,
+                        parse_repository_rotation_subjects(args.repository_subject),
+                        args.root,
                     )
                 elif args.command == "record-correction":
                     require_operation_lock(args.root, args.slot, args.token)

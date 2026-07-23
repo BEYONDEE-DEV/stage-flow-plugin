@@ -153,7 +153,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "Exact retries are idempotent",
             "not a lifecycle state",
             "same slot/worktree and develop B locally",
-            '"schema_version": 4',
+            '"schema_version": 5',
             '"source_branch": "feature-etc"',
             '"remote": "origin"',
             "without changing file bytes",
@@ -184,7 +184,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "Ordinary OPEN submit never pushes the local active branch",
             "continuation_boundary_sha",
             "record-correction",
-            "exactly one Korean transfer commit",
+            "exactly one transfer commit",
             "immediately call `record-batch`",
         ]:
             self.assertIn(phrase, reference)
@@ -196,6 +196,13 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("`MERGED` rotates", skill)
         self.assertIn("Never enable auto-merge or run a remote PR merge command", skill)
         self.assertIn("preserving the continuation boundary", skill)
+        self.assertIn("B-only net user outcome", skill)
+        self.assertIn("normalized subject", skill)
+        self.assertIn("source_tree_sha", reference)
+        self.assertIn("feat(events): 이벤트 필터 상태 보존", reference)
+        self.assertIn("migrate-rotation-subject", reference)
+        self.assertIn("discard-legacy-temporary", reference)
+        self.assertNotIn("후속 작업을 최신 <source-branch> 기준으로 이전", reference)
         self.assertNotIn("gh pr edit", reference)
         self.assertNotIn('git -C "<development-worktree>" add .', reference)
 
@@ -256,7 +263,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
 
         self.assertIn("first initialization and exact retry", skill)
         self.assertIn("`create` owns only first initialization", skill)
-        self.assertIn("Initialize schema-4 manifest evidence", skill)
+        self.assertIn("Initialize schema-5 manifest evidence", skill)
         self.assertIn("Use `create` only for first initialization or exact retry", reference)
         self.assertIn("initialize --slot", reference)
         self.assertIn("worktree add -b", reference)
@@ -796,7 +803,7 @@ class SlotManifestTests(unittest.TestCase):
             before = manifest_path.read_bytes()
 
             status = json.loads(self.run_manifest(root, "status").stdout)["result"]
-            self.assertEqual(status["schema_version"], 4)
+            self.assertEqual(status["schema_version"], 5)
             self.assertIsNone(status["slots"]["slot-1"]["repositories"]["service-a"]["source_branch"])
             self.assertIsNone(status["slots"]["slot-2"]["repositories"]["service-c"]["remote"])
             self.assertEqual(manifest_path.read_bytes(), before)
@@ -836,7 +843,7 @@ class SlotManifestTests(unittest.TestCase):
             self.assertEqual(json.loads(bound.stdout)["result"], json.loads(repeated.stdout)["result"])
 
             written = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(written["schema_version"], 4)
+            self.assertEqual(written["schema_version"], 5)
             self.assertEqual(
                 written["slots"]["slot-1"]["repositories"]["service-a"]["source_branch"],
                 "main",
@@ -1705,6 +1712,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             local_head = "4" * 40
             next_source = "5" * 40
             result_tree = "6" * 40
+            source_tree = "8" * 40
+            transfer_subject = "feat: 이벤트 필터 상태 보존"
             self.run_manifest(
                 root,
                 "initialize",
@@ -1743,7 +1752,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "--slot", "slot-1",
                 "--token", "submit-a",
                 "--repository-rotation",
-                "service-a", "task-a", "1", local_head, submitted, next_source, target, "2", result_tree,
+                "service-a", "task-a", "1", local_head, submitted, next_source, source_tree,
+                target, "2", result_tree, transfer_subject,
                 str(root / "original-source-worktree"),
                 check=False,
             )
@@ -1759,7 +1769,8 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
                 "--slot", "slot-1",
                 "--token", "submit-a",
                 "--repository-rotation",
-                "service-a", "task-a", "1", local_head, submitted, next_source, target, "2", result_tree,
+                "service-a", "task-a", "1", local_head, submitted, next_source, source_tree,
+                target, "2", result_tree, transfer_subject,
                 temporary_worktree,
             )
             self.assertEqual(
@@ -1769,6 +1780,10 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             self.assertEqual(
                 json.loads(begun.stdout)["result"]["repositories"]["service-a"]["rotation"]["temporary_worktree"],
                 temporary_worktree,
+            )
+            self.assertEqual(
+                json.loads(begun.stdout)["result"]["repositories"]["service-a"]["rotation"]["transfer_subject"],
+                transfer_subject,
             )
             self.run_manifest(
                 root,
@@ -1880,6 +1895,206 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             self.assertNotIn("legacy_schema", identity)
             self.assertEqual(identity["branch_base_sha"], "1" * 40)
             self.assertEqual(identity["submission"]["observed_head_sha"], "2" * 40)
+
+    def test_schema_v4_active_rotation_requires_lock_and_git_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            temporary = generation_temporary_worktree(
+                root / "service-a",
+                "task-a",
+                2,
+                workspace_root=root,
+                repository="service-a",
+            )
+            legacy_rotation = {
+                "phase": "planned",
+                "from_branch": "task-a",
+                "from_branch_generation": 1,
+                "from_head_sha": "3" * 40,
+                "boundary_sha": "2" * 40,
+                "source_sha": "4" * 40,
+                "target_branch": "task-a-stageflow-g2",
+                "target_branch_generation": 2,
+                "result_tree_sha": "6" * 40,
+                "temporary_worktree": str(temporary),
+            }
+            manifest = {
+                "schema_version": 4,
+                "slots": {
+                    "slot-1": {
+                        "path": str((root / "worktrees" / "slot-1").resolve()),
+                        "repositories": {
+                            "service-a": {
+                                "branch_family": "task-a",
+                                "branch": "task-a",
+                                "branch_generation": 1,
+                                "branch_base_sha": "1" * 40,
+                                "source_branch": "main",
+                                "remote": "origin",
+                                "generation": 1,
+                                "pr": "17",
+                                "submission": {
+                                    "generation": 1,
+                                    "head_branch": "task-a",
+                                    "continuation_boundary_sha": "2" * 40,
+                                    "observed_head_sha": "2" * 40,
+                                },
+                                "rotation": legacy_rotation,
+                            }
+                        },
+                    }
+                },
+            }
+            manifest_path = state / "slots.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            status = json.loads(self.run_manifest(root, "status").stdout)["result"]
+            promoted = status["slots"]["slot-1"]["repositories"]["service-a"]
+            self.assertEqual(status["schema_version"], 5)
+            self.assertEqual(promoted["legacy_schema"], 4)
+            self.assertNotIn("source_tree_sha", promoted["rotation"])
+            self.assertEqual(json.loads(manifest_path.read_text())["schema_version"], 4)
+
+            arguments = (
+                "migrate-rotation-subject",
+                "--slot", "slot-1",
+                "--token", "rotate-a",
+                "--repository-subject",
+                "service-a", "task-a", "1", "3" * 40, "2" * 40, "4" * 40,
+                "5" * 40, "task-a-stageflow-g2", "2", "6" * 40,
+                "  feat(events): 이벤트 필터 상태 보존  ", str(temporary),
+            )
+            unlocked = self.run_manifest(root, *arguments, check=False)
+            self.assertEqual(unlocked.returncode, 2)
+            self.assertIn("not locked", unlocked.stderr)
+            self.assertEqual(json.loads(manifest_path.read_text())["schema_version"], 4)
+
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "rotate-a")
+            missing_git = self.run_manifest(root, *arguments, check=False)
+            self.assertEqual(missing_git.returncode, 2)
+            self.assertIn("rotation Git evidence is invalid", missing_git.stderr)
+            self.assertEqual(json.loads(manifest_path.read_text())["schema_version"], 4)
+
+    def test_rotation_subject_and_empty_tree_invariants_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-1",
+                "--path", str(root / "worktrees" / "slot-1"),
+                "--repository", "service-a", "task-a", "main", "origin", "1" * 40,
+            )
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "rotate-a")
+            temporary = generation_temporary_worktree(
+                root / "service-a",
+                "task-a",
+                2,
+                workspace_root=root,
+                repository="service-a",
+            )
+            common = [
+                "begin-rotation",
+                "--slot", "slot-1",
+                "--token", "rotate-a",
+                "--repository-rotation",
+                "service-a", "task-a", "1", "3" * 40, "2" * 40, "4" * 40,
+            ]
+            non_empty_without_subject = self.run_manifest(
+                root,
+                *common,
+                "5" * 40, "task-a-stageflow-g2", "2", "6" * 40, "-", str(temporary),
+                check=False,
+            )
+            self.assertEqual(non_empty_without_subject.returncode, 2)
+            self.assertIn("non-empty rotation requires a subject", non_empty_without_subject.stderr)
+
+            empty_with_subject = self.run_manifest(
+                root,
+                *common,
+                "6" * 40, "task-a-stageflow-g2", "2", "6" * 40,
+                "feat: 없어야 하는 메시지", str(temporary),
+                check=False,
+            )
+            self.assertEqual(empty_with_subject.returncode, 2)
+            self.assertIn("empty rotation must not have a subject", empty_with_subject.stderr)
+
+            for token in ("<source-branch>", "<branch-family>", "<target>", "<repo>"):
+                with self.subTest(token=token):
+                    placeholder = self.run_manifest(
+                        root,
+                        *common,
+                        "5" * 40, "task-a-stageflow-g2", "2", "6" * 40,
+                        f"후속 {token} 이동", str(temporary),
+                        check=False,
+                    )
+                    self.assertEqual(placeholder.returncode, 2)
+                    self.assertIn("unresolved workflow placeholder", placeholder.stderr)
+            accepted_english = json.loads(self.run_manifest(
+                root,
+                *common,
+                "5" * 40, "task-a-stageflow-g2", "2", "6" * 40,
+                "feat(events): preserve filter state", str(temporary),
+            ).stdout)["result"]
+            self.assertEqual(
+                accepted_english["repositories"]["service-a"]["rotation"]["transfer_subject"],
+                "feat(events): preserve filter state",
+            )
+
+    def test_schema_v4_new_slot_initialize_preserves_existing_legacy_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = root / ".stageflow-worktrees"
+            state.mkdir()
+            existing_identity = {
+                "branch_family": "task-a",
+                "branch": "task-a",
+                "branch_generation": 1,
+                "branch_base_sha": "1" * 40,
+                "source_branch": "main",
+                "remote": "origin",
+                "generation": 0,
+                "pr": None,
+                "submission": None,
+            }
+            (state / "slots.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 4,
+                        "slots": {
+                            "slot-1": {
+                                "path": str((root / "worktrees" / "slot-1").resolve()),
+                                "repositories": {"service-a": existing_identity},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            initialized = json.loads(self.run_manifest(
+                root,
+                "initialize",
+                "--slot", "slot-2",
+                "--path", str(root / "worktrees" / "slot-2"),
+                "--repository", "service-b", "task-b", "main", "origin", "2" * 40,
+            ).stdout)["result"]
+            self.assertNotIn("legacy_schema", initialized["repositories"]["service-b"])
+            written = json.loads((state / "slots.json").read_text(encoding="utf-8"))
+            self.assertEqual(written["schema_version"], 5)
+            self.assertEqual(
+                written["slots"]["slot-1"]["repositories"]["service-a"]["legacy_schema"],
+                4,
+            )
+            self.assertEqual(
+                {
+                    key: value
+                    for key, value in written["slots"]["slot-1"]["repositories"]["service-a"].items()
+                    if key != "legacy_schema"
+                },
+                existing_identity,
+            )
 
     def test_schema_v3_migration_upgrades_legacy_reconciliation_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2013,6 +2228,14 @@ class GenerationBranchPreparationTests(unittest.TestCase):
 
     def run_preparer(self, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         prepared_arguments = list(arguments)
+        if (
+            prepared_arguments[0] in {"create", "verify"}
+            and "--source-tree" not in prepared_arguments
+        ):
+            repo = Path(prepared_arguments[prepared_arguments.index("--repo") + 1])
+            source = prepared_arguments[prepared_arguments.index("--source") + 1]
+            source_tree = self.git(repo, "rev-parse", f"{source}^{{tree}}").stdout.strip()
+            prepared_arguments.extend(["--source-tree", source_tree])
         if prepared_arguments[0] == "create" and "--workspace-root" not in prepared_arguments:
             repo = Path(prepared_arguments[prepared_arguments.index("--repo") + 1])
             prepared_arguments.extend(
@@ -2055,16 +2278,18 @@ class GenerationBranchPreparationTests(unittest.TestCase):
             "--target-generation", str(generation),
         )
         plan = json.loads(analyzed.stdout)["result"]
-        created = self.run_preparer(
+        create_arguments = [
             "create",
             "--repo", str(repo),
             "--source", source,
             "--result-tree", str(plan["result_tree_sha"]),
             "--branch-family", family,
             "--target-generation", str(generation),
-            "--message", "후속 작업을 최신 기준으로 이전",
             "--temporary-worktree", str(generation_temporary_worktree(repo, family, generation)),
-        )
+        ]
+        if plan["result_tree_sha"] != plan["source_tree_sha"]:
+            create_arguments.extend(["--message", "feat: 후속 작업 결과 반영"])
+        created = self.run_preparer(*create_arguments)
         return plan, json.loads(created.stdout)["result"]["target_sha"]
 
     def test_squash_merge_moves_only_next_work_to_source_parent(self) -> None:
@@ -2127,6 +2352,10 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 ["b.txt"],
             )
             self.assertEqual(self.git(repo, "show", f"{target_sha}:source.txt").stdout, "source advance\n")
+            self.assertEqual(
+                self.git(repo, "show", "-s", "--format=%s", target_sha).stdout.strip(),
+                "작업 B를 새 기준으로 이전",
+            )
 
     def test_conflict_does_not_create_target_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2217,6 +2446,211 @@ class GenerationBranchPreparationTests(unittest.TestCase):
             self.assertEqual(plan["result_tree_sha"], self.git(repo, "rev-parse", f"{source}^{{tree}}").stdout.strip())
             self.assertEqual(target, source)
             self.assertEqual(self.git(repo, "rev-parse", "task-stageflow-g2").stdout.strip(), source)
+
+    def test_transfer_subject_is_normalized_and_exact_retry_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.prepare_repo(Path(tmp))
+            source = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "switch", "-c", "task")
+            (repo / "events.txt").write_text("filter state\n", encoding="utf-8")
+            self.git(repo, "add", "events.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            local_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            plan = json.loads(self.run_preparer(
+                "analyze",
+                "--repo", str(repo),
+                "--from-head", local_head,
+                "--boundary", source,
+                "--source", source,
+                "--branch-family", "task",
+                "--target-generation", "2",
+            ).stdout)["result"]
+            self.assertEqual(
+                plan["source_tree_sha"],
+                self.git(repo, "rev-parse", f"{source}^{{tree}}").stdout.strip(),
+            )
+            wrong_source_tree = self.run_preparer(
+                "create",
+                "--repo", str(repo),
+                "--source", source,
+                "--source-tree", source,
+                "--result-tree", str(plan["result_tree_sha"]),
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--message", "feat(events): 이벤트 필터 상태 보존",
+                "--temporary-worktree", str(generation_temporary_worktree(repo, "task", 2)),
+                check=False,
+            )
+            self.assertEqual(wrong_source_tree.returncode, 2)
+            self.assertIn("source tree does not match", wrong_source_tree.stderr)
+            self.assertNotEqual(
+                self.git(
+                    repo,
+                    "rev-parse",
+                    "--verify",
+                    "refs/heads/task-stageflow-g2",
+                    check=False,
+                ).returncode,
+                0,
+            )
+            created = json.loads(self.run_preparer(
+                "create",
+                "--repo", str(repo),
+                "--source", source,
+                "--result-tree", str(plan["result_tree_sha"]),
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--message", "  feat(events): 이벤트 필터 상태 보존  ",
+                "--temporary-worktree", str(generation_temporary_worktree(repo, "task", 2)),
+            ).stdout)["result"]
+            self.assertEqual(created["transfer_subject"], "feat(events): 이벤트 필터 상태 보존")
+            self.assertEqual(
+                self.git(repo, "show", "-s", "--format=%s", created["target_sha"]).stdout.strip(),
+                created["transfer_subject"],
+            )
+
+            wrong_subject = self.run_preparer(
+                "verify",
+                "--repo", str(repo),
+                "--source", source,
+                "--result-tree", str(plan["result_tree_sha"]),
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--message", "fix(events): 다른 결과",
+                check=False,
+            )
+            self.assertEqual(wrong_subject.returncode, 2)
+            self.assertIn("does not match the journal", wrong_subject.stderr)
+            verified = json.loads(self.run_preparer(
+                "verify",
+                "--repo", str(repo),
+                "--source", source,
+                "--result-tree", str(plan["result_tree_sha"]),
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--message", "feat(events): 이벤트 필터 상태 보존",
+            ).stdout)["result"]
+            self.assertEqual(verified["target_sha"], created["target_sha"])
+
+    def test_invalid_transfer_subjects_publish_no_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.prepare_repo(Path(tmp))
+            source = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "switch", "-c", "task")
+            (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+            self.git(repo, "add", "b.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            local_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            plan = json.loads(self.run_preparer(
+                "analyze",
+                "--repo", str(repo),
+                "--from-head", local_head,
+                "--boundary", source,
+                "--source", source,
+                "--branch-family", "task",
+                "--target-generation", "2",
+            ).stdout)["result"]
+            for subject in (
+                "   ",
+                "feat: 첫 줄\n둘째 줄",
+                "feat: 제어\x7f문자",
+                "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "후속 <branch-family> 이동",
+                "후속 <target> 이동",
+                "후속 <repo> 이동",
+            ):
+                with self.subTest(subject=subject):
+                    result = self.run_preparer(
+                        "create",
+                        "--repo", str(repo),
+                        "--source", source,
+                        "--result-tree", str(plan["result_tree_sha"]),
+                        "--branch-family", "task",
+                        "--target-generation", "2",
+                        "--message", subject,
+                        "--temporary-worktree", str(generation_temporary_worktree(repo, "task", 2)),
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertNotEqual(
+                        self.git(
+                            repo,
+                            "rev-parse",
+                            "--verify",
+                            "refs/heads/task-stageflow-g2",
+                            check=False,
+                        ).returncode,
+                        0,
+                    )
+
+    def test_subject_mutating_hook_blocks_before_target_and_preserves_retry_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self.prepare_repo(root)
+            source = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "switch", "-c", "task")
+            (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+            self.git(repo, "add", "b.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            local_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            plan = json.loads(self.run_preparer(
+                "analyze",
+                "--repo", str(repo),
+                "--from-head", local_head,
+                "--boundary", source,
+                "--source", source,
+                "--branch-family", "task",
+                "--target-generation", "2",
+            ).stdout)["result"]
+            hooks = root / "hooks"
+            hooks.mkdir()
+            hook = hooks / "commit-msg"
+            hook.write_text("#!/bin/sh\nprintf 'chore: hook changed subject\\n' > \"$1\"\n", encoding="utf-8")
+            hook.chmod(0o755)
+            self.git(repo, "config", "core.hooksPath", str(hooks))
+            temporary = generation_temporary_worktree(repo, "task", 2)
+            arguments = (
+                "create",
+                "--repo", str(repo),
+                "--source", source,
+                "--result-tree", str(plan["result_tree_sha"]),
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--message", "feat: 작업 B 반영",
+                "--temporary-worktree", str(temporary),
+            )
+            first = self.run_preparer(*arguments, check=False)
+            self.assertEqual(first.returncode, 2)
+            self.assertIn("expected 'feat: 작업 B 반영'", first.stderr)
+            self.assertTrue(temporary.is_dir())
+            self.assertEqual(
+                self.git(temporary, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+                "chore: hook changed subject",
+            )
+            self.assertNotEqual(
+                self.git(
+                    repo,
+                    "rev-parse",
+                    "--verify",
+                    "refs/heads/task-stageflow-g2",
+                    check=False,
+                ).returncode,
+                0,
+            )
+            retry = self.run_preparer(*arguments, check=False)
+            self.assertEqual(retry.returncode, 2)
+            self.assertTrue(temporary.is_dir())
+            self.assertNotEqual(
+                self.git(
+                    repo,
+                    "rev-parse",
+                    "--verify",
+                    "refs/heads/task-stageflow-g2",
+                    check=False,
+                ).returncode,
+                0,
+            )
+            self.git(repo, "worktree", "remove", "--force", str(temporary))
 
     def test_delete_and_rename_are_transferred_to_source_parent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2442,7 +2876,7 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                         ":/",
                     )
                 if crash_state == "result-committed":
-                    self.git(temporary, "commit", "-m", "중단 전 이전 커밋")
+                    self.git(temporary, "commit", "-m", "feat: 후속 작업 결과 반영")
 
                 created = json.loads(self.run_preparer(
                     "create",
@@ -2451,7 +2885,7 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                     "--result-tree", result_tree,
                     "--branch-family", "task",
                     "--target-generation", "2",
-                    "--message", "후속 작업을 최신 기준으로 이전",
+                    "--message", "feat: 후속 작업 결과 반영",
                     "--temporary-worktree", str(temporary),
                 ).stdout)["result"]
                 target = str(created["target_sha"])
@@ -2463,6 +2897,424 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 )
                 self.assertEqual(self.git(repo, "show", "-s", "--format=%P", target).stdout.strip(), source)
                 self.assertEqual(self.git(repo, "rev-parse", f"{target}^{{tree}}").stdout.strip(), result_tree)
+
+    def test_legacy_temporary_inspection_and_pre_target_discard_are_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self.prepare_repo(root)
+            source = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "switch", "-c", "task")
+            (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+            self.git(repo, "add", "b.txt")
+            self.git(repo, "commit", "-m", "작업 B")
+            local_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            plan = json.loads(self.run_preparer(
+                "analyze",
+                "--repo", str(repo),
+                "--from-head", local_head,
+                "--boundary", source,
+                "--source", source,
+                "--branch-family", "task",
+                "--target-generation", "2",
+            ).stdout)["result"]
+            result_tree = str(plan["result_tree_sha"])
+            temporary = generation_temporary_worktree(repo, "task", 2)
+            state_dir = root / ".stageflow-worktrees"
+            state_dir.mkdir(exist_ok=True)
+            manifest_path = state_dir / "slots.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 4,
+                        "slots": {
+                            "slot-1": {
+                                "path": str(root.resolve()),
+                                "repositories": {
+                                    "repo": {
+                                        "branch_family": "task",
+                                        "branch": "task",
+                                        "branch_generation": 1,
+                                        "branch_base_sha": source,
+                                        "source_branch": "main",
+                                        "remote": "origin",
+                                        "generation": 1,
+                                        "pr": "17",
+                                        "submission": {
+                                            "generation": 1,
+                                            "head_branch": "task",
+                                            "continuation_boundary_sha": source,
+                                            "observed_head_sha": source,
+                                        },
+                                        "rotation": {
+                                            "phase": "planned",
+                                            "from_branch": "task",
+                                            "from_branch_generation": 1,
+                                            "from_head_sha": local_head,
+                                            "boundary_sha": source,
+                                            "source_sha": source,
+                                            "target_branch": "task-stageflow-g2",
+                                            "target_branch_generation": 2,
+                                            "result_tree_sha": result_tree,
+                                            "temporary_worktree": str(temporary),
+                                        },
+                                    }
+                                },
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            def create_legacy_temporary() -> str:
+                temporary.parent.mkdir(parents=True, exist_ok=True)
+                self.git(repo, "worktree", "add", "--detach", str(temporary), source)
+                self.git(
+                    temporary,
+                    "restore",
+                    "--source", result_tree,
+                    "--staged",
+                    "--worktree",
+                    "--",
+                    ":/",
+                )
+                self.git(
+                    temporary,
+                    "commit",
+                    "-m",
+                    "후속 작업을 최신 <source-branch> 기준으로 이전",
+                )
+                return self.git(temporary, "rev-parse", "HEAD").stdout.strip()
+
+            legacy_head = create_legacy_temporary()
+            common = (
+                "--repo", str(repo),
+                "--source", source,
+                "--result-tree", result_tree,
+                "--branch-family", "task",
+                "--target-generation", "2",
+                "--temporary-worktree", str(temporary),
+                "--workspace-root", str(root),
+                "--slot", "slot-1",
+                "--repository", "repo",
+            )
+            inspected = json.loads(
+                self.run_preparer("inspect-legacy", *common).stdout
+            )["result"]
+            self.assertEqual(inspected["target_status"], "absent")
+            self.assertEqual(inspected["temporary_status"], "completed")
+            self.assertEqual(inspected["temporary_head_sha"], legacy_head)
+            self.assertEqual(
+                inspected["temporary_subject"],
+                "후속 작업을 최신 <source-branch> 기준으로 이전",
+            )
+
+            no_lock = self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "rotate-a",
+                check=False,
+            )
+            self.assertEqual(no_lock.returncode, 2)
+            self.assertIn("not locked", no_lock.stderr)
+            self.assertTrue(temporary.is_dir())
+            self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "rotate-a")
+            wrong_token = self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "wrong",
+                check=False,
+            )
+            self.assertEqual(wrong_token.returncode, 2)
+            self.assertIn("token mismatch", wrong_token.stderr)
+            self.assertTrue(temporary.is_dir())
+            discarded = json.loads(self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "rotate-a",
+            ).stdout)["result"]
+            self.assertTrue(discarded["discarded"])
+            self.assertFalse(temporary.exists())
+
+            legacy_head = create_legacy_temporary()
+            persisted = json.loads(manifest_path.read_text(encoding="utf-8"))
+            persisted["slots"]["slot-1"]["repositories"]["repo"]["rotation"]["phase"] = "branch-created"
+            manifest_path.write_text(json.dumps(persisted), encoding="utf-8")
+            non_planned = self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "rotate-a",
+                check=False,
+            )
+            self.assertEqual(non_planned.returncode, 2)
+            self.assertIn("persisted rotation phase", non_planned.stderr)
+            self.assertTrue(temporary.is_dir())
+            persisted["slots"]["slot-1"]["repositories"]["repo"]["rotation"]["phase"] = "planned"
+            manifest_path.write_text(json.dumps(persisted), encoding="utf-8")
+            self.git(repo, "branch", "task-stageflow-g2", legacy_head)
+            after_publication = self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "rotate-a",
+                check=False,
+            )
+            self.assertEqual(after_publication.returncode, 2)
+            self.assertIn("after target publication", after_publication.stderr)
+            self.assertTrue(temporary.is_dir())
+            self.git(repo, "branch", "-D", "task-stageflow-g2")
+            (temporary / "untracked.txt").write_text("preserve\n", encoding="utf-8")
+            dirty = self.run_preparer(
+                "discard-legacy-temporary",
+                *common,
+                "--expected-phase", "planned",
+                "--expected-subject", "후속 작업을 최신 <source-branch> 기준으로 이전",
+                "--token", "rotate-a",
+                check=False,
+            )
+            self.assertEqual(dirty.returncode, 2)
+            self.assertIn("additional changes", dirty.stderr)
+            self.assertTrue((temporary / "untracked.txt").exists())
+            self.git(repo, "worktree", "remove", "--force", str(temporary))
+
+    def test_schema_v4_recovery_binds_manifest_lock_git_state_and_subject(self) -> None:
+        states = (
+            "absent",
+            "source",
+            "suitable-temp",
+            "mechanical-temp",
+            "suitable-target",
+            "unsuitable-target",
+            "switched-unsuitable",
+        )
+        for legacy_state in states:
+            with self.subTest(legacy_state=legacy_state), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                repo = self.prepare_repo(root)
+                source = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+                source_tree = self.git(repo, "rev-parse", f"{source}^{{tree}}").stdout.strip()
+                self.git(repo, "switch", "-c", "task")
+                (repo / "b.txt").write_text("work B\n", encoding="utf-8")
+                self.git(repo, "add", "b.txt")
+                self.git(repo, "commit", "-m", "작업 B")
+                local_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+                plan = json.loads(self.run_preparer(
+                    "analyze",
+                    "--repo", str(repo),
+                    "--from-head", local_head,
+                    "--boundary", source,
+                    "--source", source,
+                    "--branch-family", "task",
+                    "--target-generation", "2",
+                ).stdout)["result"]
+                result_tree = str(plan["result_tree_sha"])
+                target = "task-stageflow-g2"
+                temporary = generation_temporary_worktree(repo, "task", 2)
+                desired_subject = "feat: 작업 B 반영"
+                old_subject = "후속 작업을 최신 <source-branch> 기준으로 이전"
+
+                def make_temporary(subject: str | None) -> str:
+                    temporary.parent.mkdir(parents=True, exist_ok=True)
+                    self.git(repo, "worktree", "add", "--detach", str(temporary), source)
+                    if subject is None:
+                        return source
+                    self.git(
+                        temporary,
+                        "restore",
+                        "--source", result_tree,
+                        "--staged",
+                        "--worktree",
+                        "--",
+                        ":/",
+                    )
+                    self.git(temporary, "commit", "-m", subject)
+                    return self.git(temporary, "rev-parse", "HEAD").stdout.strip()
+
+                phase = "planned"
+                if legacy_state == "source":
+                    make_temporary(None)
+                elif legacy_state in {"suitable-temp", "mechanical-temp"}:
+                    make_temporary(
+                        desired_subject if legacy_state == "suitable-temp" else old_subject
+                    )
+                elif legacy_state in {
+                    "suitable-target",
+                    "unsuitable-target",
+                    "switched-unsuitable",
+                }:
+                    transfer_head = make_temporary(
+                        desired_subject if legacy_state == "suitable-target" else old_subject
+                    )
+                    self.git(repo, "worktree", "remove", str(temporary))
+                    self.git(repo, "branch", target, transfer_head)
+                    phase = (
+                        "switched"
+                        if legacy_state == "switched-unsuitable"
+                        else "branch-created"
+                    )
+                    if phase == "switched":
+                        self.git(repo, "switch", target)
+
+                state_dir = root / ".stageflow-worktrees"
+                state_dir.mkdir(exist_ok=True)
+                manifest_path = state_dir / "slots.json"
+                manifest_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 4,
+                            "slots": {
+                                "slot-1": {
+                                    "path": str(root.resolve()),
+                                    "repositories": {
+                                        "repo": {
+                                            "branch_family": "task",
+                                            "branch": "task",
+                                            "branch_generation": 1,
+                                            "branch_base_sha": source,
+                                            "source_branch": "main",
+                                            "remote": "origin",
+                                            "generation": 1,
+                                            "pr": "17",
+                                            "submission": {
+                                                "generation": 1,
+                                                "head_branch": "task",
+                                                "continuation_boundary_sha": source,
+                                                "observed_head_sha": source,
+                                            },
+                                            "rotation": {
+                                                "phase": phase,
+                                                "from_branch": "task",
+                                                "from_branch_generation": 1,
+                                                "from_head_sha": local_head,
+                                                "boundary_sha": source,
+                                                "source_sha": source,
+                                                "target_branch": target,
+                                                "target_branch_generation": 2,
+                                                "result_tree_sha": result_tree,
+                                                "temporary_worktree": str(temporary),
+                                            },
+                                        }
+                                    },
+                                }
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "rotate-a")
+                migration = (
+                    "migrate-rotation-subject",
+                    "--slot", "slot-1",
+                    "--token", "rotate-a",
+                    "--repository-subject",
+                    "repo", "task", "1", local_head, source, source, source_tree,
+                    target, "2", result_tree, desired_subject, str(temporary),
+                )
+
+                if legacy_state in {"unsuitable-target", "switched-unsuitable"}:
+                    before = manifest_path.read_bytes()
+                    rejected = self.run_manifest(root, *migration, check=False)
+                    self.assertEqual(rejected.returncode, 2)
+                    self.assertIn("published target subject is not suitable", rejected.stderr)
+                    self.assertEqual(manifest_path.read_bytes(), before)
+                    discard = self.run_preparer(
+                        "discard-legacy-temporary",
+                        "--repo", str(repo),
+                        "--source", source,
+                        "--result-tree", result_tree,
+                        "--branch-family", "task",
+                        "--target-generation", "2",
+                        "--temporary-worktree", str(temporary),
+                        "--workspace-root", str(root),
+                        "--slot", "slot-1",
+                        "--repository", "repo",
+                        "--expected-phase", "planned",
+                        "--expected-subject", old_subject,
+                        "--token", "rotate-a",
+                        check=False,
+                    )
+                    self.assertEqual(discard.returncode, 2)
+                    self.assertEqual(
+                        self.git(repo, "show", "-s", "--format=%s", target).stdout.strip(),
+                        old_subject,
+                    )
+                    continue
+
+                if legacy_state == "mechanical-temp":
+                    rejected = self.run_manifest(root, *migration, check=False)
+                    self.assertEqual(rejected.returncode, 2)
+                    self.assertIn("requires safe recreation", rejected.stderr)
+                    discarded = self.run_preparer(
+                        "discard-legacy-temporary",
+                        "--repo", str(repo),
+                        "--source", source,
+                        "--result-tree", result_tree,
+                        "--branch-family", "task",
+                        "--target-generation", "2",
+                        "--temporary-worktree", str(temporary),
+                        "--workspace-root", str(root),
+                        "--slot", "slot-1",
+                        "--repository", "repo",
+                        "--expected-phase", "planned",
+                        "--expected-subject", old_subject,
+                        "--token", "rotate-a",
+                    )
+                    self.assertEqual(
+                        json.loads(discarded.stdout)["result"]["temporary_status"],
+                        "discarded",
+                    )
+                    self.assertFalse(temporary.exists())
+                    self.assertEqual(
+                        json.loads(manifest_path.read_text())["schema_version"],
+                        4,
+                    )
+
+                migrated = json.loads(self.run_manifest(root, *migration).stdout)["result"]
+                identity = migrated["repositories"]["repo"]
+                self.assertNotIn("legacy_schema", identity)
+                self.assertEqual(identity["rotation"]["source_tree_sha"], source_tree)
+                self.assertEqual(identity["rotation"]["transfer_subject"], desired_subject)
+
+                if legacy_state == "suitable-target":
+                    verified = self.run_preparer(
+                        "verify",
+                        "--repo", str(repo),
+                        "--source", source,
+                        "--source-tree", source_tree,
+                        "--result-tree", result_tree,
+                        "--branch-family", "task",
+                        "--target-generation", "2",
+                        "--message", desired_subject,
+                    )
+                    target_head = json.loads(verified.stdout)["result"]["target_sha"]
+                else:
+                    created = self.run_preparer(
+                        "create",
+                        "--repo", str(repo),
+                        "--source", source,
+                        "--source-tree", source_tree,
+                        "--result-tree", result_tree,
+                        "--branch-family", "task",
+                        "--target-generation", "2",
+                        "--message", desired_subject,
+                        "--temporary-worktree", str(temporary),
+                    )
+                    target_head = json.loads(created.stdout)["result"]["target_sha"]
+                self.assertEqual(
+                    self.git(repo, "show", "-s", "--format=%s", target_head).stdout.strip(),
+                    desired_subject,
+                )
+                retried = json.loads(self.run_manifest(root, *migration).stdout)["result"]
+                self.assertEqual(retried, migrated)
 
     def test_create_preserves_ignored_untracked_collision_in_journaled_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2653,6 +3505,7 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 "--result-tree", str(plan["result_tree_sha"]),
                 "--branch-family", "task",
                 "--target-generation", "2",
+                "--message", "feat: 후속 작업 결과 반영",
                 check=False,
             )
             self.assertEqual(verified.returncode, 2)
@@ -2928,7 +3781,9 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 "--slot", "slot-1",
                 "--token", "sync-a",
                 "--repository-rotation",
-                "service-a", "task", "1", local_head, boundary, source, target, "2", result_tree,
+                "service-a", "task", "1", local_head, boundary, source,
+                str(plan["source_tree_sha"]), target, "2", result_tree,
+                "feat: 작업 B 반영",
                 str(temporary_worktree),
             )
             created = json.loads(self.run_preparer(
@@ -2938,7 +3793,7 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 "--result-tree", result_tree,
                 "--branch-family", "task",
                 "--target-generation", "2",
-                "--message", "작업 B를 최신 기준으로 이전",
+                "--message", "feat: 작업 B 반영",
                 "--temporary-worktree", str(temporary_worktree),
                 "--workspace-root", str(root),
                 "--slot", "slot-1",
@@ -2967,6 +3822,7 @@ class GenerationBranchPreparationTests(unittest.TestCase):
                 "--result-tree", result_tree,
                 "--branch-family", "task",
                 "--target-generation", "2",
+                "--message", "feat: 작업 B 반영",
             ).stdout)["result"]
             self.assertEqual(verified["target_sha"], target_head)
             self.assertEqual(self.git(repo, "status", "--porcelain").stdout, "")
@@ -3027,6 +3883,14 @@ class PullAndSyncFlowTests(unittest.TestCase):
 
     def run_preparer(self, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         prepared_arguments = list(arguments)
+        if (
+            prepared_arguments[0] in {"create", "verify"}
+            and "--source-tree" not in prepared_arguments
+        ):
+            repo = Path(prepared_arguments[prepared_arguments.index("--repo") + 1])
+            source = prepared_arguments[prepared_arguments.index("--source") + 1]
+            source_tree = self.git(repo, "rev-parse", f"{source}^{{tree}}").stdout.strip()
+            prepared_arguments.extend(["--source-tree", source_tree])
         if prepared_arguments[0] == "create" and "--workspace-root" not in prepared_arguments:
             repo = Path(prepared_arguments[prepared_arguments.index("--repo") + 1])
             prepared_arguments.extend(
@@ -3174,7 +4038,6 @@ class PullAndSyncFlowTests(unittest.TestCase):
                 "--result-tree", str(plan["result_tree_sha"]),
                 "--branch-family", "task",
                 "--target-generation", "2",
-                "--message", "최신 기준으로 이전",
                 "--temporary-worktree", str(generation_temporary_worktree(derived, "task", 2)),
             ).stdout)["result"]
             self.git(derived, "switch", "task-stageflow-g2")

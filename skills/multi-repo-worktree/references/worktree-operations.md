@@ -56,11 +56,11 @@ There is no slot freeze, release, reassignment, or task-start `create`. The slot
 
 ## Permanent Slot Manifest
 
-`<workspace-root>/.stageflow-worktrees/slots.json` uses schema 4:
+`<workspace-root>/.stageflow-worktrees/slots.json` uses schema 5:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "slots": {
     "slot-1": {
       "path": "/absolute/worktrees/slot-1",
@@ -104,9 +104,11 @@ Example journal:
   "from_head_sha": "3333333333333333333333333333333333333333",
   "boundary_sha": "2222222222222222222222222222222222222222",
   "source_sha": "4444444444444444444444444444444444444444",
+  "source_tree_sha": "6666666666666666666666666666666666666666",
   "target_branch": "feature-etc-docs-stageflow-g2",
   "target_branch_generation": 2,
   "result_tree_sha": "5555555555555555555555555555555555555555",
+  "transfer_subject": "feat(events): 이벤트 필터 상태 보존",
   "temporary_worktree": "/workspace/.stageflow-worktrees/generation-worktrees/<sha256-slot-repo-target>.worktree"
 }
 ```
@@ -133,7 +135,7 @@ python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
 
 `record-batch`, migration, correction, and every rotation-journal mutation require the exact operation lock. Call them once per successful repository so a later sibling failure cannot erase completed evidence. Exact retries are idempotent; conflicting values fail without partial writes.
 
-Schema 2/3 status is promoted in memory to schema 4 with `legacy_schema` and missing SHA evidence, without changing file bytes. Before a write, prove and atomically record branch family/generation/base and submission SHA evidence with `migrate-batch`. Never guess from a branch name or latest PR number. Generation 0 uses `-` for PR and submission fields; a positive generation requires exact values:
+Schema 2/3/4 status is promoted in memory to a lossless schema-5 envelope with `legacy_schema`, without changing file bytes during status. New manifests start at schema 5. Initializing a new slot in an existing legacy file may atomically serialize the envelope, but it preserves every other repository's legacy marker and grants no generation-write eligibility. Before an existing repository's first semantic write, hold that slot's operation lock and prove its exact evidence. Use `migrate-batch` for branch/generation/submission evidence and schema-4 repositories without an active rotation. Never guess from a branch name or latest PR number. Generation 0 uses `-` for PR and submission fields; a positive generation requires exact values:
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
@@ -288,14 +290,20 @@ python3 "<skill-dir>/scripts/prepare_generation_branch.py" analyze \
 
 The helper runs a 3-way tree merge with explicit base=`boundary`, ours=`pinned source`, theirs=`local HEAD`. A conflict returns failure before a target ref or worktree change. Do not resolve automatically.
 
+The analyze result includes both `source_tree_sha` and `result_tree_sha`. If they match, record `transfer_subject: null`, omit `--message`, and create no transfer commit. Otherwise inspect the B-only net diff and task context and choose one concise subject for the user-visible outcome. Summarize multiple B commits as one result; describe rename/delete by the resulting behavior; exclude correction A, branch/base movement, and source provenance. Follow the repository's required commit syntax first and include Korean meaning when compatible. If repository policy and the intended meaning cannot coexist, block only that repository and ask the user; never bypass hooks. Do not add source/boundary trailers because the manifest owns that provenance.
+
+Before journaling, reject CR/LF, ASCII controls, blank values, and known unresolved workflow placeholders, then trim only outer ASCII spaces. The helper does not use regex to judge the natural-language meaning, Korean content, or repository convention. The normalized subject is part of rotation retry identity, so a different subject is not an exact retry even when the result tree is unchanged.
+
 Derive the one allowed temporary path as `<workspace-root>/.stageflow-worktrees/generation-worktrees/<sha256(slot NUL repo NUL target)>.worktree`. Use lowercase SHA-256 hex and the `.worktree` suffix. This path is outside user repositories and is owned only by this exact slot/repository/target rotation. Journal the exact plan before ref mutation; `begin-rotation` rejects every other or non-normalized path:
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   begin-rotation --slot "<slot>" --token "<token>" \
   --repository-rotation "<repo>" "<from-branch>" "<from-generation>" \
-  "<from-head>" "<boundary>" "<source>" "<target>" "<target-generation>" \
-  "<result-tree>" "<deterministic-absolute-temporary-worktree>"
+  "<from-head>" "<boundary>" "<source>" "<source-tree>" \
+  "<target>" "<target-generation>" "<result-tree>" \
+  "<task-specific-transfer-subject-or-dash>" \
+  "<deterministic-absolute-temporary-worktree>"
 ```
 
 Then create without overwriting an existing ref:
@@ -303,14 +311,15 @@ Then create without overwriting an existing ref:
 ```bash
 python3 "<skill-dir>/scripts/prepare_generation_branch.py" create \
   --repo "<development-worktree>" --source "<pinned-source-sha>" \
+  --source-tree "<source-tree-sha>" \
   --result-tree "<result-tree-sha>" --branch-family "<branch-family>" \
   --target-generation "<next-generation>" \
-  --message "후속 작업을 최신 <source-branch> 기준으로 이전" \
+  --message "feat(events): 이벤트 필터 상태 보존" \
   --temporary-worktree "<deterministic-absolute-temporary-worktree>" \
   --workspace-root "<workspace-root>" --slot "<slot>" --repository "<repo>"
 ```
 
-If the result tree equals the source tree, target points directly at source. Otherwise the helper creates exactly one Korean transfer commit whose sole parent is source and whose tree is the computed result. It independently recomputes the deterministic workspace/slot/repository/target path, rejects traversal or any original/development/other worktree path, requires a registered retry to have detached HEAD, restores the exact result tree there, and uses normal `git commit`, so configured commit hooks and signing policy run. A retry recognizes only these exact states at that path: clean source HEAD with source/result index, or a clean one-parent completed result commit. Any unregistered existing path, missing registered worktree, attached branch, unexpected index, unstaged content, ignored or ordinary untracked content, HEAD, tree, or parent blocks without overwrite. The helper removes only a proven clean temporary worktree without force before publishing the target ref; a rejected hook or cleanup failure publishes no target ref and reports the journaled path. Run the repository's required validation on the switched target before any push. Advance journal `planned -> branch-created`, run helper `verify`, switch the same development worktree with `git switch <target>`, verify clean HEAD/tree and original-worktree invariants, then advance `branch-created -> switched`. Complete with the exact verified target commit and result-tree evidence:
+For an empty result, omit `--message`; target points directly at source. `create` and `verify` require the journaled `--source-tree` and compare it with the actual `source^{tree}` before adopting or publishing a target. Otherwise the helper creates exactly one transfer commit whose sole parent is source, tree is the computed result, and `%s` equals the journaled subject. It independently recomputes the deterministic workspace/slot/repository/target path, rejects traversal or any original/development/other worktree path, requires a registered retry to have detached HEAD, restores the exact result tree there, and uses normal `git commit`, so configured commit hooks and signing policy run. A retry recognizes only these exact states at that path: clean source HEAD with source/result index, or a clean one-parent completed result commit with the exact subject. Any unregistered existing path, missing registered worktree, attached branch, unexpected index, unstaged content, ignored or ordinary untracked content, HEAD, tree, parent, source-tree evidence, or subject blocks without overwrite. If a commit hook changes the subject, preserve the temporary state, publish no target ref, report the mismatch, and do not loop by automatically recreating it. The helper removes only a proven clean temporary worktree without force before publishing the target ref; a rejected hook or cleanup failure publishes no target ref and reports the journaled path. Run the repository's required validation on the switched target before any push. Advance journal `planned -> branch-created`, run helper `verify` with the same `--source-tree` and, for a non-empty result, the same `--message`, switch the same development worktree with `git switch <target>`, verify clean HEAD/tree and original-worktree invariants, then advance `branch-created -> switched`. Complete with the exact verified target commit and result-tree evidence:
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
@@ -327,7 +336,7 @@ Crash retry rules:
 - `planned` + absent target and absent journaled temporary path: run create.
 - `planned` + exact registered temporary source/result state: resume restore/commit/clean removal, then create the target ref.
 - `planned` + exact clean completed transfer commit in the journaled temporary worktree: adopt it, remove that worktree without force, then create the target ref.
-- `planned` + compatible target: adopt it and advance.
+- `planned` + exact parent/tree/subject target: adopt it and advance.
 - `branch-created` + old branch checked out: verify and switch.
 - `branch-created` + exact target already checked out: treat this as a crash after `git switch`; verify target commit/tree and clean worktree, then adopt `branch-created -> switched`.
 - `switched` + exact target checked out: complete manifest.
@@ -340,6 +349,40 @@ Git and GitHub writes are not one transaction. Report `completed`, `waiting`, `f
 Record each successful PR, correction, migration, or rotation phase immediately under the operation lock. A retry re-reads manifest/journal and actual refs rather than repeating earlier assumptions. Release only the operation lock after no mutation is active; never release a slot. A stale lock requires read-only reconciliation and one explicit unlock decision.
 
 Legacy schema 2/3 and omitted PR history may be recovered only when exact GitHub PR base/head/head SHA, local/remote refs, source inclusion, merge parents, and tree comparisons yield one result. For an existing source-sync merge commit, prove its exact source parent is contained by the current remote source and that the source-parent-to-local-HEAD tree delta is only next work; use that proven source parent as the one-time effective rotation boundary. Keep the original submitted boundary in submission evidence. This avoids treating changes introduced by the legacy source merge as future work. With two candidates, missing objects, a rewritten PR head outside an explicitly recorded isolated correction, or an unexplained tree, block that repository. After a recorded correction, the local continuation head containing B and the corrected remote PR head are intentionally divergent; this is supported because transfer always uses the unchanged continuation boundary and exact observed PR head evidence. Do not ask the user to edit JSON or bypass the skill.
+
+For a schema-4 active rotation, first choose the B-only subject, acquire the slot operation lock, re-read manifest phase, and run `inspect-legacy`. It reports the actual target and deterministic temporary worktree parent/tree/cleanliness/subject without mutation. If its actual subject is suitable, atomically backfill the exact old identity plus `source_tree_sha` and the normalized subject:
+
+```bash
+python3 "<skill-dir>/scripts/prepare_generation_branch.py" inspect-legacy \
+  --repo "<development-worktree>" --source "<pinned-source-sha>" \
+  --result-tree "<result-tree-sha>" --branch-family "<branch-family>" \
+  --target-generation "<next-generation>" \
+  --temporary-worktree "<deterministic-absolute-temporary-worktree>" \
+  --workspace-root "<workspace-root>" --slot "<slot>" --repository "<repo>"
+
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  migrate-rotation-subject --slot "<slot>" --token "<token>" \
+  --repository-subject "<repo>" "<from-branch>" "<from-generation>" \
+  "<from-head>" "<boundary>" "<source>" "<source-tree>" \
+  "<target>" "<target-generation>" "<result-tree>" \
+  "<task-specific-transfer-subject-or-dash>" \
+  "<deterministic-absolute-temporary-worktree>"
+```
+
+If the old temporary commit has an unsuitable mechanical subject, discard it only when the re-read phase is `planned`, target ref is absent, and `inspect-legacy` proves the deterministic Stageflow-owned worktree is detached, exact, and clean:
+
+```bash
+python3 "<skill-dir>/scripts/prepare_generation_branch.py" discard-legacy-temporary \
+  --repo "<development-worktree>" --source "<pinned-source-sha>" \
+  --result-tree "<result-tree-sha>" --branch-family "<branch-family>" \
+  --target-generation "<next-generation>" \
+  --temporary-worktree "<deterministic-absolute-temporary-worktree>" \
+  --workspace-root "<workspace-root>" --slot "<slot>" --repository "<repo>" \
+  --expected-phase planned --expected-subject "<actual-old-subject>" \
+  --token "<held-operation-lock-token>"
+```
+
+The discard helper reads the authoritative manifest itself, verifies the exact held operation-lock token, persisted schema-4 journal and `planned` phase, manifest-bound repository path, development HEAD/branch/cleanliness, absent target, and exact temporary commit before removal. Then run `migrate-rotation-subject` with the confirmed new subject and resume `create`. The migration command independently reads the manifest-bound Git repository under the same operation lock and compares actual `source^{tree}`, phase, development HEAD/branch, target ref, temporary state, and actual subject before removing the legacy marker. A crash after discard leaves the old journal plus an absent temp and safely repeats inspection; a crash after backfill makes the schema-5 subject authoritative. A dirty/untracked/attached/foreign temp is never removed. If the target exists or phase is `branch-created`/`switched`, an unsuitable subject blocks that repository without migration, amend, ref replacement, force push, or history rewrite.
 
 For omitted PR discovery, query all pages for the exact repository/base and deterministic branch family/generation candidates; never choose merely the highest PR number. Reconciliation must record full recovered submission evidence, not only a PR number.
 
