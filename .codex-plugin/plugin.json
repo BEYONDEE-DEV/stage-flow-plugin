@@ -1,6 +1,6 @@
 {
   "name": "stageflow",
-  "version": "0.1.19+codex.20260722054319",
+  "version": "0.1.19+codex.20260723031247",
   "description": "Standardize Stageflow planning flows with durable request artifacts and validation gates.",
   "author": {
     "name": "Local developer"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Stageflow",
     "shortDescription": "Plan Codex work and expose Simple Workflow plus atomic-docs.",
-    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose an atomic-docs skill for storage-mode-aware atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships. It also exposes Simple Workflow for a lightweight reviewed plan.md flow, atomic-impl for docs-first implementation from approved atomic-docs requirements, and multi-repo-worktree for explicitly invoked low-interruption permanent worktrees with one-time create, repeated same-branch submit, and help, status, pull, and sync workflows.",
+    "longDescription": "Stageflow helps Codex inspect a project, clarify requirements, preserve request-specific artifacts, review plans, require explicit approval, proceed from a validated plan, and expose an atomic-docs skill for storage-mode-aware atomic documentation that preserves user intent, implementation state, planned changes, gaps, source-code baselines, and graph relationships. It also exposes Simple Workflow for a lightweight reviewed plan.md flow, atomic-impl for docs-first implementation from approved atomic-docs requirements, and multi-repo-worktree for explicitly invoked permanent development worktrees with one-time create, squash-merge-safe generation branches, isolated PR corrections, and help, status, submit, pull, and sync workflows.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +29,7 @@
       "Use atomic-docs to refresh atom files from source-code changes.",
       "Use atomic-docs to inspect intent, implementation, planned changes, and gaps.",
       "Use atomic-impl to write requirements into atomic docs before implementing code.",
-      "Use $stageflow:multi-repo-worktree submit to publish the current multi-repo worktree without routine re-approval."
+      "Use $stageflow:multi-repo-worktree submit to publish ready PRs while preserving local follow-up work."
     ]
   }
 }

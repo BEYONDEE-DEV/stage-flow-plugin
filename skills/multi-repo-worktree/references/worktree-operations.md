@@ -3,15 +3,17 @@
 ## Contents
 
 - Keyword authorization and decision contract
-- Roles and repeated-PR flow
+- Roles and generation-branch flow
 - Permanent slot manifest
 - Read-only inspection and status
-- Complete-batch preflight
+- Complete-bundle preflight
 - Create
 - Submit common phase
-- Submit NONE and OPEN
+- Submit NONE
+- Submit OPEN and explicit correction
 - Submit MERGED
-- Retry and partial results
+- Common generation rotation
+- Retry, legacy recovery, and partial results
 - Pull
 - Sync
 
@@ -19,59 +21,65 @@
 
 Expose only `help`, `status`, `create`, `submit`, `pull`, and `sync`. Do not normalize or advertise removed `recycle`, `integrate`, `merge`, `merge-back`, or `sync-derived` commands.
 
-An explicit request to execute `create`, `submit`, `pull`, or `sync` authorizes that keyword's routine writes. A request for `status`, inspection only, or dry-run remains read-only even when it mentions a write keyword.
+An explicit write-keyword request authorizes that keyword's routine writes. `status`, inspection, or dry-run stays read-only. Before routine writes:
 
-For every routine write operation:
+1. Inspect every participating repository and exact GitHub state without mutation.
+2. Resolve stored source branch, remote, branch family, active branch/generation/base, submission evidence, PR, and rotation journal per repository.
+3. Preflight the complete bundle and classify each repository independently.
+4. Send one concise non-blocking summary of targets, changed paths, PR classifications, fetch/ref changes, rotation behavior, conflict behavior, and possible partial results.
+5. Re-inspect relevant identities immediately before fetch, branch/ref, manifest, or remote publication.
+6. Execute and record repository-local results. A repository-local wait/conflict/failure does not roll back or suppress a valid sibling.
 
-1. Inspect all participating repositories and GitHub state without changing either.
-2. Resolve repo-specific source branches, fixed task branches, remotes, worktree paths, manifest generations, and current PRs.
-3. Preflight the complete batch and classify every changed repo.
-4. Send a concise non-blocking commentary summary of exact targets, changed paths, state classification, intended effects, fetch/ref updates, risks, conflict behavior, and partial-failure behavior.
-5. Re-inspect relevant local, remote, manifest, and PR state immediately before execution.
-6. Execute one repository at a time and stop on the first unplanned failure or conflict.
+Do not ask for routine commands, task-related path lists, generated Korean text, or manifest-proven transitions. Ask one consolidated question only for conflicting permanent facts, ambiguous/secret/unrelated content, an inseparable PR correction, stale-lock recovery, or conflict recovery.
 
-Do not turn the summary into an approval question. Do not ask again for exact commands, clearly task-related paths, generated Korean commit/PR text, a manifest-proven state flow, or a compatible advancement of the same source branch before branch/index/manifest/remote publication.
+Never reset, clean, force checkout, force push, rewrite published history, amend, stash, auto-resolve conflicts, or delete a remote branch. A clean internal correction worktree and its unpublished temporary local branch may be removed after exact remote and manifest verification. A journaled internal generation worktree may be populated from the exact result tree and removed without force only after its source/index/tree/HEAD are proven. These are bounded routine cleanups, not slot release.
 
-Ask one consolidated question only when source/task/remote/path facts are missing or conflict, publish content is secret-bearing/generated/unrelated/ambiguous, scope would materially expand, or destructive/history-rewriting, stale-lock unlock, or conflict recovery is required. A semantic change in permanent identity, generation, PR classification, base, or head stops the current attempt and reports the state; the user may re-invoke the same keyword instead of approving a stale plan.
-
-## Roles And Repeated-PR Flow
+## Roles And Generation-Branch Flow
 
 ```text
-create once
-  -> develop and validate work A
-  -> submit ready PR 1
-  -> user merges PR 1 on GitHub
-  -> keep the same slot, worktrees, and task branches
-  -> develop and validate work B
-  -> submit ready PR 2 from the same task branches
-  -> repeat
+create once at fetched origin/source SHA
+  -> develop A
+  -> submit ready PR A and record its submitted HEAD boundary
+  -> keep the same slot/worktree and develop B locally without pushing it
+  -> user squash-merges PR A on GitHub
+  -> sync or next submit fetches origin/source in the development worktree
+  -> 3-way B's net tree change onto a fresh branch parented by the fetched SHA
+  -> switch the same development worktree to that generation branch
+  -> submit ready PR B
 ```
 
-- **Development user**: initializes one permanent bundle, develops in its fixed task branches, validates, and runs repeated `submit` or development-worktree `sync` operations.
-- **Original user**: runs `pull` only in confirmed original/source worktrees.
-- **GitHub user**: manually merges ready PRs outside this skill. The skill neither enables auto-merge nor runs remote merge commands.
+- **Development user**: creates one permanent bundle, develops, runs repeated `submit`, and may run development-only `sync`.
+- **Original user**: runs `pull` only in original/source worktrees.
+- **GitHub user**: reviews and manually merges ready PRs. The skill never merges them.
 
-`create` is not a task-start command after initialization. A successful submit never releases, clears, reassigns, switches, or deletes the slot. The manifest continues to point at a merged PR until a later submit successfully creates or adopts the next PR.
-
-While PR 1 is OPEN, every commit pushed to its fixed head branch becomes part of PR 1. Git cannot determine whether an ahead commit is a PR 1 correction or work B. To keep work B out of PR 1, leave B local and do not run `submit` or a manual/CI push until PR 1 is merged.
+There is no slot freeze, release, reassignment, or task-start `create`. The slot and worktree persist while active task branches rotate. Git cannot infer whether a local commit is a PR correction or future work, so ordinary OPEN submit never pushes local-ahead commits. Corrections require explicit intent and content separation.
 
 ## Permanent Slot Manifest
 
-`<workspace-root>/.stageflow-worktrees/slots.json` owns each fixed slot path and the fixed task branch, source branch, remote, PR generation, and current PR for every repository. It has no owner or `active`/`released` lifecycle.
+`<workspace-root>/.stageflow-worktrees/slots.json` uses schema 4:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "slots": {
     "slot-1": {
       "path": "/absolute/worktrees/slot-1",
       "repositories": {
         "service-a": {
+          "branch_family": "feature-etc-docs",
           "branch": "feature-etc-docs",
+          "branch_generation": 1,
+          "branch_base_sha": "1111111111111111111111111111111111111111",
           "source_branch": "feature-etc",
           "remote": "origin",
           "generation": 1,
-          "pr": "https://github.com/example/service-a/pull/17"
+          "pr": "https://github.com/example/service-a/pull/17",
+          "submission": {
+            "generation": 1,
+            "head_branch": "feature-etc-docs",
+            "continuation_boundary_sha": "2222222222222222222222222222222222222222",
+            "observed_head_sha": "2222222222222222222222222222222222222222"
+          }
         }
       }
     }
@@ -79,11 +87,29 @@ While PR 1 is OPEN, every commit pushed to its fixed head branch becomes part of
 }
 ```
 
-Generation `0` requires `pr: null` and proves that no PR has been recorded yet. Every positive generation requires a non-empty current PR. Do not infer `NONE` merely from a missing field. A new schema-3 `create` requires non-empty source branch and remote for every repository.
+- `branch_family` is permanent naming input. The initial branch may equal the family; every rotation target is exactly `<branch-family>-stageflow-g<branch-generation>`.
+- `branch_generation` counts local branch rotations independently of PR `generation`.
+- `branch_base_sha` is the remote source commit on which the active branch was last prepared. It is the explicit base for an unsubmitted or already-rotated branch.
+- PR generation `0` requires `pr: null` and `submission: null`. Positive PR generations require both a PR and exact submission evidence.
+- `continuation_boundary_sha` is fixed for that submitted PR even if an isolated correction advances `observed_head_sha`. It identifies the local tree before future work began.
+- `rotation` is present only during a generation rotation and is a crash journal, not a lifecycle state.
 
-After `reconcile-batch`, the affected repository also carries an internal `last_reconciliation` receipt containing the exact from/to generation and PR values. It exists only to prove an exact crash retry and must match the current generation/PR. A later successful `record-batch` clears it; a later reconciliation replaces it. The skill never asks the user to edit this receipt.
+Example journal:
 
-The helper reads a schema-2 permanent manifest as schema 3 with paired `source_branch: null` and `remote: null` legacy context without writing the file. `status`, inspection, and dry-run must leave manifest bytes unchanged. Before a selected legacy slot performs a routine write, prove every missing context from exact recorded-PR base plus one repository-matching remote, or ask once for only the unproven facts. Then fill the complete selected slot atomically with `bind-context`; sibling legacy slots may remain nullable. Never partially bind a slot or overwrite a non-null context. Legacy schema 1 manifests used task ownership and release semantics; fail closed with the helper's explicit legacy error.
+```json
+{
+  "phase": "planned",
+  "from_branch": "feature-etc-docs",
+  "from_branch_generation": 1,
+  "from_head_sha": "3333333333333333333333333333333333333333",
+  "boundary_sha": "2222222222222222222222222222222222222222",
+  "source_sha": "4444444444444444444444444444444444444444",
+  "target_branch": "feature-etc-docs-stageflow-g2",
+  "target_branch_generation": 2,
+  "result_tree_sha": "5555555555555555555555555555555555555555",
+  "temporary_worktree": "/workspace/.stageflow-worktrees/generation-worktrees/<sha256-slot-repo-target>.worktree"
+}
+```
 
 Use the helper relative to the loaded skill directory:
 
@@ -92,54 +118,47 @@ python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" status
 
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   initialize --slot "<slot>" --path "<slot-path>" \
-  --repository "<repo-a>" "<fixed-task-branch-a>" "<source-branch-a>" "<remote-a>" \
-  --repository "<repo-b>" "<fixed-task-branch-b>" "<source-branch-b>" "<remote-b>"
+  --repository "<repo>" "<branch-family>" "<source>" "<remote>" "<fetched-source-sha>"
 
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  bind-context --slot "<legacy-slot>" \
-  --repository-context "<repo-a>" "<source-branch-a>" "<remote-a>" \
-  --repository-context "<repo-b>" "<source-branch-b>" "<remote-b>"
+  record-batch --slot "<slot>" --token "<token>" \
+  --repository-update "<repo>" "<current-pr-generation>" "<new-pr>" \
+  "<active-head-branch>" "<submitted-head-sha>" "<submitted-head-sha>"
 
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  lock --slot "<slot>" --token "<unique-submit-token>"
-
-python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  lock-status --slot "<slot>"
-
-python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  record-batch --slot "<slot>" --token "<unique-submit-token>" \
-  --repository-update "<repo-a>" "<current-generation-a>" "<new-pr-a>" \
-  --repository-update "<repo-b>" "<current-generation-b>" "<new-pr-b>"
-
-python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  reconcile-batch --slot "<slot>" --token "<unique-submit-token>" \
-  --repository-recovery "<repo-a>" "<current-generation>" \
-  "<recorded-pr>" "<proven-successor-merged-pr>"
-
-python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
-  unlock --slot "<slot>" --token "<unique-submit-token>"
+  record-correction --slot "<slot>" --token "<token>" \
+  --repository-correction "<repo>" "<generation>" "<pr>" \
+  "<expected-observed-head>" "<new-observed-head>"
 ```
 
-`initialize` writes the entire repository binding atomically. An exact repeated call is idempotent and preserves generation/current PR; a different path, repository set, task/source branch, or remote fails closed. An exact retry may fill null context promoted from schema 2. `bind-context` requires every repository in the selected slot, writes them atomically, and is exact-retry idempotent. `record-batch`, `reconcile-batch`, and operation-lock acquisition require complete context and the exact operation lock. `record-batch` validates every participating repository against the expected generation carried by its own `--repository-update`, updates all newly created or adopted OPEN PR pointers atomically, and clears any obsolete reconciliation receipt for those repositories. `reconcile-batch` additionally compares the exact current PR before advancing one generation to an externally proven omitted MERGED successor and records the exact transition receipt; it does not prove GitHub or Git facts itself. The submit flow must establish the proof below before calling it. Both batch writes are exact-retry idempotent, and a retry whose predecessor PR differs from the stored receipt fails before any repository advances.
+`record-batch`, migration, correction, and every rotation-journal mutation require the exact operation lock. Call them once per successful repository so a later sibling failure cannot erase completed evidence. Exact retries are idempotent; conflicting values fail without partial writes.
 
-The operation lock is separate from slot ownership. Acquire it after complete preflight and before the first submit mutation. A competing token fails immediately. After execution has stopped mutating state, capture the final inspection/report and unlock with the exact token even when recovery is required. A crashed process may leave a lock: show `lock-status`, verify no submit is still running, and ask one explicit recovery question before exact-token unlock; never steal or expire it automatically.
+Schema 2/3 status is promoted in memory to schema 4 with `legacy_schema` and missing SHA evidence, without changing file bytes. Before a write, prove and atomically record branch family/generation/base and submission SHA evidence with `migrate-batch`. Never guess from a branch name or latest PR number. Generation 0 uses `-` for PR and submission fields; a positive generation requires exact values:
+
+```bash
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  migrate-batch --slot "<slot>" --token "<token>" \
+  --repository-migration "<repo>" "<generation>" "<pr-or-dash>" \
+  "<family>" "<branch-generation>" "<base-sha>" \
+  "<head-or-dash>" "<boundary-or-dash>" "<observed-or-dash>"
+
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  reconcile-batch --slot "<slot>" --token "<token>" \
+  --repository-recovery "<repo>" "<current-generation>" "<current-pr>" \
+  "<recovered-pr>" "<recovered-head-branch>" \
+  "<recovered-boundary-sha>" "<recovered-observed-head-sha>"
+```
 
 ## Read-Only Inspection And Status
 
-Resolve scripts relative to the loaded skill directory:
+Run the inspector and manifest status before a write. For GitHub state use exact repository identity:
 
 ```bash
-python3 "<skill-dir>/scripts/inspect_worktrees.py" \
-  --root "<workspace-root>" \
-  --bundle "worktrees/<bundle-name>" \
-  --json
+gh pr view "<recorded-pr>" --repo "<owner/repo>" \
+  --json number,state,isDraft,headRefName,headRefOid,baseRefName,createdAt,mergedAt,mergeCommit,url
 ```
 
-The inspector uses local Git state only. It must not fetch, pull, create/switch branches or worktrees, merge, rebase, push, reset, clean, abort, or delete.
-
-Git does not retain a branch's creation parent. A schema-3 permanent context is authoritative after validation against the actual repository and refs. A unique sibling branch is evidence only; mark it `(추정)`. Use it to enrich a legacy slot without a question only when an exact recorded PR base and one repository-matching remote independently prove the same context; otherwise ask once before a write and persist the answer.
-
-For an identifiable bundle, show:
+Primary status format:
 
 ```text
 대상 묶음: worktrees/<bundle-name>
@@ -149,214 +168,199 @@ For an identifiable bundle, show:
 <repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>
 ```
 
-Do not use a Markdown table. Add each repo's manifest generation/current PR and any held operation lock as secondary lines. An absent operation lock means the slot is available for a new operation; it is not a blocker and does not require recovery. Keep upstream, HEAD, locks, prunable state, and operation state out of the primary line; add them only as relevant risk notes. When the user names a bundle, filter to it and do not mix the workspace or sibling bundles.
+Add manifest PR/branch generation and a held operation lock or rotation journal as secondary lines. An absent lock is normal. Do not use a Markdown table. Status never enriches legacy evidence.
 
-## Complete-Batch Preflight
+## Complete-Bundle Preflight
 
-Before any write, block the whole plan on:
+Before fetch or another write, inspect all repositories. A bundle-global identity/path/lock ambiguity blocks the operation. Repository-local unsupported state blocks only that repository when siblings are independently proven.
 
-- ambiguous or inferred-only source-branch mappings
-- a slot path, repository set, or fixed task branch that disagrees with the manifest
-- unexpected current branches or detached required worktrees
-- an in-progress merge, rebase, cherry-pick, revert, or bisect
-- operation-relevant dirty state except literal paths proven clearly task-related for a `submit` commit
-- unsafe locked/prunable paths or missing required paths
-- branches checked out in unexpected worktrees
-- missing or ambiguous remotes/upstreams required by the operation
-- an existing slot operation lock from another token
-- `CLOSED`, missing/inaccessible recorded PR, Draft PR, head/base mismatch, unknown API state, unexpected remote divergence, or ambiguous retry candidate
+Require:
 
-Fetch is a Git write because it updates shared remote-tracking refs. Finish local/path/branch/manifest/GitHub preflight before fetch. Omitted-PR recovery additionally requires its complete GitHub API, `ls-remote`, and local-graph proof before acquiring the operation lock. After fetching all repos, pin every fetched SHA and revalidate ancestry, divergence, and conflict facts before changing local branches or the manifest.
+- manifest path and repository mapping match the requested bundle;
+- every active development branch equals its manifest branch and is not detached;
+- no merge, rebase, cherry-pick, revert, or bisect is in progress;
+- cleanliness is classified per repository: a dirty `sync` worktree is reported `failed/skipped unchanged`, while clean siblings continue; `submit` dirt is limited to clearly task-related literal paths;
+- stored remote identifies the expected repository and source ref;
+- no branch is checked out in an unexpected worktree;
+- no different operation-lock token is present;
+- current PR is exact base/head, ready, and classified `OPEN` or `MERGED`; `CLOSED`, Draft, missing, and unknown states are repository-local blockers;
+- a present rotation journal matches actual refs, HEAD, target tree, and phase before any resume.
+
+Fetch updates shared remote-tracking refs and is a Git write. Inspect first, then fetch every eligible repository, pin `refs/remotes/<remote>/<source-branch>`, and never use a moving symbolic name in later rotation commands.
 
 ## Create
 
-Use `create` only for the first fixed bundle initialization or an exact retry of that initialization.
+Use `create` only for first initialization or exact retry.
 
-Before the first write, resolve each source worktree, source branch, remote, complete repository set, target slot path, target child path, and fixed task branch. If any permanent fact is missing or conflicting, ask one consolidated question; otherwise the explicit `create` request authorizes initialization. Require each new task branch not to exist and each target path to be absent or an exact clean partial result from the same binding.
-
-Send a non-blocking summary, then initialize the complete manifest binding immediately before the first worktree add:
+Resolve each clean source worktree, checked-out source branch, repository-matching remote, complete repo set, target slot path, child path, initial branch family, and exact source SHA. Fetch and pin the remote source before initialization. Initialize the complete binding before the first worktree add:
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   initialize --slot "<slot>" --path "<slot-path>" \
-  --repository "<repo-a>" "<fixed-task-branch-a>" "<source-branch-a>" "<remote-a>" \
-  --repository "<repo-b>" "<fixed-task-branch-b>" "<source-branch-b>" "<remote-b>"
+  --repository "<repo-a>" "<family-a>" "<source-a>" "<remote-a>" "<source-sha-a>" \
+  --repository "<repo-b>" "<family-b>" "<source-b>" "<remote-b>" "<source-sha-b>"
+
+git -C "<source-worktree>" worktree add -b "<branch-family>" \
+  "<target-path>" "<pinned-source-sha>"
 ```
 
-Then add each new fixed task branch:
-
-```bash
-git -C "<source-worktree>" worktree add -b "<fixed-task-branch>" \
-  "<target-path>" "<confirmed-source-branch>"
-```
-
-If creation stops partway, keep the permanent binding. An exact retry may leave already-correct clean worktrees untouched and add only missing worktrees. A different branch/path/repository set, dirty partial worktree, unexpected existing branch, or ambiguous path blocks. Never switch an existing slot to a new task branch, clear prior PR identity, or use `create` to begin work B.
+Exact retry leaves correct clean results and fills only missing worktrees. A changed path, repository set, family, remote, source, SHA, dirty partial worktree, or unexpected existing ref blocks. Later work never invokes `create`.
 
 ## Submit Common Phase
 
-Use the manifest and read-only GitHub queries to classify each changed repository before the first branch/index/manifest/remote publication mutation. For a recorded PR:
+Acquire the slot operation lock only after read-only classification. Classifications belong to repositories, not the batch:
+
+- `NONE`: generation 0, no PR/submission, no conflicting open PR for active branch.
+- `OPEN`: recorded PR is OPEN, ready, exact base/head, and its head OID equals manifest `observed_head_sha`.
+- `MERGED`: recorded PR is MERGED with merge commit/time and exact base/head/head OID.
+
+Allow any mix. An OPEN repository waiting behind its PR is a successful wait, not a reason to block a NONE or MERGED sibling.
+
+Inspect staged, unstaged, and non-ignored untracked content. In `submit`, stage only exact task paths and use Korean commit text:
 
 ```bash
-gh pr view "<recorded-pr>" --repo "<owner/repo>" \
-  --json number,state,isDraft,headRefName,headRefOid,baseRefName,createdAt,mergedAt,mergeCommit,url
-```
-
-Before treating later same-branch history as unsupported manifest loss, list every PR for the exact recorded base/head pair. PR numbers are repository-wide monotonic identifiers, so every exact-pair PR with a number greater than the recorded PR is later history. A PR from another slot has a different fixed task head and is outside this candidate set even when it uses the same repository and source branch. A repository has one narrowly recoverable omitted successor only when all of these facts hold together:
-
-- the recorded current PR is exact `MERGED`, ready, and matches the manifest base/head;
-- exactly one later PR exists for that exact base/head, it has a different head OID descended from the recorded head OID, and it is ready `MERGED` with a non-null merge commit;
-- no second later exact-base/head PR exists in any state or ancestry relationship; an `OPEN`, `CLOSED`, Draft, `MERGED`, or nonlinear later PR is ambiguity, not an ignorable non-candidate;
-- `git ls-remote` proves that the remote task branch equals the successor head and captures the current remote source SHA;
-- the recorded head is an ancestor of the successor head, and the successor head is an ancestor of or equal to local task `HEAD`, so local-only next-work commits are preserved;
-- the GitHub compare API reports the successor merge commit as an ancestor of or equal to the captured remote source SHA; and
-- all of this proof completes before acquiring the operation lock, without fetch, manifest mutation, staging, commit, branch change, or remote publication;
-- after acquiring the submit lock and fetching the stored remote, the pinned task/source refs and local graph reproduce the same proof; and
-- immediate reinspection shows the manifest generation/current PR, GitHub PR identities, remote task ref, local `HEAD`, and pinned source SHA are unchanged.
-
-Do not use the cwd-dependent, default-limited `gh pr list` for this proof. Query the exact repository and exhaust every REST page:
-
-```bash
-gh api --method GET --paginate --slurp "repos/<owner>/<repo>/pulls" \
-  -f state=all -f base="<source>" -f head="<owner>:<task>" -f per_page=100
-```
-
-Flatten every returned page, then verify each result's repository identity and exact base/head before counting later PR numbers. Use `gh pr view --repo <owner/repo>` including `createdAt` and `mergeCommit` for the recorded PR and the sole successor. Before the lock, use `git -C <development-worktree> ls-remote --heads <remote>`, local `git merge-base --is-ancestor`, and `gh api repos/<owner>/<repo>/compare/<successor-merge-sha>...<remote-source-sha>`; accept compare status only when it is `ahead` or `identical`. Any missing page/object, second later exact-pair PR, mismatched repository/base/head, nonlinear later history, remote task mismatch, successor head not contained by local `HEAD`, or remote/pinned source that lacks the merge commit is unsupported and blocks the entire batch. Do not repair more than one omitted generation in one submit.
-
-After the full proof succeeds, call `reconcile-batch` with the exact generation, recorded PR, and successor PR. Re-read the manifest, re-query the successor, classify the repository as the newly recorded `MERGED` generation, and continue the normal `Submit MERGED` flow in the same operation. If later commit, merge, push, or PR creation fails, keep the factual reconciliation and report it as completed recovery state rather than rolling it back.
-
-Classify only after any exact reconciliation:
-
-- `NONE`: manifest generation is exactly `0`, current PR is `null`, and no conflicting PR exists for the fixed head branch.
-- `OPEN`: the recorded PR state is `OPEN`, `isDraft` is false, and its base/head branches exactly match the manifest source/fixed task branches.
-- `MERGED`: the recorded PR state is `MERGED`, `mergedAt` is non-null, and its base/head branches exactly match.
-
-Treat a non-merged `CLOSED` PR as unsupported, not as `MERGED` or `NONE`. An exactly recoverable omitted successor is a pre-classification recovery state, not a fourth persistent PR classification. Classifications and generations belong to individual repositories: allow any mix of otherwise valid `NONE`, `OPEN`, and `MERGED` repositories in one submit. Complete the whole-batch local/GitHub/remote proof without mutation, send one non-blocking execution summary that names each repository's classification or recoverable state and effects, acquire the operation lock, fetch and revalidate every recovery fact, reconcile, then re-run the relevant checks before staging. The explicit `submit` request already authorizes the routine reconciliation, commit, fetch, merge, push, PR, and manifest writes described by each flow. Never propose bypassing the skill merely because supported repository states differ.
-
-Inspect staged, unstaged, and non-ignored untracked paths. A dirty repo is eligible only when every changed path and patch is clearly part of the current user task and validation covers that content. Any unrelated, generated, secret-bearing, ignored-only, or ambiguous change blocks the whole batch before staging and triggers one consolidated content-scope question. Existing staged changes are not automatically trusted; inspect them under the same rule.
-
-For each eligible dirty repo, include the exact literal path list and generated Korean commit message in the non-blocking summary. Keep identifiers or fixed template text verbatim, but write explanatory natural language in Korean. Do not ask for separate path or copy approval. Then:
-
-```bash
-git -C "<development-worktree>" add -A -- \
-  "<task-path-1>" "<task-path-2>"
+git -C "<development-worktree>" add -A -- "<task-path-1>" "<task-path-2>"
 git -C "<development-worktree>" diff --cached --check
 git -C "<development-worktree>" commit -m "<generated-Korean-commit-message>"
 ```
 
-Never use broad `git add .`, amend, empty commits, stash, reset, clean, force-add, or bypass hooks. Complete the local commit phase for every repo and the pinned-base merge plus validation for every `MERGED` repo before the first remote write in any repository. Re-inspect the exact branch, clean state, commit diff, manifest, operation lock, PR state, and relevant remote ancestry.
+Never use `git add .`, amend, stash, reset, force-add, or bypass hooks for user task commits. In an ordinary submit, clearly future-work changes in an OPEN repository may be committed locally with Korean text under the same task-path rules, but they are never pushed while that PR remains open. Explicit correction mode first separates correction content from future work and never stages the combined development tree as a correction.
 
-If a commit or hook fails or changes scope, stop before remote writes. Do not undo successful local commits. Record the final state, unlock after no mutation is running, and report recovery-required.
+## Submit NONE
 
-## Submit NONE And OPEN
-
-For `NONE`, require the fixed task branch's local history to contain the manifest source base and reject any conflicting open PR for the head branch. Generate a concise Korean title/body from the current task and inspected change, include them in the non-blocking summary, and push without force:
+Fetch and pin the stored remote source. If it differs from `branch_base_sha`, run the common generation rotation exactly as NONE `sync` before publication; this keeps first submission based on the currently inspected remote source without merging or rewriting the existing local branch. Then require the active branch base SHA to be the pinned source, prove the local diff contains only task work, push without force, and create a Korean ready PR:
 
 ```bash
 git -C "<development-worktree>" push "<remote>" \
-  "HEAD:refs/heads/<fixed-task-branch>"
+  "HEAD:refs/heads/<active-branch>"
 gh pr create --repo "<owner/repo>" --base "<source-branch>" \
-  --head "<fixed-task-branch>" --title "<generated-Korean-title>" \
+  --head "<active-branch>" --title "<generated-Korean-title>" \
   --body "<generated-Korean-body>"
 ```
 
-Do not pass `--draft`. After a `NONE` repository has created or uniquely adopted its PR and the PR is OPEN, ready, and exact-base/head/SHA matched, collect that repository's update as `<repo> 0 <new-pr>`. Do not write the manifest yet; finish and verify every repository's state-specific remote result first.
+Do not pass `--draft`. Verify OPEN, ready, exact base/head and head SHA, plus exact changed-files patch. Then immediately call `record-batch` for that repository with the submitted HEAD as both continuation boundary and observed head. A created-but-unrecorded retry adopts only one exact OPEN PR matching base/head/SHA.
 
-For `OPEN`, require the PR head SHA to be an ancestor of or equal to the inspected local HEAD and reject remote-only/divergent history. A push publishes every local commit to the current PR:
+## Submit OPEN And Explicit Correction
 
-```bash
-git -C "<development-worktree>" push "<remote>" \
-  "HEAD:refs/heads/<fixed-task-branch>"
-```
+Ordinary OPEN submit never pushes the local active branch. After the common phase has optionally committed clearly task-related future work locally, it fetches/queries exact PR and remote refs, reports `PR 병합 대기`, and performs no further branch/index/file/commit mutation. Remote PR head, PR generation, and continuation boundary remain unchanged.
 
-Update the same PR branch only. Never run `gh pr edit` during routine `submit`; preserve title/body that a person may have edited. Edit metadata only when the user explicitly requests that specific edit, and then preserve all content outside the requested change. Verify the existing PR remains OPEN, ready, and points to the pushed HEAD. Do not add an `OPEN` repository to `record-batch`, advance its generation, or create another PR. If there is no commit, ahead SHA, or explicitly requested metadata change, report a no-op while other supported repositories may still proceed.
+Only an explicit correction intent enters correction mode. Before writing, require the user-provided/inspected correction paths or patch to be semantically separable from future work. If a path contains both, ask one decision and do not guess.
+
+1. Re-fetch and require remote PR head equals manifest `observed_head_sha`.
+2. Create a unique internal local branch/worktree from that observed head, outside the development bundle but under `.stageflow-worktrees/corrections/`.
+3. Apply only the proven correction patch, inspect it, commit with Korean text, and verify the development worktree HEAD/tree remains byte-for-byte unchanged.
+4. Push the correction commit as a normal fast-forward to the existing remote PR head ref. Never force push.
+5. Verify the same PR remains OPEN/ready and points to the new SHA, then call `record-correction`. This changes only `observed_head_sha`; it never changes `continuation_boundary_sha`.
+6. After remote and manifest verification, remove only the clean internal correction worktree and its unpublished local temporary branch. If cleanup fails, report the exact leftover; do not alter the development branch.
+
+If the remote head advances concurrently, do not push or force. Re-fetch, discard no work, and report a retry. A retry may adopt an already-pushed exact correction only when the PR head, commit parent, patch, development tree, and manifest boundary prove it uniquely.
 
 ## Submit MERGED
 
-Require each recorded merged PR's `headRefOid` to be an ancestor of or equal to the current local task branch. A lost or rewritten merged head blocks. For every `MERGED` repository in the batch, fetch its manifest remote and pin `refs/remotes/<remote>/<source-branch>` before the common phase's first local commit. `NONE` and `OPEN` participants do not need this merged-base step. Capture whether the fixed remote head exists and its SHA:
+Commit clearly task-related future work first. Fetch and pin the stored remote source. Determine whether rotation is required:
+
+- If active `branch == submission.head_branch`, this is the unrotated submitted branch. Use `submission.continuation_boundary_sha` as the explicit merge base.
+- If active branch differs, it has already rotated. Use `branch_base_sha`; rotate again only when the pinned source advanced.
+
+Run the common rotation before the first remote publication. After rotation, validate `pinned-source...active-HEAD` contains only future work. If empty, do not push or create a PR; the fresh branch at pinned source remains a successful synchronized no-op. Otherwise follow Submit NONE's push/create/verify flow and immediately record the new PR generation with the new submitted HEAD boundary.
+
+Old submitted branches and remote PR branches are not reused or automatically deleted.
+
+## Common Generation Rotation
+
+Rotation is shared by eligible `NONE`, `MERGED`, and already-rotated unsubmitted branches. It never updates an original worktree.
+
+Preconditions:
+
+- development worktree is clean and its HEAD/branch equal inspected manifest values;
+- boundary, local HEAD, and pinned source objects exist;
+- target generation is `branch_generation + 1` and target name is exactly `<branch-family>-stageflow-g<target-generation>`;
+- no in-progress journal conflicts with the requested transition.
+
+First compute the result tree without changing refs, index, worktree, or current branch:
 
 ```bash
-git -C "<development-worktree>" fetch --prune "<remote>"
-git -C "<development-worktree>" rev-parse \
-  "refs/remotes/<remote>/<source-branch>"
+python3 "<skill-dir>/scripts/prepare_generation_branch.py" analyze \
+  --repo "<development-worktree>" --from-head "<local-head-sha>" \
+  --boundary "<boundary-sha>" --source "<pinned-source-sha>" \
+  --branch-family "<branch-family>" --target-generation "<next-generation>"
 ```
 
-Fetch updates shared remote-tracking refs and must be named in the commentary summary. Before the first local commit, compare the remote source ref again. If the same source branch advanced compatibly, fetch, repin, and rerun the complete affected preflight without asking. If permanent context, generation, PR classification, base, or head changed, stop without a branch/index/manifest/remote publication mutation and report the new state.
+The helper runs a 3-way tree merge with explicit base=`boundary`, ours=`pinned source`, theirs=`local HEAD`. A conflict returns failure before a target ref or worktree change. Do not resolve automatically.
 
-If the remote task branch exists, require it to be an ancestor of or equal to local HEAD. If it is absent, allow later recreation only because the recorded PR is confirmed MERGED. An OPEN, CLOSED, or unknown recorded PR never permits deleted-head recreation.
-
-After the common commit phase, merge the pinned base into every current fixed task branch. Use the generated Korean merge message when Git creates a merge commit:
+Derive the one allowed temporary path as `<workspace-root>/.stageflow-worktrees/generation-worktrees/<sha256(slot NUL repo NUL target)>.worktree`. Use lowercase SHA-256 hex and the `.worktree` suffix. This path is outside user repositories and is owned only by this exact slot/repository/target rotation. Journal the exact plan before ref mutation; `begin-rotation` rejects every other or non-normalized path:
 
 ```bash
-git -C "<development-worktree>" merge "<pinned-base-sha>" \
-  -m "기준 브랜치 <source-branch> 동기화"
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  begin-rotation --slot "<slot>" --token "<token>" \
+  --repository-rotation "<repo>" "<from-branch>" "<from-generation>" \
+  "<from-head>" "<boundary>" "<source>" "<target>" "<target-generation>" \
+  "<result-tree>" "<deterministic-absolute-temporary-worktree>"
 ```
 
-Stop on the first conflict. Do not resolve, continue, skip, abort, or push. Report successful commits/merges in earlier repos and ask only for the conflict-recovery decision. After recovery, the user may invoke the same keyword for exact retry.
-
-After all local merges succeed and validation passes, require the pinned base to be an ancestor of HEAD. Inspect `git diff --check`, name/status, and the patch for `<pinned-base-sha>...HEAD`. Compare them with the exact task-related next-work paths and content from preflight. Old commits from an earlier squash merge may remain in the later PR's Commits list; the required result is that `Files changed` contains only the next work.
-
-If a `MERGED` repository has an empty `base...HEAD` diff, do not push it, create a PR for it, or add it to `record-batch`. Report that repository as a successful no-op; its local base merge and current merged PR pointer remain while other supported repositories may still proceed. If every participant is a no-op, finish without a remote write or manifest update.
-
-Immediately before the first push, query the remote again. Require the source SHA still equal the pinned base and the task ref still equal its expected SHA or still be absent. Because local branch mutation has already begun, any drift now stops before push and reports the exact retry state; it does not start an approval loop or silently repin. Then push each same branch without force and create the next ready PR with generated Korean title/body using the NONE commands.
-
-Verify every created PR:
+Then create without overwriting an existing ref:
 
 ```bash
-gh pr view "<new-pr>" --repo "<owner/repo>" \
-  --json number,state,isDraft,headRefName,headRefOid,baseRefName,url
-gh pr diff "<new-pr>" --repo "<owner/repo>" --name-only
-gh pr diff "<new-pr>" --repo "<owner/repo>" --patch
+python3 "<skill-dir>/scripts/prepare_generation_branch.py" create \
+  --repo "<development-worktree>" --source "<pinned-source-sha>" \
+  --result-tree "<result-tree-sha>" --branch-family "<branch-family>" \
+  --target-generation "<next-generation>" \
+  --message "후속 작업을 최신 <source-branch> 기준으로 이전" \
+  --temporary-worktree "<deterministic-absolute-temporary-worktree>" \
+  --workspace-root "<workspace-root>" --slot "<slot>" --repository "<repo>"
 ```
 
-Require OPEN, non-Draft, exact base/head, the pushed HEAD SHA, and a changed-files patch matching the inspected local `pinned-base...HEAD` result. Collect each verified `MERGED` repository as `<repo> <its-current-generation> <new-pr>`. Only after every repository passes its own state-specific verification may one `record-batch` atomically advance the repositories that created or adopted new PRs and replace their current PR pointers. Repositories may have different expected generations. Omit `OPEN` and no-op repositories; when the update set is empty, do not call `record-batch`.
-
-## Retry And Partial Results
-
-Multi-repo commit, merge, push, and GitHub API operations are not one transaction. On failure, report:
-
-- `completed`: exact local commits/merges, pushed SHAs, created PRs, and recorded pointers
-- `failed`: repository and exact operation/local/remote/PR state
-- `untouched`: repositories not started
-- overall `recovery-required`
-
-Never auto-rollback a commit, base merge, pushed branch, or created PR.
-
-If a PR may have been created before manifest recording failed, list OPEN PRs for the exact base/head:
+If the result tree equals the source tree, target points directly at source. Otherwise the helper creates exactly one Korean transfer commit whose sole parent is source and whose tree is the computed result. It independently recomputes the deterministic workspace/slot/repository/target path, rejects traversal or any original/development/other worktree path, requires a registered retry to have detached HEAD, restores the exact result tree there, and uses normal `git commit`, so configured commit hooks and signing policy run. A retry recognizes only these exact states at that path: clean source HEAD with source/result index, or a clean one-parent completed result commit. Any unregistered existing path, missing registered worktree, attached branch, unexpected index, unstaged content, ignored or ordinary untracked content, HEAD, tree, or parent blocks without overwrite. The helper removes only a proven clean temporary worktree without force before publishing the target ref; a rejected hook or cleanup failure publishes no target ref and reports the journaled path. Run the repository's required validation on the switched target before any push. Advance journal `planned -> branch-created`, run helper `verify`, switch the same development worktree with `git switch <target>`, verify clean HEAD/tree and original-worktree invariants, then advance `branch-created -> switched`. Complete with the exact verified target commit and result-tree evidence:
 
 ```bash
-gh pr list --repo "<owner/repo>" --state open \
-  --base "<source-branch>" --head "<fixed-task-branch>" \
-  --json number,state,isDraft,headRefName,headRefOid,baseRefName,url
+python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
+  complete-rotation --slot "<slot>" --token "<token>" \
+  --repository "<repo>" --target-branch "<target>" \
+  --target-generation "<target-generation>" --source-sha "<pinned-source-sha>" \
+  --target-head-sha "<verified-target-sha>" --result-tree-sha "<result-tree-sha>"
 ```
 
-Adopt only one ready OPEN result whose base, head, and `headRefOid` exactly match the inspected pushed SHA. Zero matches means create the missing PR only after rechecking remote SHA. Multiple matches or any identity mismatch blocks without changing the manifest. This rule applies to both initial generation and the next generation after a merged PR.
+Completion sets active branch/generation/base to target/next/source, stores an exact `last_rotation` receipt containing target commit and result tree, and removes only the journal. A retry without a journal succeeds only when every supplied value exactly matches that receipt; it never treats an unrelated no-journal state or a moved target ref as completed.
 
-Keep each `NONE` or `MERGED` repository's old current PR pointer until every participant's state-specific remote result is created or adopted and verified. Then call the idempotent atomic `record-batch` with only new-PR repositories and each one's own expected generation. An `OPEN` repository keeps its recorded pointer even if another repository's PR creation fails. On retry, reclassify every repository from the manifest and exact GitHub state, adopt already-created exact candidates, and never create a duplicate PR or suggest an untracked Git/GitHub bypass. After execution has stopped and the final state is captured, release the operation lock with the same token. A stale lock from a crashed process requires read-only reconciliation and one explicit unlock-recovery decision; it is never automatic slot release.
+Crash retry rules:
+
+- `planned` + absent target and absent journaled temporary path: run create.
+- `planned` + exact registered temporary source/result state: resume restore/commit/clean removal, then create the target ref.
+- `planned` + exact clean completed transfer commit in the journaled temporary worktree: adopt it, remove that worktree without force, then create the target ref.
+- `planned` + compatible target: adopt it and advance.
+- `branch-created` + old branch checked out: verify and switch.
+- `branch-created` + exact target already checked out: treat this as a crash after `git switch`; verify target commit/tree and clean worktree, then adopt `branch-created -> switched`.
+- `switched` + exact target checked out: complete manifest.
+- a target with a different tree/parent, unexpected checked-out branch, changed source/head/boundary, or impossible phase blocks without overwrite or deletion.
+
+## Retry, Legacy Recovery, And Partial Results
+
+Git and GitHub writes are not one transaction. Report `completed`, `waiting`, `failed`, and `untouched` repositories plus exact retry state. Never claim automatic rollback.
+
+Record each successful PR, correction, migration, or rotation phase immediately under the operation lock. A retry re-reads manifest/journal and actual refs rather than repeating earlier assumptions. Release only the operation lock after no mutation is active; never release a slot. A stale lock requires read-only reconciliation and one explicit unlock decision.
+
+Legacy schema 2/3 and omitted PR history may be recovered only when exact GitHub PR base/head/head SHA, local/remote refs, source inclusion, merge parents, and tree comparisons yield one result. For an existing source-sync merge commit, prove its exact source parent is contained by the current remote source and that the source-parent-to-local-HEAD tree delta is only next work; use that proven source parent as the one-time effective rotation boundary. Keep the original submitted boundary in submission evidence. This avoids treating changes introduced by the legacy source merge as future work. With two candidates, missing objects, a rewritten PR head outside an explicitly recorded isolated correction, or an unexplained tree, block that repository. After a recorded correction, the local continuation head containing B and the corrected remote PR head are intentionally divergent; this is supported because transfer always uses the unchanged continuation boundary and exact observed PR head evidence. Do not ask the user to edit JSON or bypass the skill.
+
+For omitted PR discovery, query all pages for the exact repository/base and deterministic branch family/generation candidates; never choose merely the highest PR number. Reconciliation must record full recovered submission evidence, not only a PR number.
 
 ## Pull
 
-`pull` runs only from the manifest-bound original/root repository set, with each stored source branch already checked out in its original worktree. It never touches development worktrees. The explicit `pull` request authorizes routine fetch and fast-forward after the non-blocking summary.
-
-Before fetch, require every root to be clean, on the stored source branch, free of in-progress operations, and configured with the stored remote/source ref. Validate that the remote still identifies the expected repository. Then fetch every repo and pin its SHA:
+`pull` runs only from the manifest-bound original repository set with each source branch already checked out. Require every original worktree clean and free of in-progress operations. Fetch and pin every stored remote source, reject divergence, then:
 
 ```bash
-git -C "<original-worktree>" fetch --prune "<remote>"
 git -C "<original-worktree>" merge --ff-only "<pinned-source-sha>"
 ```
 
-Require the current source HEAD to be an ancestor of the pinned SHA before the fast-forward phase. Do not use plain `git pull`, create merge commits, rebase, reset, switch branches, or update a development worktree. A no-op already at the pinned SHA is successful and retry-safe.
+Do not use plain `git pull`, merge commits, rebase, reset, branch switching, or development-worktree changes. A no-op at the pinned SHA succeeds.
 
 ## Sync
 
-`sync` runs only in the requested development bundle. It never runs from an original/root worktree and never updates a root worktree's checked-out state. The explicit `sync` request authorizes routine fetch and merge after the non-blocking summary.
+`sync` runs only in the requested development bundle. It never invokes `pull` and never changes the original worktree's checked-out state. Classify cleanliness per repository: leave each dirty repository unchanged and continue with every independently clean sibling. Fetch and pin each eligible repository's stored remote source, then apply repository-local state rules:
 
-Before fetch, require every derived worktree to be clean, on its manifest-fixed task branch, and free of in-progress operations. Validate each manifest source branch, remote, and repository identity, then:
+- **NONE**: use `branch_base_sha` as boundary. If pinned source equals branch base, no-op. If advanced, rotate net unsubmitted work to the next local branch generation; do not push or create a PR.
+- **OPEN**: verify exact PR/base/head and fetch source, then report `PR 병합 대기`. Do not rotate, switch, stage, commit, push, or mutate submission evidence even when source advanced.
+- **MERGED, not yet rotated** (`branch == submission.head_branch`): use `submission.continuation_boundary_sha` and rotate future work onto pinned source.
+- **MERGED, already rotated** (`branch != submission.head_branch`): use `branch_base_sha`; rotate again only if pinned source advanced.
+- **mixed bundle**: run each rule independently. A waiting or dirty OPEN repository does not stop an eligible clean NONE/MERGED sibling. A dirty repository or repository-local 3-way conflict is reported `failed/skipped unchanged` and does not undo recorded sibling success.
 
-```bash
-git -C "<development-worktree>" fetch --prune "<remote>"
-git -C "<development-worktree>" merge "<pinned-source-sha>"
-```
-
-Fetching from a linked worktree updates repository-shared objects and remote-tracking refs, but must not switch or update the original worktree's branch, HEAD, index, or files. The original worktree may remain intentionally stale. `sync` does not invoke `pull`, and the two commands have no required ordering.
-
-On conflict, stop in the failing development worktree. Report its Git state and untouched repos, then ask one conflict-recovery question. Do not resolve, continue, skip, abort, update the original worktree, release the permanent slot, or switch its fixed task branch without that decision.
+Dirty `sync` does not stash or make a WIP commit. Report the dirty paths unchanged. After the relevant PR is merged, a later `submit` may commit clearly task-related paths with Korean text and call the same common rotation.

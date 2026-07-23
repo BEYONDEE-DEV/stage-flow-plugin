@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Atomically manage Stageflow's permanent multi-repo worktree bindings."""
+"""Atomically manage Stageflow's permanent multi-repo worktree generations."""
 
 from __future__ import annotations
 
@@ -20,10 +20,11 @@ if os.name == "nt":
 else:
     import fcntl
 
-SCHEMA_VERSION = 3
-LEGACY_PERMANENT_SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
+LEGACY_PERMANENT_SCHEMA_VERSIONS = {2, 3}
 MANIFEST_RELATIVE_PATH = Path(".stageflow-worktrees") / "slots.json"
 LOCKS_RELATIVE_PATH = Path(".stageflow-worktrees") / "operation-locks"
+GENERATION_WORKTREES_RELATIVE_PATH = Path(".stageflow-worktrees") / "generation-worktrees"
 
 
 class ManifestError(RuntimeError):
@@ -39,20 +40,114 @@ def operation_lock_path(root: Path, slot: str) -> Path:
     return root.resolve() / LOCKS_RELATIVE_PATH / f"{digest}.json"
 
 
+def generation_worktree_path(root: Path, slot: str, repo: str, target: str) -> Path:
+    identity = "\0".join((slot, repo, target)).encode("utf-8")
+    digest = hashlib.sha256(identity).hexdigest()
+    return root.resolve() / GENERATION_WORKTREES_RELATIVE_PATH / f"{digest}.worktree"
+
+
 def empty_manifest() -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "slots": {}}
+
+
+def is_object_id(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) in {40, 64}
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def validate_submission(name: str, identity: dict[str, Any], slot_name: str) -> None:
+    submission = identity["submission"]
+    generation = identity["generation"]
+    if submission is None:
+        if generation > 0 and "legacy_schema" not in identity:
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} generation requires submission evidence"
+            )
+        return
+    if not isinstance(submission, dict) or set(submission) != {
+        "generation",
+        "head_branch",
+        "continuation_boundary_sha",
+        "observed_head_sha",
+    }:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid submission evidence")
+    if (
+        type(submission["generation"]) is not int
+        or submission["generation"] <= 0
+        or submission["generation"] != generation
+        or not isinstance(submission["head_branch"], str)
+        or not submission["head_branch"]
+        or not is_object_id(submission["continuation_boundary_sha"])
+        or not is_object_id(submission["observed_head_sha"])
+    ):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid submission evidence")
+
+
+def validate_rotation(name: str, rotation: Any, slot_name: str) -> None:
+    if not isinstance(rotation, dict) or set(rotation) != {
+        "phase",
+        "from_branch",
+        "from_branch_generation",
+        "from_head_sha",
+        "boundary_sha",
+        "source_sha",
+        "target_branch",
+        "target_branch_generation",
+        "result_tree_sha",
+        "temporary_worktree",
+    }:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
+    if rotation["phase"] not in {"planned", "branch-created", "switched"}:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation phase")
+    if (
+        not isinstance(rotation["from_branch"], str)
+        or not rotation["from_branch"]
+        or type(rotation["from_branch_generation"]) is not int
+        or rotation["from_branch_generation"] <= 0
+        or not isinstance(rotation["target_branch"], str)
+        or not rotation["target_branch"]
+        or not isinstance(rotation["temporary_worktree"], str)
+        or not rotation["temporary_worktree"]
+        or not Path(rotation["temporary_worktree"]).is_absolute()
+        or type(rotation["target_branch_generation"]) is not int
+        or rotation["target_branch_generation"] != rotation["from_branch_generation"] + 1
+        or not all(
+            is_object_id(rotation[field])
+            for field in ("from_head_sha", "boundary_sha", "source_sha", "result_tree_sha")
+        )
+    ):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
 
 
 def validate_repository(name: str, identity: Any, slot_name: str) -> None:
     if not isinstance(name, str) or not name or not isinstance(identity, dict):
         raise ManifestError(f"slot {slot_name!r} has an invalid repository identity")
-    required_fields = {"branch", "source_branch", "remote", "generation", "pr"}
+    required_fields = {
+        "branch_family",
+        "branch",
+        "branch_generation",
+        "branch_base_sha",
+        "source_branch",
+        "remote",
+        "generation",
+        "pr",
+        "submission",
+    }
     if not required_fields.issubset(identity) or set(identity) - (
-        required_fields | {"last_reconciliation"}
+        required_fields | {"rotation", "last_rotation", "last_reconciliation", "legacy_schema"}
     ):
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has unexpected fields")
+    if not isinstance(identity["branch_family"], str) or not identity["branch_family"]:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch family")
     if not isinstance(identity["branch"], str) or not identity["branch"]:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch")
+    if type(identity["branch_generation"]) is not int or identity["branch_generation"] <= 0:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch generation")
+    if identity["branch_base_sha"] is not None and not is_object_id(identity["branch_base_sha"]):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has an invalid branch base SHA")
     source_branch = identity["source_branch"]
     remote = identity["remote"]
     if (source_branch is None) != (remote is None):
@@ -75,14 +170,66 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation 0 must not have a PR")
     if identity["generation"] > 0 and pr is None:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} generation requires a PR")
+    if "legacy_schema" in identity:
+        if identity["legacy_schema"] not in LEGACY_PERMANENT_SCHEMA_VERSIONS:
+            raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid legacy evidence")
+    elif identity["branch_base_sha"] is None:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} requires a branch base SHA")
+    validate_submission(name, identity, slot_name)
+    if identity["generation"] == 0 and identity["submission"] is not None:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} generation 0 has a submission")
+    if "rotation" in identity:
+        validate_rotation(name, identity["rotation"], slot_name)
+        rotation = identity["rotation"]
+        if (
+            rotation["from_branch"] != identity["branch"]
+            or rotation["from_branch_generation"] != identity["branch_generation"]
+        ):
+            raise ManifestError(f"slot {slot_name!r} repository {name!r} rotation source mismatch")
+    if "last_rotation" in identity:
+        receipt = identity["last_rotation"]
+        receipt_fields = {
+            "target_branch",
+            "target_branch_generation",
+            "source_sha",
+            "target_head_sha",
+            "result_tree_sha",
+        }
+        if (
+            not isinstance(receipt, dict)
+            or set(receipt) != receipt_fields
+            or not isinstance(receipt["target_branch"], str)
+            or not receipt["target_branch"]
+            or type(receipt["target_branch_generation"]) is not int
+            or receipt["target_branch_generation"] <= 1
+            or not all(
+                is_object_id(receipt[field])
+                for field in ("source_sha", "target_head_sha", "result_tree_sha")
+            )
+            or receipt["target_branch"] != identity["branch"]
+            or receipt["target_branch_generation"] != identity["branch_generation"]
+            or receipt["source_sha"] != identity["branch_base_sha"]
+        ):
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} has an invalid rotation receipt"
+            )
     if "last_reconciliation" in identity:
         receipt = identity["last_reconciliation"]
-        if not isinstance(receipt, dict) or set(receipt) != {
+        legacy_receipt_fields = {
             "from_generation",
             "from_pr",
             "to_generation",
             "to_pr",
-        }:
+        }
+        evidence_fields = legacy_receipt_fields | {
+            "head_branch",
+            "continuation_boundary_sha",
+            "observed_head_sha",
+        }
+        if (
+            not isinstance(receipt, dict)
+            or frozenset(receipt) not in {frozenset(legacy_receipt_fields), frozenset(evidence_fields)}
+        ):
             raise ManifestError(
                 f"slot {slot_name!r} repository {name!r} has an invalid reconciliation receipt"
             )
@@ -90,6 +237,17 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
         to_generation = receipt["to_generation"]
         from_pr = receipt["from_pr"]
         to_pr = receipt["to_pr"]
+        invalid_evidence = False
+        if set(receipt) == evidence_fields:
+            invalid_evidence = (
+                identity["submission"] is None
+                or receipt["head_branch"] != identity["submission"]["head_branch"]
+                or receipt["continuation_boundary_sha"]
+                != identity["submission"]["continuation_boundary_sha"]
+                or receipt["observed_head_sha"] != identity["submission"]["observed_head_sha"]
+            )
+        elif "legacy_schema" not in identity:
+            invalid_evidence = True
         if (
             type(from_generation) is not int
             or from_generation <= 0
@@ -102,13 +260,14 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
             or from_pr == to_pr
             or identity["generation"] != to_generation
             or pr != to_pr
+            or invalid_evidence
         ):
             raise ManifestError(
                 f"slot {slot_name!r} repository {name!r} has an invalid reconciliation receipt"
             )
 
 
-def validate_manifest_v3(data: Any) -> dict[str, Any]:
+def validate_manifest_v4(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -137,7 +296,7 @@ def validate_manifest_v3(data: Any) -> dict[str, Any]:
     return data
 
 
-def promote_v2_manifest(data: Any) -> dict[str, Any]:
+def promote_legacy_manifest(data: Any, version: int) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ManifestError("manifest must be a JSON object")
     if set(data) != {"schema_version", "slots"}:
@@ -165,22 +324,41 @@ def promote_v2_manifest(data: Any) -> dict[str, Any]:
         for repo, identity in repositories.items():
             if not isinstance(repo, str) or not repo or not isinstance(identity, dict):
                 raise ManifestError(f"slot {name!r} has an invalid repository identity")
-            if set(identity) != {"branch", "generation", "pr"}:
-                raise ManifestError(f"slot {name!r} repository {repo!r} has unexpected fields")
+            if version == 2:
+                if set(identity) != {"branch", "generation", "pr"}:
+                    raise ManifestError(f"slot {name!r} repository {repo!r} has unexpected fields")
+                source_branch = None
+                remote = None
+                receipt = None
+            else:
+                required = {"branch", "source_branch", "remote", "generation", "pr"}
+                if not required.issubset(identity) or set(identity) - (required | {"last_reconciliation"}):
+                    raise ManifestError(f"slot {name!r} repository {repo!r} has unexpected fields")
+                source_branch = identity.get("source_branch")
+                remote = identity.get("remote")
+                receipt_present = "last_reconciliation" in identity
+                receipt = identity.get("last_reconciliation")
             candidate = {
+                "branch_family": identity.get("branch"),
                 "branch": identity.get("branch"),
-                "source_branch": None,
-                "remote": None,
+                "branch_generation": max(1, identity.get("generation", 0)),
+                "branch_base_sha": None,
+                "source_branch": source_branch,
+                "remote": remote,
                 "generation": identity.get("generation"),
                 "pr": identity.get("pr"),
+                "submission": None,
+                "legacy_schema": version,
             }
+            if version == 3 and receipt_present:
+                candidate["last_reconciliation"] = receipt
             validate_repository(repo, candidate, name)
             promoted_repositories[repo] = candidate
         promoted["slots"][name] = {
             "path": slot["path"],
             "repositories": promoted_repositories,
         }
-    return validate_manifest_v3(promoted)
+    return validate_manifest_v4(promoted)
 
 
 def validate_manifest(data: Any) -> dict[str, Any]:
@@ -188,9 +366,9 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         raise ManifestError("manifest must be a JSON object")
     version = data.get("schema_version")
     if type(version) is int and version == SCHEMA_VERSION:
-        return validate_manifest_v3(data)
-    if type(version) is int and version == LEGACY_PERMANENT_SCHEMA_VERSION:
-        return promote_v2_manifest(data)
+        return validate_manifest_v4(data)
+    if type(version) is int and version in LEGACY_PERMANENT_SCHEMA_VERSIONS:
+        return promote_legacy_manifest(data, version)
     raise ManifestError(
         f"unsupported manifest schema: {version!r}; "
         "legacy active/released manifests require manual correction"
@@ -268,7 +446,7 @@ def write_json_atomic(path: Path, data: Any, prefix: str) -> None:
 
 
 def write_manifest(path: Path, data: dict[str, Any]) -> None:
-    validate_manifest_v3(data)
+    validate_manifest_v4(data)
     write_json_atomic(path, data, "slots.")
 
 
@@ -291,17 +469,30 @@ def require_complete_context(slot: dict[str, Any], name: str) -> None:
         )
 
 
+def require_generation_evidence(identity: dict[str, Any], repo: str) -> None:
+    if "legacy_schema" in identity or identity["branch_base_sha"] is None:
+        raise ManifestError(f"repository {repo!r} requires proven generation migration")
+    if identity["generation"] > 0 and identity["submission"] is None:
+        raise ManifestError(f"repository {repo!r} requires proven submission migration")
+
+
 def parse_repository_bindings(values: list[list[str]]) -> dict[str, dict[str, str]]:
     bindings: dict[str, dict[str, str]] = {}
-    for repo, branch, source_branch, remote in values:
+    for value in values:
+        if len(value) != 5:
+            raise ManifestError("repository binding requires REPO BRANCH SOURCE REMOTE SOURCE_SHA")
+        repo, branch, source_branch, remote, source_sha = value
         if not repo or not branch or not source_branch or not remote:
             raise ManifestError("repository binding values must not be empty")
+        if not is_object_id(source_sha):
+            raise ManifestError(f"repository {repo!r} has invalid source SHA")
         if repo in bindings:
             raise ManifestError(f"duplicate repository binding: {repo}")
         bindings[repo] = {
             "branch": branch,
             "source_branch": source_branch,
             "remote": remote,
+            "source_sha": source_sha,
         }
     if not bindings:
         raise ManifestError("at least one repository binding is required")
@@ -321,30 +512,360 @@ def parse_repository_contexts(values: list[list[str]]) -> dict[str, dict[str, st
     return contexts
 
 
-def parse_repository_updates(values: list[list[str]]) -> list[tuple[str, int, str]]:
-    updates: list[tuple[str, int, str]] = []
-    for repo, expected_generation_text, pr in values:
+def parse_repository_updates(values: list[list[str]]) -> list[tuple[str, int, str, str, str, str]]:
+    updates: list[tuple[str, int, str, str, str, str]] = []
+    for value in values:
+        if len(value) != 6:
+            raise ManifestError(
+                "repository update requires REPO GENERATION PR HEAD_BRANCH BOUNDARY_SHA OBSERVED_SHA"
+            )
+        repo, expected_generation_text, pr = value[:3]
         try:
             expected_generation = int(expected_generation_text)
         except ValueError as exc:
             raise ManifestError(
                 f"repository {repo!r} expected generation must be an integer"
             ) from exc
-        updates.append((repo, expected_generation, pr))
+        head_branch, boundary_sha, observed_sha = value[3:]
+        if not head_branch or not is_object_id(boundary_sha) or not is_object_id(observed_sha):
+            raise ManifestError(f"repository {repo!r} has invalid submission update")
+        updates.append((repo, expected_generation, pr, head_branch, boundary_sha, observed_sha))
     return updates
 
 
-def parse_repository_recoveries(values: list[list[str]]) -> list[tuple[str, int, str, str]]:
-    recoveries: list[tuple[str, int, str, str]] = []
-    for repo, expected_generation_text, expected_pr, recovered_pr in values:
+def parse_repository_recoveries(values: list[list[str]]) -> list[tuple[str, int, str, str, str, str, str]]:
+    recoveries: list[tuple[str, int, str, str, str, str, str]] = []
+    for value in values:
+        if len(value) != 7:
+            raise ManifestError(
+                "repository recovery requires REPO GENERATION CURRENT_PR RECOVERED_PR HEAD BOUNDARY OBSERVED"
+            )
+        repo, expected_generation_text, expected_pr, recovered_pr = value[:4]
         try:
             expected_generation = int(expected_generation_text)
         except ValueError as exc:
             raise ManifestError(
                 f"repository {repo!r} expected generation must be an integer"
             ) from exc
-        recoveries.append((repo, expected_generation, expected_pr, recovered_pr))
+        head_branch, boundary_sha, observed_sha = value[4:]
+        if not head_branch or not is_object_id(boundary_sha) or not is_object_id(observed_sha):
+            raise ManifestError(f"repository {repo!r} has invalid recovery submission evidence")
+        recoveries.append(
+            (repo, expected_generation, expected_pr, recovered_pr, head_branch, boundary_sha, observed_sha)
+        )
     return recoveries
+
+
+def parse_repository_migrations(values: list[list[str]]) -> list[tuple[str, int, str | None, str, int, str, dict[str, Any] | None]]:
+    migrations: list[tuple[str, int, str | None, str, int, str, dict[str, Any] | None]] = []
+    for value in values:
+        if len(value) != 9:
+            raise ManifestError(
+                "repository migration requires REPO GENERATION PR_OR_DASH FAMILY BRANCH_GENERATION BASE_SHA HEAD_OR_DASH BOUNDARY_OR_DASH OBSERVED_OR_DASH"
+            )
+        repo, generation_text, pr_text, family, branch_generation_text, base_sha, head, boundary, observed = value
+        try:
+            generation = int(generation_text)
+            branch_generation = int(branch_generation_text)
+        except ValueError as exc:
+            raise ManifestError(f"repository {repo!r} migration generations must be integers") from exc
+        pr = None if pr_text == "-" else pr_text
+        if generation == 0:
+            if any(item != "-" for item in (head, boundary, observed)):
+                raise ManifestError(f"repository {repo!r} generation 0 migration has submission evidence")
+            submission = None
+        else:
+            if "-" in {head, boundary, observed}:
+                raise ManifestError(f"repository {repo!r} migration requires submission evidence")
+            submission = {
+                "generation": generation,
+                "head_branch": head,
+                "continuation_boundary_sha": boundary,
+                "observed_head_sha": observed,
+            }
+        migrations.append((repo, generation, pr, family, branch_generation, base_sha, submission))
+    return migrations
+
+
+def parse_repository_corrections(values: list[list[str]]) -> list[tuple[str, int, str, str, str]]:
+    corrections: list[tuple[str, int, str, str, str]] = []
+    for repo, generation_text, pr, expected_head, new_head in values:
+        try:
+            generation = int(generation_text)
+        except ValueError as exc:
+            raise ManifestError(f"repository {repo!r} generation must be an integer") from exc
+        corrections.append((repo, generation, pr, expected_head, new_head))
+    return corrections
+
+
+def parse_repository_rotations(values: list[list[str]]) -> list[tuple[str, str, int, str, str, str, str, int, str, str]]:
+    rotations: list[tuple[str, str, int, str, str, str, str, int, str, str]] = []
+    for value in values:
+        if len(value) != 10:
+            raise ManifestError(
+                "repository rotation requires REPO FROM_BRANCH FROM_GENERATION FROM_HEAD BOUNDARY SOURCE TARGET TARGET_GENERATION RESULT_TREE TEMPORARY_WORKTREE"
+            )
+        (
+            repo,
+            from_branch,
+            from_generation_text,
+            from_head,
+            boundary,
+            source,
+            target,
+            target_generation_text,
+            result_tree,
+            temporary_worktree,
+        ) = value
+        try:
+            from_generation = int(from_generation_text)
+            target_generation = int(target_generation_text)
+        except ValueError as exc:
+            raise ManifestError(f"repository {repo!r} rotation generations must be integers") from exc
+        rotations.append(
+            (
+                repo,
+                from_branch,
+                from_generation,
+                from_head,
+                boundary,
+                source,
+                target,
+                target_generation,
+                result_tree,
+                temporary_worktree,
+            )
+        )
+    return rotations
+
+
+def migrate_batch(
+    data: dict[str, Any],
+    name: str,
+    migrations: list[tuple[str, int, str | None, str, int, str, dict[str, Any] | None]],
+) -> dict[str, Any]:
+    if not migrations:
+        raise ManifestError("at least one repository migration is required")
+    slot = require_slot(data, name)
+    require_complete_context(slot, name)
+    repositories = slot["repositories"]
+    seen: set[str] = set()
+    pending: list[tuple[str, dict[str, Any]]] = []
+    for repo, generation, pr, family, branch_generation, base_sha, submission in migrations:
+        if repo in seen:
+            raise ManifestError(f"duplicate repository migration: {repo}")
+        seen.add(repo)
+        if repo not in repositories:
+            raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+        identity = repositories[repo]
+        if identity["generation"] != generation or identity["pr"] != pr:
+            raise ManifestError(f"repository {repo!r} migration identity mismatch")
+        if not family or type(branch_generation) is not int or branch_generation <= 0 or not is_object_id(base_sha):
+            raise ManifestError(f"repository {repo!r} has invalid migration evidence")
+        candidate = dict(identity)
+        candidate.update(
+            branch_family=family,
+            branch_generation=branch_generation,
+            branch_base_sha=base_sha,
+            submission=submission,
+        )
+        reconciliation = candidate.get("last_reconciliation")
+        if reconciliation is not None and set(reconciliation) == {
+            "from_generation",
+            "from_pr",
+            "to_generation",
+            "to_pr",
+        }:
+            if submission is None:
+                raise ManifestError(
+                    f"repository {repo!r} reconciliation migration requires submission evidence"
+                )
+            upgraded_reconciliation = dict(reconciliation)
+            upgraded_reconciliation.update(
+                head_branch=submission["head_branch"],
+                continuation_boundary_sha=submission["continuation_boundary_sha"],
+                observed_head_sha=submission["observed_head_sha"],
+            )
+            candidate["last_reconciliation"] = upgraded_reconciliation
+        candidate.pop("legacy_schema", None)
+        validate_repository(repo, candidate, name)
+        if candidate == identity:
+            continue
+        if "legacy_schema" not in identity:
+            raise ManifestError(f"repository {repo!r} migration is already complete with different evidence")
+        pending.append((repo, candidate))
+    for repo, candidate in pending:
+        repositories[repo] = candidate
+    return slot
+
+
+def record_corrections(
+    data: dict[str, Any],
+    name: str,
+    corrections: list[tuple[str, int, str, str, str]],
+) -> dict[str, Any]:
+    if not corrections:
+        raise ManifestError("at least one repository correction is required")
+    slot = require_slot(data, name)
+    repositories = slot["repositories"]
+    seen: set[str] = set()
+    pending: list[tuple[str, str]] = []
+    for repo, generation, pr, expected_head, new_head in corrections:
+        if repo in seen:
+            raise ManifestError(f"duplicate repository correction: {repo}")
+        seen.add(repo)
+        if repo not in repositories:
+            raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+        identity = repositories[repo]
+        require_generation_evidence(identity, repo)
+        submission = identity["submission"]
+        if identity["generation"] != generation or identity["pr"] != pr or submission is None:
+            raise ManifestError(f"repository {repo!r} correction identity mismatch")
+        if not is_object_id(expected_head) or not is_object_id(new_head):
+            raise ManifestError(f"repository {repo!r} correction has invalid head SHA")
+        if submission["observed_head_sha"] == new_head:
+            continue
+        if submission["observed_head_sha"] != expected_head:
+            raise ManifestError(f"repository {repo!r} correction head mismatch")
+        pending.append((repo, new_head))
+    for repo, new_head in pending:
+        repositories[repo]["submission"]["observed_head_sha"] = new_head
+    return slot
+
+
+def begin_rotations(
+    data: dict[str, Any],
+    name: str,
+    rotations: list[tuple[str, str, int, str, str, str, str, int, str, str]],
+    root: Path,
+) -> dict[str, Any]:
+    if not rotations:
+        raise ManifestError("at least one repository rotation is required")
+    slot = require_slot(data, name)
+    repositories = slot["repositories"]
+    seen: set[str] = set()
+    pending: list[tuple[str, dict[str, Any]]] = []
+    for (
+        repo,
+        from_branch,
+        from_generation,
+        from_head,
+        boundary,
+        source,
+        target,
+        target_generation,
+        result_tree,
+        temporary_worktree,
+    ) in rotations:
+        if repo in seen:
+            raise ManifestError(f"duplicate repository rotation: {repo}")
+        seen.add(repo)
+        if repo not in repositories:
+            raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+        identity = repositories[repo]
+        require_generation_evidence(identity, repo)
+        rotation = {
+            "phase": "planned",
+            "from_branch": from_branch,
+            "from_branch_generation": from_generation,
+            "from_head_sha": from_head,
+            "boundary_sha": boundary,
+            "source_sha": source,
+            "target_branch": target,
+            "target_branch_generation": target_generation,
+            "result_tree_sha": result_tree,
+            "temporary_worktree": temporary_worktree,
+        }
+        validate_rotation(repo, rotation, name)
+        if identity.get("rotation") == rotation:
+            continue
+        if "rotation" in identity:
+            raise ManifestError(f"repository {repo!r} already has a different rotation journal")
+        if identity["branch"] != from_branch or identity["branch_generation"] != from_generation:
+            raise ManifestError(f"repository {repo!r} rotation source mismatch")
+        expected_target = f"{identity['branch_family']}-stageflow-g{target_generation}"
+        if target != expected_target:
+            raise ManifestError(f"repository {repo!r} rotation target is not deterministic")
+        expected_temporary = generation_worktree_path(root, name, repo, target)
+        if temporary_worktree != str(expected_temporary):
+            raise ManifestError(f"repository {repo!r} rotation temporary worktree is not deterministic")
+        pending.append((repo, rotation))
+    for repo, rotation in pending:
+        repositories[repo]["rotation"] = rotation
+    return slot
+
+
+def advance_rotation(data: dict[str, Any], name: str, repo: str, expected: str, target: str) -> dict[str, Any]:
+    transitions = {("planned", "branch-created"), ("branch-created", "switched")}
+    if (expected, target) not in transitions:
+        raise ManifestError("invalid rotation phase transition")
+    slot = require_slot(data, name)
+    if repo not in slot["repositories"]:
+        raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+    identity = slot["repositories"][repo]
+    rotation = identity.get("rotation")
+    if rotation is None:
+        raise ManifestError(f"repository {repo!r} has no rotation journal")
+    if rotation["phase"] == target:
+        return slot
+    if rotation["phase"] != expected:
+        raise ManifestError(f"repository {repo!r} rotation phase mismatch")
+    rotation["phase"] = target
+    return slot
+
+
+def complete_rotation(
+    data: dict[str, Any],
+    name: str,
+    repo: str,
+    target_branch: str,
+    target_generation: int,
+    source_sha: str,
+    target_head_sha: str,
+    result_tree_sha: str,
+) -> dict[str, Any]:
+    slot = require_slot(data, name)
+    if repo not in slot["repositories"]:
+        raise ManifestError(f"slot {name!r} has no repository binding for: {repo}")
+    identity = slot["repositories"][repo]
+    if (
+        not is_object_id(source_sha)
+        or not is_object_id(target_head_sha)
+        or not is_object_id(result_tree_sha)
+    ):
+        raise ManifestError(f"repository {repo!r} rotation completion has invalid object evidence")
+    receipt = {
+        "target_branch": target_branch,
+        "target_branch_generation": target_generation,
+        "source_sha": source_sha,
+        "target_head_sha": target_head_sha,
+        "result_tree_sha": result_tree_sha,
+    }
+    rotation = identity.get("rotation")
+    if rotation is None:
+        if (
+            identity["branch"] == target_branch
+            and identity["branch_generation"] == target_generation
+            and identity["branch_base_sha"] == source_sha
+            and identity.get("last_rotation") == receipt
+        ):
+            return slot
+        raise ManifestError(f"repository {repo!r} has no matching completed rotation")
+    if rotation["phase"] != "switched":
+        raise ManifestError(f"repository {repo!r} rotation is not switched")
+    if (
+        rotation["target_branch"] != target_branch
+        or rotation["target_branch_generation"] != target_generation
+        or rotation["source_sha"] != source_sha
+        or rotation["result_tree_sha"] != result_tree_sha
+    ):
+        raise ManifestError(f"repository {repo!r} rotation completion mismatch")
+    identity["branch"] = rotation["target_branch"]
+    identity["branch_generation"] = rotation["target_branch_generation"]
+    identity["branch_base_sha"] = rotation["source_sha"]
+    identity["last_rotation"] = receipt
+    identity.pop("rotation")
+    return slot
 
 
 def initialize(
@@ -358,11 +879,15 @@ def initialize(
         "path": requested_path,
         "repositories": {
             repo: {
+                "branch_family": binding["branch"],
                 "branch": binding["branch"],
+                "branch_generation": 1,
+                "branch_base_sha": binding["source_sha"],
                 "source_branch": binding["source_branch"],
                 "remote": binding["remote"],
                 "generation": 0,
                 "pr": None,
+                "submission": None,
             }
             for repo, binding in sorted(bindings.items())
         },
@@ -375,11 +900,16 @@ def initialize(
             identity = current["repositories"][repo]
             if identity["branch"] != binding["branch"]:
                 raise ManifestError(f"permanent slot binding mismatch for {name}")
+            if identity["branch_family"] != binding["branch"]:
+                raise ManifestError(f"permanent slot binding mismatch for {name}")
             current_context = (identity["source_branch"], identity["remote"])
             requested_context = (binding["source_branch"], binding["remote"])
             if current_context == (None, None):
                 identity["source_branch"], identity["remote"] = requested_context
             elif current_context != requested_context:
+                raise ManifestError(f"permanent slot binding mismatch for {name}")
+            requested_sha = binding["source_sha"]
+            if identity["branch_base_sha"] != requested_sha:
                 raise ManifestError(f"permanent slot binding mismatch for {name}")
         return current
     data["slots"][name] = requested
@@ -500,19 +1030,19 @@ def release_operation_lock(root: Path, slot: str, token: str) -> dict[str, Any]:
 def record_batch(
     data: dict[str, Any],
     name: str,
-    repository_updates: list[tuple[str, int, str]],
+    repository_updates: list[tuple[str, int, str, str, str, str]],
 ) -> dict[str, Any]:
     if not repository_updates:
         raise ManifestError("at least one repository PR update is required")
-    updates: dict[str, tuple[int, str]] = {}
-    for repo, expected_generation, pr in repository_updates:
+    updates: dict[str, tuple[int, str, str, str, str]] = {}
+    for repo, expected_generation, pr, head_branch, boundary_sha, observed_sha in repository_updates:
         if not repo or not pr:
             raise ManifestError("repository and PR must not be empty")
         if type(expected_generation) is not int or expected_generation < 0:
             raise ManifestError("expected generation must be a non-negative integer")
         if repo in updates:
             raise ManifestError(f"duplicate repository PR update: {repo}")
-        updates[repo] = (expected_generation, pr)
+        updates[repo] = (expected_generation, pr, head_branch, boundary_sha, observed_sha)
 
     slot = require_slot(data, name)
     require_complete_context(slot, name)
@@ -521,12 +1051,19 @@ def record_batch(
     if missing:
         raise ManifestError(f"slot {name!r} has no repository binding for: {', '.join(missing)}")
 
-    pending: list[tuple[str, int, str]] = []
-    for repo, (expected_generation, pr) in updates.items():
+    pending: list[tuple[str, int, str, dict[str, Any] | None]] = []
+    for repo, (expected_generation, pr, head_branch, boundary_sha, observed_sha) in updates.items():
         identity = repositories[repo]
+        submission = {
+            "generation": expected_generation + 1,
+            "head_branch": head_branch,
+            "continuation_boundary_sha": boundary_sha,
+            "observed_head_sha": observed_sha,
+        }
         if (
             identity["generation"] == expected_generation + 1
             and identity["pr"] == pr
+            and identity["submission"] == submission
         ):
             continue
         if identity["generation"] != expected_generation:
@@ -540,11 +1077,17 @@ def record_batch(
             raise ManifestError(f"repository {repo!r} generation has no current PR")
         if expected_generation > 0 and identity["pr"] == pr:
             raise ManifestError(f"repository {repo!r} new PR matches its current PR")
-        pending.append((repo, expected_generation, pr))
+        require_generation_evidence(identity, repo)
+        if head_branch != identity["branch"]:
+            raise ManifestError(f"repository {repo!r} submitted head is not its active branch")
+        if boundary_sha != observed_sha:
+            raise ManifestError(f"repository {repo!r} new submission boundary must equal its head")
+        pending.append((repo, expected_generation, pr, submission))
 
-    for repo, expected_generation, pr in pending:
+    for repo, expected_generation, pr, submission in pending:
         repositories[repo]["generation"] = expected_generation + 1
         repositories[repo]["pr"] = pr
+        repositories[repo]["submission"] = submission
         repositories[repo].pop("last_reconciliation", None)
     return slot
 
@@ -552,12 +1095,24 @@ def record_batch(
 def reconcile_batch(
     data: dict[str, Any],
     name: str,
-    repository_recoveries: list[tuple[str, int, str, str]],
+    repository_recoveries: list[
+        tuple[str, int, str, str, str, str, str]
+    ],
 ) -> dict[str, Any]:
     if not repository_recoveries:
         raise ManifestError("at least one repository PR recovery is required")
-    recoveries: dict[str, tuple[int, str, str]] = {}
-    for repo, expected_generation, expected_pr, recovered_pr in repository_recoveries:
+    recoveries: dict[
+        str, tuple[int, str, str, str, str, str]
+    ] = {}
+    for (
+        repo,
+        expected_generation,
+        expected_pr,
+        recovered_pr,
+        head_branch,
+        boundary_sha,
+        observed_sha,
+    ) in repository_recoveries:
         if not repo or not expected_pr or not recovered_pr:
             raise ManifestError("repository and PR values must not be empty")
         if type(expected_generation) is not int or expected_generation <= 0:
@@ -566,7 +1121,14 @@ def reconcile_batch(
             raise ManifestError(f"repository {repo!r} recovered PR matches its current PR")
         if repo in recoveries:
             raise ManifestError(f"duplicate repository PR recovery: {repo}")
-        recoveries[repo] = (expected_generation, expected_pr, recovered_pr)
+        recoveries[repo] = (
+            expected_generation,
+            expected_pr,
+            recovered_pr,
+            head_branch,
+            boundary_sha,
+            observed_sha,
+        )
 
     slot = require_slot(data, name)
     require_complete_context(slot, name)
@@ -575,17 +1137,39 @@ def reconcile_batch(
     if missing:
         raise ManifestError(f"slot {name!r} has no repository binding for: {', '.join(missing)}")
 
-    pending: list[tuple[str, int, str]] = []
-    for repo, (expected_generation, expected_pr, recovered_pr) in recoveries.items():
+    pending: list[tuple[str, int, str, dict[str, Any] | None, dict[str, Any]]] = []
+    for repo, recovery in recoveries.items():
+        (
+            expected_generation,
+            expected_pr,
+            recovered_pr,
+            head_branch,
+            boundary_sha,
+            observed_sha,
+        ) = recovery
         identity = repositories[repo]
+        submission = {
+            "generation": expected_generation + 1,
+            "head_branch": head_branch,
+            "continuation_boundary_sha": boundary_sha,
+            "observed_head_sha": observed_sha,
+        }
+        expected_receipt = {
+            "from_generation": expected_generation,
+            "from_pr": expected_pr,
+            "to_generation": expected_generation + 1,
+            "to_pr": recovered_pr,
+        }
+        expected_receipt.update(
+            head_branch=head_branch,
+            continuation_boundary_sha=boundary_sha,
+            observed_head_sha=observed_sha,
+        )
         if identity["generation"] == expected_generation + 1 and identity["pr"] == recovered_pr:
-            expected_receipt = {
-                "from_generation": expected_generation,
-                "from_pr": expected_pr,
-                "to_generation": expected_generation + 1,
-                "to_pr": recovered_pr,
-            }
-            if identity.get("last_reconciliation") != expected_receipt:
+            if (
+                identity.get("last_reconciliation") != expected_receipt
+                or identity["submission"] != submission
+            ):
                 raise ManifestError(f"repository {repo!r} recovery retry does not match its receipt")
             continue
         if identity["generation"] != expected_generation:
@@ -598,18 +1182,14 @@ def reconcile_batch(
                 f"repository {repo!r} current PR mismatch: "
                 f"expected {expected_pr!r}, found {identity['pr']!r}"
             )
-        pending.append((repo, expected_generation, recovered_pr))
+        require_generation_evidence(identity, repo)
+        pending.append((repo, expected_generation, recovered_pr, submission, expected_receipt))
 
-    for repo, expected_generation, recovered_pr in pending:
-        expected_pr = recoveries[repo][1]
+    for repo, expected_generation, recovered_pr, submission, receipt in pending:
         repositories[repo]["generation"] = expected_generation + 1
         repositories[repo]["pr"] = recovered_pr
-        repositories[repo]["last_reconciliation"] = {
-            "from_generation": expected_generation,
-            "from_pr": expected_pr,
-            "to_generation": expected_generation + 1,
-            "to_pr": recovered_pr,
-        }
+        repositories[repo]["submission"] = submission
+        repositories[repo]["last_reconciliation"] = receipt
     return slot
 
 
@@ -628,9 +1208,9 @@ def parser() -> argparse.ArgumentParser:
         "--repository",
         action="append",
         required=True,
-        nargs=4,
-        metavar=("REPO", "TASK_BRANCH", "SOURCE_BRANCH", "REMOTE"),
-        help="Repository and permanent Git context; repeat for every repository",
+        nargs=5,
+        metavar=("REPO", "TASK_BRANCH", "SOURCE_BRANCH", "REMOTE", "SOURCE_SHA"),
+        help="REPO TASK_BRANCH SOURCE_BRANCH REMOTE SOURCE_SHA; repeat for every repository",
     )
 
     bind_context_parser = subparsers.add_parser(
@@ -665,10 +1245,66 @@ def parser() -> argparse.ArgumentParser:
         "--repository-update",
         action="append",
         required=True,
-        nargs=3,
-        metavar=("REPO", "EXPECTED_GENERATION", "PR"),
-        help="Repository, current generation, and new PR; repeat for every updated repository",
+        nargs=6,
+        metavar=("REPO", "GENERATION", "PR", "HEAD_BRANCH", "BOUNDARY_SHA", "OBSERVED_SHA"),
+        help="REPO GENERATION PR HEAD_BRANCH BOUNDARY_SHA OBSERVED_SHA; repeat per repository",
     )
+
+    migrate = subparsers.add_parser(
+        "migrate-batch",
+        help="Atomically record exactly proven generation evidence for legacy repositories",
+    )
+    migrate.add_argument("--slot", required=True)
+    migrate.add_argument("--token", required=True)
+    migrate.add_argument(
+        "--repository-migration",
+        action="append",
+        required=True,
+        nargs=9,
+        metavar=("REPO", "GENERATION", "PR", "FAMILY", "BRANCH_GENERATION", "BASE_SHA", "HEAD", "BOUNDARY", "OBSERVED"),
+    )
+
+    correction = subparsers.add_parser(
+        "record-correction",
+        help="Atomically advance observed heads without moving continuation boundaries",
+    )
+    correction.add_argument("--slot", required=True)
+    correction.add_argument("--token", required=True)
+    correction.add_argument(
+        "--repository-correction",
+        action="append",
+        required=True,
+        nargs=5,
+        metavar=("REPO", "GENERATION", "PR", "EXPECTED_HEAD", "NEW_HEAD"),
+    )
+
+    begin = subparsers.add_parser("begin-rotation", help="Journal generation rotations before refs change")
+    begin.add_argument("--slot", required=True)
+    begin.add_argument("--token", required=True)
+    begin.add_argument(
+        "--repository-rotation",
+        action="append",
+        required=True,
+        nargs=10,
+        metavar=("REPO", "FROM_BRANCH", "FROM_GENERATION", "FROM_HEAD", "BOUNDARY", "SOURCE", "TARGET", "TARGET_GENERATION", "RESULT_TREE", "TEMPORARY_WORKTREE"),
+    )
+
+    advance = subparsers.add_parser("advance-rotation", help="Advance one exact rotation journal phase")
+    advance.add_argument("--slot", required=True)
+    advance.add_argument("--token", required=True)
+    advance.add_argument("--repository", required=True)
+    advance.add_argument("--expected-phase", required=True)
+    advance.add_argument("--target-phase", required=True)
+
+    complete = subparsers.add_parser("complete-rotation", help="Commit one switched generation binding")
+    complete.add_argument("--slot", required=True)
+    complete.add_argument("--token", required=True)
+    complete.add_argument("--repository", required=True)
+    complete.add_argument("--target-branch", required=True)
+    complete.add_argument("--target-generation", required=True, type=int)
+    complete.add_argument("--source-sha", required=True)
+    complete.add_argument("--target-head-sha", required=True)
+    complete.add_argument("--result-tree-sha", required=True)
 
     reconcile = subparsers.add_parser(
         "reconcile-batch",
@@ -680,9 +1316,9 @@ def parser() -> argparse.ArgumentParser:
         "--repository-recovery",
         action="append",
         required=True,
-        nargs=4,
-        metavar=("REPO", "EXPECTED_GENERATION", "EXPECTED_PR", "RECOVERED_PR"),
-        help="Repository, current generation/PR, and proven successor PR; repeat as needed",
+        nargs=7,
+        metavar=("REPO", "GENERATION", "CURRENT_PR", "RECOVERED_PR", "HEAD", "BOUNDARY", "OBSERVED"),
+        help="REPO GENERATION CURRENT_PR RECOVERED_PR HEAD BOUNDARY OBSERVED; repeat as needed",
     )
     return result
 
@@ -722,6 +1358,49 @@ def main() -> int:
                         data,
                         args.slot,
                         parse_repository_updates(args.repository_update),
+                    )
+                elif args.command == "migrate-batch":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = migrate_batch(
+                        data,
+                        args.slot,
+                        parse_repository_migrations(args.repository_migration),
+                    )
+                elif args.command == "record-correction":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = record_corrections(
+                        data,
+                        args.slot,
+                        parse_repository_corrections(args.repository_correction),
+                    )
+                elif args.command == "begin-rotation":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = begin_rotations(
+                        data,
+                        args.slot,
+                        parse_repository_rotations(args.repository_rotation),
+                        args.root,
+                    )
+                elif args.command == "advance-rotation":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = advance_rotation(
+                        data,
+                        args.slot,
+                        args.repository,
+                        args.expected_phase,
+                        args.target_phase,
+                    )
+                elif args.command == "complete-rotation":
+                    require_operation_lock(args.root, args.slot, args.token)
+                    payload = complete_rotation(
+                        data,
+                        args.slot,
+                        args.repository,
+                        args.target_branch,
+                        args.target_generation,
+                        args.source_sha,
+                        args.target_head_sha,
+                        args.result_tree_sha,
                     )
                 else:
                     require_operation_lock(args.root, args.slot, args.token)
