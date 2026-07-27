@@ -4,6 +4,7 @@
 
 - [Responsibility](#responsibility)
 - [Version 5 Boundary](#version-5-boundary)
+- [Shared Review Acceptance Contract](#shared-review-acceptance-contract)
 - [Local And Shared Risk Routes](#local-and-shared-risk-routes)
 - [Bounded Shared Contract Closure](#bounded-shared-contract-closure)
 - [Selected Contract Binding Traces](#selected-contract-binding-traces)
@@ -32,10 +33,23 @@ After Goal handoff, every executable Atomic Docs operation uses exact `context_s
 - `created_aids`
 - `semantic_challenge`
 - `reviewer_handoffs`
+- `review_alignment`
 
 Give every `risk_triggers` entry a unique lower-kebab-case `risk_id` and `route: local|shared-contract`; give every `bundle_queue` entry `bundle_id` plus `depends_on_contract_ids`. A `shared-contract` route names `shared_contract_id`; a `local` route omits it. Initialize exact `selection_retirements: {"version":"1","retired_bundles":[],"retired_contracts":[]}`, `created_aids: []`, challenge, and handoff owners before writing. A pre-Goal bootstrap request may resume without selection. After Goal handoff, reject a missing, non-string, v1-v4, future, or unknown marker and direct the agent to a new v5 request under the existing approval and Goal gates. Never mutate, resume, migrate, backfill, or dual-read rejected state.
 
 Bundle-scoped development/risk review PASSes and required reviews use stable `bundle_id` as `scope`, and semantic invalidation `affected_bundles` contains those bundle IDs. This preserves affected-only review when one domain has several shards. Readiness itself keeps the fixed `selection-readiness` scope.
+
+Every new version-5 operation additionally creates exact top-level `review_alignment.version: "1"` with `acceptance_contracts`, `bindings`, `maintenance_attempts`, and `escaped_prepass_defects`. This is a hard-cut sub-contract: reject a marker-free or unknown revision and direct the agent to a new version-5 request. Do not retrofit an active older v5 operation.
+
+## Shared Review Acceptance Contract
+
+Create exactly one acceptance contract for every active stable `bundle_id`. Canonically hash only accepted meaning: the selected candidate disposition and basis, expected output and owner, contract/risk route meaning, material safety invariant and binding meaning, plus the approved criteria revision. Exclude evidence paths and content digests, receipts, timestamps, journal sequence/order, and other protocol metadata from `acceptance_fingerprint`.
+
+Keep mutable evidence under a positive `evidence_revision` and `evidence_fingerprint`. Derive it per bundle from only that bundle's candidate-scoped inventory/evidence sections, shared-contract evidence routes, and trace authority/implementation locator-content bindings. Do not feed review result receipts, review IDs, timestamps, or global whole-file hashes back into this projection: receipts are outputs validated by `semantic-review-proof.md`, and feeding them into their own reviewed input would self-invalidate the review and fan one bundle's change out to unrelated bundles. A writer binds the current bundle acceptance fingerprint and never the mutable evidence revision. Readiness binds the applicable acceptance plus its launch-time evidence; every later semantic reviewer binds the applicable acceptance plus the current evidence. A project-wide, affected-closure, or terminal reviewer binds every active contract in its scope. The validator derives the canonical projections from their existing owners; this state does not duplicate the natural-language criteria or create another acceptance artifact.
+
+An evidence-only correction appends one `maintenance` attempt with stable bundle scope, basis, allowed changed fields, equal before/after acceptance fingerprints, different before/after evidence fingerprints, and the one subsequent `review_mode: evidence-only` development PASS. Keep the existing full semantic PASS current as the accepted-meaning owner; let exactly one latest current evidence-only PASS overlay current evidence for that bundle, and mark an older overlay `superseded` without opening a meaning invalidation. Preserve the original readiness receipt, span, and launch-time binding byte-for-byte; the overlay receipt hashes current `inventory.md` and `evidence.md`. Allowed changes are the request inventory/evidence index, binding locator/content digest, a corresponding review-receipt input repair, and protocol metadata. Receipt or protocol metadata alone does not manufacture an evidence revision; validate that correction through its receipt/protocol owner. A changed candidate, expected output, owner, rule/relationship, risk/contract meaning, safety invariant, or acceptance fingerprint rejects maintenance and returns to the writer path. The evidence-only review follows the completed same-basis maintenance span; it does not require a fabricated same-basis bundle/writer pair.
+
+Final integration/baseline review normally reconciles the current corpus with these contracts. When it directly finds a missing permission, privacy, destructive-effect, or shared-contract invariant, append exactly one `escaped_prepass_defect` for that final FAIL diagnostic and classify it with the same root category; every such diagnostic must reciprocally own one defect. Stale readiness, pause dispatch, name the root and every currently known affected bundle, correct the contract/prepass, and require corrected readiness before resuming. Bind source evidence to exactly that diagnostic-derived root fan-out. An unrelated bundle's evidence change is never new evidence for this root. If the same root produces another material finding without changed evidence in an already affected bundle, preserve and correct the finding but set batching protocol status to `FAIL` and record a separate failed `validation` span scoped `prepass-batching`. New root-scoped source evidence permits a later same-root finding with protocol status `PASS`. Open escape records block terminal completion; resolution keeps their history and points to the corrected readiness PASS and affected semantic invalidation.
 
 ## Local And Shared Risk Routes
 

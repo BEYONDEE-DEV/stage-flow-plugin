@@ -47,6 +47,7 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                 "request_id": REQUEST_ID,
                 "operation_profile": "targeted",
                 "context_selection": {"version": "5", "candidates": []},
+                "review_alignment": {"version": "1"},
                 "selection_readiness": {"basis_revision": 1},
                 "semantic_review_closure": {"basis_revision": 1},
                 "bundle_queue": [
@@ -1275,6 +1276,7 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                             "request_id": request_id,
                             "operation_profile": "targeted",
                             "context_selection": {{"version": "5", "candidates": []}},
+                            "review_alignment": {{"version": "1"}},
                             "selection_readiness": {{"basis_revision": 1}},
                             "semantic_review_closure": {{"basis_revision": 1}},
                             "bundle_queue": [],
@@ -1563,10 +1565,26 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
             reduce_operation_events([first, early])
 
     def test_v5_and_safe_request_path_are_mandatory(self) -> None:
-        old = self.read_state()
+        current = self.read_state()
+        old = copy.deepcopy(current)
         old["context_selection"]["version"] = "4"
         self.write_state(old)
         with self.assertRaisesRegex(OperationEventError, "exact context_selection.version `5`"):
+            record_operation_event(
+                self.request_root,
+                REQUEST_ID,
+                "operation-started",
+                {"started_at": "2026-07-21T21:00:00+09:00"},
+            )
+        self.assertFalse(self.journal_path.exists())
+
+        missing_alignment = copy.deepcopy(current)
+        missing_alignment.pop("review_alignment")
+        self.write_state(missing_alignment)
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "exact review_alignment.version `1`",
+        ):
             record_operation_event(
                 self.request_root,
                 REQUEST_ID,
@@ -1581,6 +1599,142 @@ class AtomicDocsEventRecorderTests(unittest.TestCase):
                 "../escape",
                 "operation-started",
                 {"started_at": "2026-07-21T21:00:00+09:00"},
+            )
+
+    def test_maintenance_is_work_and_protocol_failure_cannot_overwrite_semantic_pass(
+        self,
+    ) -> None:
+        state = self.read_state()
+        state["review_alignment"]["acceptance_contracts"] = [
+            {
+                "bundle_id": "accounts-bundle",
+                "acceptance_fingerprint": "a" * 64,
+                "evidence_revision": 1,
+                "evidence_fingerprint": "b" * 64,
+            }
+        ]
+        self.write_state(state)
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "operation-started",
+            {"started_at": "2026-07-21T21:00:00+09:00"},
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-started",
+            {
+                "span_id": "accounts-evidence-maintenance-1",
+                "kind": "maintenance",
+                "scope": "accounts-bundle",
+                "attempt_id": "accounts-evidence-attempt-1",
+                "basis_revision": 1,
+                "started_at": "2026-07-21T21:01:00+09:00",
+                "acceptance_fingerprint": "a" * 64,
+                "evidence_revision": 1,
+                "evidence_fingerprint": "b" * 64,
+            },
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-finished",
+            {
+                "span_id": "accounts-evidence-maintenance-1",
+                "finished_at": "2026-07-21T21:02:00+09:00",
+                "outcome": "completed",
+            },
+        )
+        self.assertEqual(
+            "maintenance",
+            self.read_state()["operation_metrics"]["spans"][0]["kind"],
+        )
+
+        state = self.read_state()
+        state["semantic_review_closure"] = {
+            "basis_revision": 1,
+            "review_passes": [
+                {
+                    "review_id": "accounts-development-1",
+                    "verdict": "PASS",
+                }
+            ],
+        }
+        self.write_state(state)
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-started",
+            {
+                "span_id": "accounts-development-1",
+                "kind": "development-review",
+                "scope": "accounts-bundle",
+                "attempt_id": "accounts-development-attempt-1",
+                "basis_revision": 1,
+                "started_at": "2026-07-21T21:03:00+09:00",
+            },
+        )
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "record chronology/receipt/order failure as a separate validation span",
+        ):
+            record_operation_event(
+                self.request_root,
+                REQUEST_ID,
+                "span-finished",
+                {
+                    "span_id": "accounts-development-1",
+                    "finished_at": "2026-07-21T21:04:00+09:00",
+                    "outcome": "FAIL",
+                },
+            )
+
+    def test_dedicated_challenge_semantic_pass_cannot_finish_fail(self) -> None:
+        state = self.read_state()
+        state["semantic_challenge"] = {
+            "version": "1",
+            "attempts": [
+                {
+                    "review_id": "terminal-challenge-1",
+                    "mode": "dedicated",
+                    "verdict": "PASS",
+                }
+            ],
+        }
+        self.write_state(state)
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "operation-started",
+            {"started_at": "2026-07-21T21:00:00+09:00"},
+        )
+        record_operation_event(
+            self.request_root,
+            REQUEST_ID,
+            "span-started",
+            {
+                "span_id": "terminal-challenge-1",
+                "kind": "integration-review",
+                "scope": "terminal-current-basis",
+                "attempt_id": "terminal-challenge-attempt-1",
+                "basis_revision": 1,
+                "started_at": "2026-07-21T21:01:00+09:00",
+            },
+        )
+        with self.assertRaisesRegex(
+            OperationEventError,
+            "record chronology/receipt/order failure as a separate validation span",
+        ):
+            record_operation_event(
+                self.request_root,
+                REQUEST_ID,
+                "span-finished",
+                {
+                    "span_id": "terminal-challenge-1",
+                    "finished_at": "2026-07-21T21:02:00+09:00",
+                    "outcome": "FAIL",
+                },
             )
 
     def test_operation_profile_is_mandatory_and_closed(self) -> None:

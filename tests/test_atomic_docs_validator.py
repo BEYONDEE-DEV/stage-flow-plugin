@@ -724,6 +724,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         scope: str,
         basis_revision: int,
         verdict: str,
+        include_raw_inputs: bool = False,
     ) -> dict[str, object]:
         evidence_path = request_root / "evidence.md"
         report_relative = Path("reviews") / f"{review_id}.md"
@@ -781,6 +782,8 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                 reviewed_paths = [evidence_path]
             if role == "risk":
                 reviewed_paths.extend(atom_paths)
+        if include_raw_inputs:
+            reviewed_paths.extend(raw_paths)
         reviewed_docs = [
             {
                 "path": path.relative_to(self.root).as_posix(),
@@ -1469,6 +1472,211 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             )
         )
 
+    def normalize_review_alignment_state(
+        self,
+        request_root: Path,
+        state: dict[str, object],
+    ) -> None:
+        prior = state.get("review_alignment")
+        prior_contracts = (
+            prior.get("acceptance_contracts")
+            if isinstance(prior, dict)
+            and isinstance(prior.get("acceptance_contracts"), list)
+            else []
+        )
+        prior_bindings = (
+            prior.get("bindings")
+            if isinstance(prior, dict)
+            and isinstance(prior.get("bindings"), list)
+            else []
+        )
+        prior_binding_by_span = {
+            binding.get("span_id"): binding
+            for binding in prior_bindings
+            if isinstance(binding, dict)
+            and isinstance(binding.get("span_id"), str)
+        }
+        prior_by_bundle = {
+            item.get("bundle_id"): item
+            for item in prior_contracts
+            if isinstance(item, dict) and isinstance(item.get("bundle_id"), str)
+        }
+        criteria_path = self.docs / "project" / "atomization-criteria.md"
+        selection = state.get("context_selection")
+        candidates = (
+            selection.get("candidates") if isinstance(selection, dict) else []
+        )
+        candidate_ids = {
+            candidate["candidate_id"]
+            for candidate in (candidates if isinstance(candidates, list) else [])
+            if isinstance(candidate, dict)
+            and isinstance(candidate.get("candidate_id"), str)
+        }
+        derived = validator_module.build_review_alignment_contracts(
+            state,
+            criteria_sha256=hashlib.sha256(criteria_path.read_bytes()).hexdigest(),
+            inventory_fingerprints=validator_module.candidate_document_fingerprints(
+                request_root / "inventory.md",
+                candidate_ids,
+                sectioned=False,
+            ),
+            evidence_fingerprints=validator_module.candidate_document_fingerprints(
+                request_root / "evidence.md",
+                candidate_ids,
+                sectioned=True,
+            ),
+        )
+        contracts: list[dict[str, object]] = []
+        for bundle_id, expected in sorted(derived.items()):
+            old = prior_by_bundle.get(bundle_id)
+            old_revision = (
+                old.get("evidence_revision")
+                if isinstance(old, dict)
+                and type(old.get("evidence_revision")) is int
+                else 0
+            )
+            old_evidence = (
+                old.get("evidence_fingerprint")
+                if isinstance(old, dict)
+                else None
+            )
+            evidence_revision = (
+                old_revision
+                if old_revision > 0
+                and old_evidence == expected["evidence_fingerprint"]
+                else max(1, old_revision + 1)
+            )
+            contracts.append(
+                {
+                    "bundle_id": bundle_id,
+                    "acceptance_fingerprint": expected[
+                        "acceptance_fingerprint"
+                    ],
+                    "evidence_revision": evidence_revision,
+                    "evidence_fingerprint": expected["evidence_fingerprint"],
+                }
+            )
+        contracts_by_bundle = {
+            item["bundle_id"]: item for item in contracts
+        }
+        readiness = state.get("selection_readiness")
+        closure = state.get("semantic_review_closure")
+        challenge = state.get("semantic_challenge")
+        review_ids = {
+            review.get("review_id")
+            for owner in (
+                readiness.get("reviews") if isinstance(readiness, dict) else [],
+                closure.get("review_passes") if isinstance(closure, dict) else [],
+            )
+            for review in (owner if isinstance(owner, list) else [])
+            if isinstance(review, dict) and isinstance(review.get("review_id"), str)
+        }
+        review_ids.update(
+            attempt.get("review_id")
+            for attempt in (
+                challenge.get("attempts")
+                if isinstance(challenge, dict)
+                and isinstance(challenge.get("attempts"), list)
+                else []
+            )
+            if isinstance(attempt, dict)
+            and attempt.get("mode") == "dedicated"
+            and attempt.get("verdict") == "PASS"
+            and isinstance(attempt.get("review_id"), str)
+        )
+        diagnostics = state.get("semantic_fail_diagnostics")
+        diagnostic_review_ids = {
+            diagnostic.get("review_span_id")
+            for diagnostic in (
+                diagnostics if isinstance(diagnostics, list) else []
+            )
+            if isinstance(diagnostic, dict)
+            and isinstance(diagnostic.get("review_span_id"), str)
+        }
+        metrics = state.get("operation_metrics")
+        spans = metrics.get("spans") if isinstance(metrics, dict) else []
+        bindings: list[dict[str, object]] = []
+        for span in spans if isinstance(spans, list) else []:
+            if not isinstance(span, dict) or not isinstance(span.get("span_id"), str):
+                continue
+            is_writer = (
+                span.get("kind") == "writer"
+                and span.get("status") == "finished"
+                and span.get("outcome") == "completed"
+            )
+            is_owned_review = (
+                span.get("kind")
+                in {
+                    "development-review",
+                    "risk-review",
+                    "integration-review",
+                    "baseline-review",
+                }
+                and span.get("status") == "finished"
+                and (
+                    (
+                        span.get("outcome") == "PASS"
+                        and span.get("span_id") in review_ids
+                    )
+                    or (
+                        span.get("outcome") == "FAIL"
+                        and span.get("span_id") in diagnostic_review_ids
+                    )
+                )
+            )
+            if not (is_writer or is_owned_review):
+                continue
+            if (
+                isinstance(span.get("alignment_binding_sha256"), str)
+                and span["span_id"] in prior_binding_by_span
+            ):
+                bindings.append(
+                    copy.deepcopy(prior_binding_by_span[span["span_id"]])
+                )
+                continue
+            scope = span.get("scope")
+            bundle_ids = (
+                [scope]
+                if isinstance(scope, str) and scope in contracts_by_bundle
+                else sorted(contracts_by_bundle)
+            )
+            binding: dict[str, object] = {
+                "span_id": span["span_id"],
+                "acceptance_fingerprints": sorted(
+                    contracts_by_bundle[bundle_id]["acceptance_fingerprint"]
+                    for bundle_id in bundle_ids
+                ),
+            }
+            if is_owned_review:
+                binding["evidence_bindings"] = [
+                    {
+                        "bundle_id": bundle_id,
+                        "evidence_revision": contracts_by_bundle[bundle_id][
+                            "evidence_revision"
+                        ],
+                        "evidence_fingerprint": contracts_by_bundle[bundle_id][
+                            "evidence_fingerprint"
+                        ],
+                    }
+                    for bundle_id in bundle_ids
+                ]
+            bindings.append(binding)
+        state["review_alignment"] = {
+            "version": "1",
+            "acceptance_contracts": contracts,
+            "bindings": bindings,
+            "maintenance_attempts": (
+                prior.get("maintenance_attempts", [])
+                if isinstance(prior, dict)
+                else []
+            ),
+            "escaped_prepass_defects": (
+                prior.get("escaped_prepass_defects", [])
+                if isinstance(prior, dict)
+                else []
+            ),
+        }
+
     def write_test_operation_journal(
         self,
         request_root: Path,
@@ -1480,6 +1688,30 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             return
         if not isinstance(metrics.get("started_at"), str):
             return
+        self.normalize_review_alignment_state(request_root, state)
+        alignment = state.get("review_alignment")
+        bindings = alignment.get("bindings") if isinstance(alignment, dict) else []
+        binding_hashes = {
+            binding.get("span_id"): validator_module.canonical_json_sha256(binding)
+            for binding in (bindings if isinstance(bindings, list) else [])
+            if isinstance(binding, dict)
+            and isinstance(binding.get("span_id"), str)
+        }
+        maintenance_attempts = (
+            alignment.get("maintenance_attempts")
+            if isinstance(alignment, dict)
+            else []
+        )
+        maintenance_by_span = {
+            attempt.get("span_id"): attempt
+            for attempt in (
+                maintenance_attempts
+                if isinstance(maintenance_attempts, list)
+                else []
+            )
+            if isinstance(attempt, dict)
+            and isinstance(attempt.get("span_id"), str)
+        }
         closure = state.get("semantic_review_closure")
         readiness = state.get("selection_readiness")
         fallback_basis = (
@@ -1569,6 +1801,25 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                 if "rerun_of" in span or "rerun_reason" in span:
                     started["rerun_of"] = span["rerun_of"]
                     started["rerun_reason"] = span["rerun_reason"]
+                binding_hash = binding_hashes.get(span.get("span_id"))
+                if isinstance(binding_hash, str):
+                    started["alignment_binding_sha256"] = binding_hash
+                if span.get("kind") == "maintenance":
+                    attempt = maintenance_by_span.get(span.get("span_id"))
+                    if isinstance(attempt, dict):
+                        started.update(
+                            {
+                                "acceptance_fingerprint": attempt[
+                                    "before_acceptance_fingerprint"
+                                ],
+                                "evidence_revision": attempt[
+                                    "before_evidence_revision"
+                                ],
+                                "evidence_fingerprint": attempt[
+                                    "before_evidence_fingerprint"
+                                ],
+                            }
+                        )
                 append_event("span-started", started)
                 if span.get("status") == "finished":
                     append_event(
@@ -1594,6 +1845,7 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             b"".join(canonical_json_bytes(event) + b"\n" for event in events)
         )
         state["operation_metrics"] = projection
+        self.normalize_review_alignment_state(request_root, state)
         projected_spans = {
             span.get("span_id"): span
             for span in state["operation_metrics"]["spans"]
@@ -2262,6 +2514,18 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         allowed_uncertainty["contract_binding_traces"][0]["verdict"] = (
             "confirmation_needed"
         )
+        for span in allowed_uncertainty["operation_metrics"]["spans"]:
+            span.pop("alignment_binding_sha256", None)
+        allowed_uncertainty["review_alignment"]["bindings"] = []
+        self.normalize_review_alignment_state(
+            self.selection_request_root(request_id),
+            allowed_uncertainty,
+        )
+        self.write_test_operation_journal(
+            self.selection_request_root(request_id),
+            request_id,
+            allowed_uncertainty,
+        )
         self.write_selection_data(request_id, allowed_uncertainty)
         result = self.run_validator(
             "selection", request_id=request_id, normalize_v5=False
@@ -2606,6 +2870,78 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             "current-basis challenge requires dispatch control to be `ready`",
             result.stdout,
         )
+
+        unresolved_before_challenge = copy.deepcopy(base)
+        challenge_review_id = unresolved_before_challenge[
+            "semantic_challenge"
+        ]["attempts"][0]["review_id"]
+        challenge_index = next(
+            index
+            for index, span in enumerate(
+                unresolved_before_challenge["operation_metrics"]["spans"]
+            )
+            if span["span_id"] == challenge_review_id
+        )
+        unresolved_before_challenge["operation_metrics"]["spans"].insert(
+            challenge_index,
+            {
+                "span_id": "challenge-protocol-validation-1",
+                "kind": "validation",
+                "scope": "review-protocol",
+                "attempt_id": "challenge-protocol-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:15.100000Z",
+                "finished_at": "2026-07-20T08:00:15.200000Z",
+                "outcome": "FAIL",
+            },
+        )
+        self.write_test_operation_journal(
+            self.selection_request_root(request_id),
+            request_id,
+            unresolved_before_challenge,
+        )
+        result = self.run_validator(
+            "selection", request_id=request_id, normalize_v5=False
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "terminal-ready challenge is blocked by unresolved protocol "
+            "validation FAIL scope(s): review-protocol",
+            result.stdout,
+        )
+
+        resolved_before_challenge = copy.deepcopy(unresolved_before_challenge)
+        challenge_index = next(
+            index
+            for index, span in enumerate(
+                resolved_before_challenge["operation_metrics"]["spans"]
+            )
+            if span["span_id"] == challenge_review_id
+        )
+        resolved_before_challenge["operation_metrics"]["spans"].insert(
+            challenge_index,
+            {
+                "span_id": "challenge-protocol-validation-2",
+                "kind": "validation",
+                "scope": "review-protocol",
+                "attempt_id": "challenge-protocol-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-20T08:00:15.300000Z",
+                "finished_at": "2026-07-20T08:00:15.400000Z",
+                "outcome": "PASS",
+                "rerun_of": "challenge-protocol-validation-1",
+                "rerun_reason": "프로토콜 오류를 수정하고 terminal challenge 전에 재검증한다.",
+            },
+        )
+        self.write_test_operation_journal(
+            self.selection_request_root(request_id),
+            request_id,
+            resolved_before_challenge,
+        )
+        result = self.run_validator(
+            "selection", request_id=request_id, normalize_v5=False
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
         future_work_after_challenge = copy.deepcopy(base)
         future_work_after_challenge["operation_metrics"]["spans"] = [
@@ -7519,6 +7855,48 @@ class AtomicDocsValidatorTests(unittest.TestCase):
                 "outcome": "PASS",
             }
         )
+        unresolved_protocol = copy.deepcopy(state)
+        unresolved_protocol["operation_metrics"]["spans"].insert(
+            -1,
+            {
+                "span_id": "review-protocol-validation-1",
+                "kind": "validation",
+                "scope": "review-protocol",
+                "attempt_id": "review-protocol-attempt-1",
+                "status": "finished",
+                "started_at": "2026-07-16T09:23:00+09:00",
+                "finished_at": "2026-07-16T09:24:00+09:00",
+                "outcome": "FAIL",
+            },
+        )
+        self.write_selection_data(request_id, unresolved_protocol)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "blocked by unresolved protocol validation FAIL scope(s): review-protocol",
+            result.stdout,
+        )
+
+        resolved_protocol = copy.deepcopy(unresolved_protocol)
+        resolved_protocol["operation_metrics"]["spans"].insert(
+            -1,
+            {
+                "span_id": "review-protocol-validation-2",
+                "kind": "validation",
+                "scope": "review-protocol",
+                "attempt_id": "review-protocol-attempt-2",
+                "status": "finished",
+                "started_at": "2026-07-16T09:24:10+09:00",
+                "finished_at": "2026-07-16T09:25:00+09:00",
+                "outcome": "PASS",
+                "rerun_of": "review-protocol-validation-1",
+                "rerun_reason": "프로토콜 오류를 수정한 뒤 다시 확인한다.",
+            },
+        )
+        self.write_selection_data(request_id, resolved_protocol)
+        result = self.run_validator("metrics-preterminal", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
         stale_closure_state = copy.deepcopy(state)
         stale_closure = stale_closure_state["semantic_review_closure"]
         stale_closure["basis_revision"] = 2
@@ -9537,6 +9915,22 @@ class AtomicDocsValidatorTests(unittest.TestCase):
         reviewed_current["operation_metrics"] = copy.deepcopy(
             reviewed_snapshot["operation_metrics"]
         )
+        snapshot_span_ids = {
+            span["span_id"]
+            for span in reviewed_snapshot["operation_metrics"]["spans"]
+            if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+        }
+        snapshot_bindings = copy.deepcopy(
+            reviewed_snapshot["review_alignment"]["bindings"]
+        )
+        reviewed_current["review_alignment"]["bindings"] = [
+            *snapshot_bindings,
+            *[
+                binding
+                for binding in reviewed_current["review_alignment"]["bindings"]
+                if binding.get("span_id") not in snapshot_span_ids
+            ],
+        ]
         reviewed_current["operation_metrics"]["spans"].append(readiness_two_span)
         self.normalize_v5_snapshot_state(request_id, reviewed_current)
         errors: list[str] = []
@@ -10945,6 +11339,809 @@ Prose
         result = self.run_validator("baseline", "example")
         self.assertEqual(1, result.returncode)
         self.assertIn("requires `--phase docs`", result.stdout)
+
+    def test_review_alignment_separates_accepted_meaning_from_evidence_revision(
+        self,
+    ) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "개발 판단에 필요한 소유권이다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260727-110000-review-alignment-fingerprint",
+        )
+        request_root = self.selection_request_root(request_id)
+        state = self.read_selection_state(request_id)
+        criteria_hash = hashlib.sha256(
+            (self.docs / "project" / "atomization-criteria.md").read_bytes()
+        ).hexdigest()
+        evidence_path = request_root / "evidence.md"
+        candidate_ids = {"domain-context"}
+
+        def alignment_contracts(
+            value: dict[str, object],
+        ) -> dict[str, dict[str, object]]:
+            return validator_module.build_review_alignment_contracts(
+                value,
+                criteria_sha256=criteria_hash,
+                inventory_fingerprints=(
+                    validator_module.candidate_document_fingerprints(
+                        request_root / "inventory.md",
+                        candidate_ids,
+                        sectioned=False,
+                    )
+                ),
+                evidence_fingerprints=(
+                    validator_module.candidate_document_fingerprints(
+                        evidence_path,
+                        candidate_ids,
+                        sectioned=True,
+                    )
+                ),
+            )
+
+        before = alignment_contracts(state)
+        evidence_path.write_text(
+            evidence_path.read_text(encoding="utf-8")
+            + "\n- `source.txt:1` locator spelling correction\n",
+            encoding="utf-8",
+        )
+        after = alignment_contracts(state)
+        bundle_id = "domain-bundle"
+        self.assertEqual(
+            before[bundle_id]["acceptance_fingerprint"],
+            after[bundle_id]["acceptance_fingerprint"],
+        )
+        self.assertNotEqual(
+            before[bundle_id]["evidence_fingerprint"],
+            after[bundle_id]["evidence_fingerprint"],
+        )
+
+        contract_state = copy.deepcopy(state)
+        contract_state["bundle_queue"][0]["depends_on_contract_ids"] = [
+            "domain-shared-contract"
+        ]
+        contract_state["shared_contracts"] = [
+            {
+                "contract_id": "domain-shared-contract",
+                "kind": "shared-identifier",
+                "owner_candidate_id": "domain-context",
+                "owner_atom_key": "domain-context",
+                "direct_consumer_candidate_ids": ["domain-consumer"],
+                "evidence_routes": ["source.txt:1"],
+                "owner_bundle_id": "domain-bundle",
+                "consumer_bundle_ids": ["domain-consumer-bundle"],
+            }
+        ]
+        contract_before = alignment_contracts(contract_state)
+        contract_state["shared_contracts"][0]["evidence_routes"] = [
+            "source.txt:2"
+        ]
+        contract_after = alignment_contracts(contract_state)
+        self.assertEqual(
+            contract_before[bundle_id]["acceptance_fingerprint"],
+            contract_after[bundle_id]["acceptance_fingerprint"],
+        )
+        self.assertNotEqual(
+            contract_before[bundle_id]["evidence_fingerprint"],
+            contract_after[bundle_id]["evidence_fingerprint"],
+        )
+
+        receipt_state = copy.deepcopy(state)
+        receipt_before = alignment_contracts(receipt_state)
+        receipt_state["selection_readiness"]["reviews"][0]["receipt"][
+            "review_run_id"
+        ] = "selection-readiness-receipt-revised"
+        receipt_after = alignment_contracts(receipt_state)
+        self.assertEqual(
+            receipt_before[bundle_id]["acceptance_fingerprint"],
+            receipt_after[bundle_id]["acceptance_fingerprint"],
+        )
+        self.assertEqual(
+            receipt_before[bundle_id]["evidence_fingerprint"],
+            receipt_after[bundle_id]["evidence_fingerprint"],
+        )
+
+        binding_state = copy.deepcopy(state)
+        binding_state["risk_triggers"] = [
+            {
+                "risk_id": "domain-risk",
+                "candidate_id": "domain-context",
+                "atom_key": "domain-context",
+            }
+        ]
+        binding_state["contract_binding_traces"] = [
+            {
+                "trace_id": "domain-binding",
+                "risk_id": "domain-risk",
+                "authority_content_sha256": "a" * 64,
+            }
+        ]
+        binding_before = alignment_contracts(binding_state)
+        binding_state["contract_binding_traces"][0][
+            "authority_content_sha256"
+        ] = "b" * 64
+        binding_after = alignment_contracts(binding_state)
+        self.assertEqual(
+            binding_before[bundle_id]["acceptance_fingerprint"],
+            binding_after[bundle_id]["acceptance_fingerprint"],
+        )
+        self.assertNotEqual(
+            binding_before[bundle_id]["evidence_fingerprint"],
+            binding_after[bundle_id]["evidence_fingerprint"],
+        )
+
+    def test_review_alignment_evidence_change_is_isolated_to_owning_bundle(
+        self,
+    ) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "alpha-context",
+                    "domain": "alpha",
+                    "candidate": "알파 맥락",
+                    "disposition": "write",
+                    "selection_basis": "알파 판단 근거다.",
+                    "candidate_atom_keys": ["alpha-context"],
+                },
+                {
+                    "candidate_id": "beta-context",
+                    "domain": "beta",
+                    "candidate": "베타 맥락",
+                    "disposition": "write",
+                    "selection_basis": "베타 판단 근거다.",
+                    "candidate_atom_keys": ["beta-context"],
+                },
+            ],
+            bundle_keys=["alpha-context"],
+            request_id="20260727-110000-review-alignment-isolation",
+            bundle_domain="alpha",
+        )
+        request_root = self.selection_request_root(request_id)
+        state = self.read_selection_state(request_id)
+        state["bundle_queue"].append(
+            {
+                "bundle_id": "beta-bundle",
+                "domain": "beta",
+                "expected_atom_keys": ["beta-context"],
+                "depends_on_contract_ids": [],
+            }
+        )
+        criteria_hash = hashlib.sha256(
+            (self.docs / "project" / "atomization-criteria.md").read_bytes()
+        ).hexdigest()
+        candidate_ids = {"alpha-context", "beta-context"}
+
+        def contracts() -> dict[str, dict[str, object]]:
+            return validator_module.build_review_alignment_contracts(
+                state,
+                criteria_sha256=criteria_hash,
+                inventory_fingerprints=(
+                    validator_module.candidate_document_fingerprints(
+                        request_root / "inventory.md",
+                        candidate_ids,
+                        sectioned=False,
+                    )
+                ),
+                evidence_fingerprints=(
+                    validator_module.candidate_document_fingerprints(
+                        request_root / "evidence.md",
+                        candidate_ids,
+                        sectioned=True,
+                    )
+                ),
+            )
+
+        before = contracts()
+        evidence_path = request_root / "evidence.md"
+        evidence_path.write_text(
+            evidence_path.read_text(encoding="utf-8")
+            + "\n- `source.txt:2` beta evidence correction\n",
+            encoding="utf-8",
+        )
+        after = contracts()
+        self.assertEqual(before["alpha-bundle"], after["alpha-bundle"])
+        self.assertEqual(
+            before["beta-bundle"]["acceptance_fingerprint"],
+            after["beta-bundle"]["acceptance_fingerprint"],
+        )
+        self.assertNotEqual(
+            before["beta-bundle"]["evidence_fingerprint"],
+            after["beta-bundle"]["evidence_fingerprint"],
+        )
+
+    def test_review_alignment_binding_cannot_be_rewritten_without_journal_event(
+        self,
+    ) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "최초 선택 근거다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260727-110000-review-alignment-immutable",
+        )
+        request_root = self.selection_request_root(request_id)
+        state = self.read_selection_state(request_id)
+        state["context_selection"]["candidates"][0][
+            "selection_basis"
+        ] = "상태 파일에서 계약을 몰래 바꾼다."
+        state["review_alignment"]["bindings"] = []
+        self.normalize_review_alignment_state(request_root, state)
+        self.write_selection_data(request_id, state)
+
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must preserve its immutable journal-bound review alignment binding",
+            result.stdout,
+        )
+
+    def test_review_alignment_hard_cut_rejects_missing_contract_owner(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "개발 판단에 필요한 소유권이다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260727-110001-review-alignment-hard-cut",
+        )
+        state = self.read_selection_state(request_id)
+        state.pop("review_alignment")
+        self.write_selection_data(request_id, state)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "requires `review_alignment.version` exact `1`",
+            result.stdout,
+        )
+
+    def test_evidence_only_review_uses_maintenance_without_writer_pair(self) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "개발 판단에 필요한 소유권이다.",
+                    "candidate_atom_keys": ["domain-context"],
+                }
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260727-110002-evidence-maintenance",
+        )
+        state = self.read_selection_state(request_id)
+        request_root = self.selection_request_root(request_id)
+        self.add_test_terminal_bundle_reviews(state)
+        self.write_selection_data(request_id, state)
+        self.normalize_v5_request(request_id, require_terminal=False)
+        state = self.read_selection_state(request_id)
+        writer_span_ids_before = [
+            span["span_id"]
+            for span in state["operation_metrics"]["spans"]
+            if span.get("kind") == "writer"
+        ]
+        readiness_receipt_before = copy.deepcopy(
+            state["selection_readiness"]["reviews"][0]["receipt"]
+        )
+        readiness_span_before = copy.deepcopy(
+            next(
+                span
+                for span in state["operation_metrics"]["spans"]
+                if span["span_id"] == "selection-readiness-1"
+            )
+        )
+        before_contract = copy.deepcopy(
+            state["review_alignment"]["acceptance_contracts"][0]
+        )
+        evidence_path = request_root / "evidence.md"
+        evidence_path.write_text(
+            evidence_path.read_text(encoding="utf-8")
+            + "\n- `source.txt:1` corrected evidence locator note\n",
+            encoding="utf-8",
+        )
+        review = {
+            "review_id": "domain-evidence-review-1",
+            "reviewer_role": "development",
+            "scope": "domain-bundle",
+            "basis_revision": 1,
+            "verdict": "PASS",
+            "status": "current",
+            "review_mode": "evidence-only",
+        }
+        review["receipt"] = self.make_test_review_receipt(
+            request_root,
+            state,
+            review_id="domain-evidence-review-1",
+            agent_id="reviewer-1",
+            role="development",
+            scope="domain-bundle",
+            basis_revision=1,
+            verdict="PASS",
+            include_raw_inputs=True,
+        )
+        state["semantic_review_closure"]["review_passes"].append(review)
+        self.normalize_review_alignment_state(request_root, state)
+        contract = state["review_alignment"]["acceptance_contracts"][0]
+        state["operation_metrics"]["spans"].extend(
+            [
+                {
+                    "span_id": "domain-evidence-maintenance-1",
+                    "kind": "maintenance",
+                    "scope": "domain-bundle",
+                    "attempt_id": "domain-evidence-attempt-1",
+                    "basis_revision": 1,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:40Z",
+                    "finished_at": "2026-07-20T08:00:41Z",
+                    "outcome": "completed",
+                },
+                {
+                    "span_id": "domain-evidence-review-1",
+                    "kind": "development-review",
+                    "scope": "domain-bundle",
+                    "attempt_id": "domain-evidence-review-attempt-1",
+                    "basis_revision": 1,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:42Z",
+                    "finished_at": "2026-07-20T08:00:43Z",
+                    "outcome": "PASS",
+                },
+                {
+                    "span_id": "domain-review-protocol-1",
+                    "kind": "validation",
+                    "scope": "review-protocol",
+                    "attempt_id": "domain-review-protocol-attempt-1",
+                    "basis_revision": 1,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:44Z",
+                    "finished_at": "2026-07-20T08:00:45Z",
+                    "outcome": "FAIL",
+                },
+            ]
+        )
+        state["review_alignment"]["maintenance_attempts"].append(
+            {
+                "maintenance_id": "domain-evidence-maintenance-1",
+                "span_id": "domain-evidence-maintenance-1",
+                "bundle_id": "domain-bundle",
+                "basis_revision": 1,
+                "before_acceptance_fingerprint": contract[
+                    "acceptance_fingerprint"
+                ],
+                "after_acceptance_fingerprint": contract[
+                    "acceptance_fingerprint"
+                ],
+                "before_evidence_revision": before_contract["evidence_revision"],
+                "after_evidence_revision": contract["evidence_revision"],
+                "before_evidence_fingerprint": before_contract[
+                    "evidence_fingerprint"
+                ],
+                "after_evidence_fingerprint": contract["evidence_fingerprint"],
+                "changed_fields": ["evidence.md", "review-receipt"],
+                "review_id": "domain-evidence-review-1",
+                "status": "PASS",
+            }
+        )
+        self.write_test_operation_journal(request_root, request_id, state)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        normalized = self.read_selection_state(request_id)
+        self.assertEqual(
+            writer_span_ids_before,
+            [
+                span["span_id"]
+                for span in normalized["operation_metrics"]["spans"]
+                if span.get("kind") == "writer"
+            ],
+        )
+        self.assertEqual(
+            readiness_receipt_before,
+            normalized["selection_readiness"]["reviews"][0]["receipt"],
+        )
+        self.assertEqual(
+            readiness_span_before,
+            next(
+                span
+                for span in normalized["operation_metrics"]["spans"]
+                if span["span_id"] == "selection-readiness-1"
+            ),
+        )
+        current_contract = normalized["review_alignment"][
+            "acceptance_contracts"
+        ][0]
+        bindings_by_span = {
+            binding["span_id"]: binding
+            for binding in normalized["review_alignment"]["bindings"]
+        }
+        full_review_id = next(
+            review["review_id"]
+            for review in normalized["semantic_review_closure"]["review_passes"]
+            if review.get("scope") == "domain-bundle"
+            and review.get("review_mode", "full") == "full"
+            and review.get("status") == "current"
+        )
+        self.assertNotEqual(
+            current_contract["evidence_fingerprint"],
+            bindings_by_span[full_review_id]["evidence_bindings"][0][
+                "evidence_fingerprint"
+            ],
+        )
+        self.assertEqual(
+            current_contract["evidence_fingerprint"],
+            bindings_by_span["domain-evidence-review-1"][
+                "evidence_bindings"
+            ][0]["evidence_fingerprint"],
+        )
+        self.assertEqual(
+            "PASS",
+            next(
+                review["verdict"]
+                for review in normalized["semantic_review_closure"]["review_passes"]
+                if review["review_id"] == "domain-evidence-review-1"
+            ),
+        )
+        self.assertEqual(
+            "FAIL",
+            normalized["operation_metrics"]["spans"][-1]["outcome"],
+        )
+        self.assertEqual([], normalized["semantic_fail_diagnostics"])
+
+        changed_meaning = copy.deepcopy(normalized)
+        changed_meaning["review_alignment"]["maintenance_attempts"][0][
+            "after_acceptance_fingerprint"
+        ] = "f" * 64
+        self.write_selection_data(request_id, changed_meaning)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "meaning changes require a writer correction",
+            result.stdout,
+        )
+
+        invalid_field = copy.deepcopy(normalized)
+        invalid_field["review_alignment"]["maintenance_attempts"][0][
+            "changed_fields"
+        ] = ["owner-meaning"]
+        self.write_selection_data(request_id, invalid_field)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn("outside evidence-only maintenance", result.stdout)
+
+        stale_binding = copy.deepcopy(normalized)
+        evidence_binding = next(
+            binding
+            for binding in stale_binding["review_alignment"]["bindings"]
+            if binding["span_id"] == "domain-evidence-review-1"
+        )
+        evidence_binding["evidence_bindings"][0]["evidence_fingerprint"] = "f" * 64
+        self.write_selection_data(request_id, stale_binding)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must bind the current evidence revision/fingerprint",
+            result.stdout,
+        )
+
+        missing_attempt = copy.deepcopy(normalized)
+        missing_attempt["review_alignment"]["maintenance_attempts"] = []
+        self.write_selection_data(request_id, missing_attempt)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must follow its completed same-basis maintenance attempt",
+            result.stdout,
+        )
+
+    def test_escaped_prepass_batches_root_without_discarding_repeat_finding(
+        self,
+    ) -> None:
+        request_id = self.write_selection_state(
+            [
+                {
+                    "candidate_id": "domain-context",
+                    "domain": "domain",
+                    "candidate": "개인정보 소유권",
+                    "disposition": "write",
+                    "selection_basis": "민감 데이터 소비 경계를 설명한다.",
+                    "candidate_atom_keys": ["domain-context"],
+                },
+                {
+                    "candidate_id": "other-context",
+                    "domain": "other",
+                    "candidate": "무관한 도메인 맥락",
+                    "disposition": "write",
+                    "selection_basis": "다른 root의 증거 격리를 검증한다.",
+                    "candidate_atom_keys": ["other-context"],
+                },
+            ],
+            bundle_keys=["domain-context"],
+            request_id="20260727-110003-escaped-prepass",
+            accepted_scope=["domain", "other"],
+        )
+        state = self.read_selection_state(request_id)
+        state["bundle_queue"].append(
+            {
+                "bundle_id": "other-bundle",
+                "domain": "other",
+                "expected_atom_keys": ["other-context"],
+                "depends_on_contract_ids": [],
+            }
+        )
+        readiness = state["selection_readiness"]
+        readiness["basis_revision"] = 3
+        readiness["reviews"][0]["status"] = "stale"
+        state["semantic_review_closure"]["basis_revision"] = 3
+        state["operation_metrics"]["spans"].extend(
+            [
+                {
+                    "span_id": "project-baseline-escape-1",
+                    "kind": "baseline-review",
+                    "scope": "project-wide",
+                    "attempt_id": "project-baseline-escape-attempt-1",
+                    "basis_revision": 2,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:03Z",
+                    "finished_at": "2026-07-20T08:00:04Z",
+                    "outcome": "FAIL",
+                },
+                {
+                    "span_id": "project-baseline-escape-2",
+                    "kind": "baseline-review",
+                    "scope": "project-wide",
+                    "attempt_id": "project-baseline-escape-attempt-2",
+                    "basis_revision": 3,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:05Z",
+                    "finished_at": "2026-07-20T08:00:06Z",
+                    "outcome": "FAIL",
+                },
+                {
+                    "span_id": "prepass-batching-validation-1",
+                    "kind": "validation",
+                    "scope": "prepass-batching",
+                    "attempt_id": "prepass-batching-attempt-1",
+                    "basis_revision": 3,
+                    "status": "finished",
+                    "started_at": "2026-07-20T08:00:07Z",
+                    "finished_at": "2026-07-20T08:00:08Z",
+                    "outcome": "FAIL",
+                },
+            ]
+        )
+        state["semantic_fail_diagnostics"] = [
+            {
+                "diagnostic_id": "escaped-prepass-diagnostic-1",
+                "review_span_id": "project-baseline-escape-1",
+                "first_attempt": True,
+                "root_category": "escaped-prepass-defect",
+                "candidate_ids": ["domain-context"],
+                "contract_ids": [],
+                "basis_revision": 2,
+            },
+            {
+                "diagnostic_id": "escaped-prepass-diagnostic-2",
+                "review_span_id": "project-baseline-escape-2",
+                "first_attempt": True,
+                "root_category": "escaped-prepass-defect",
+                "candidate_ids": ["domain-context"],
+                "contract_ids": [],
+                "basis_revision": 3,
+            },
+        ]
+        self.normalize_review_alignment_state(
+            self.selection_request_root(request_id),
+            state,
+        )
+        contract = state["review_alignment"]["acceptance_contracts"][0]
+        source_evidence_bindings = [
+            {
+                "bundle_id": "domain-bundle",
+                "evidence_revision": contract["evidence_revision"],
+                "evidence_fingerprint": contract["evidence_fingerprint"],
+            }
+        ]
+        state["review_alignment"]["escaped_prepass_defects"] = [
+            {
+                "defect_id": "escaped-prepass-defect-1",
+                "root_id": "privacy-owner-root",
+                "finding_span_id": "project-baseline-escape-1",
+                "basis_revision": 2,
+                "safety_invariants": ["privacy"],
+                "affected_bundle_ids": ["domain-bundle"],
+                "new_source_evidence": False,
+                "source_evidence_bindings": copy.deepcopy(
+                    source_evidence_bindings
+                ),
+                "batching_protocol_status": "PASS",
+                "status": "open",
+                "stale_readiness_review_id": "selection-readiness-1",
+            },
+            {
+                "defect_id": "escaped-prepass-defect-2",
+                "root_id": "privacy-owner-root",
+                "finding_span_id": "project-baseline-escape-2",
+                "basis_revision": 3,
+                "safety_invariants": ["privacy"],
+                "affected_bundle_ids": ["domain-bundle"],
+                "new_source_evidence": False,
+                "source_evidence_bindings": copy.deepcopy(
+                    source_evidence_bindings
+                ),
+                "batching_protocol_status": "FAIL",
+                "status": "open",
+                "stale_readiness_review_id": "selection-readiness-1",
+                "protocol_validation_span_id": "prepass-batching-validation-1",
+            },
+        ]
+        state["dispatch_control"] = {
+            "version": "1",
+            "status": "paused",
+            "episodes": [
+                {
+                    "episode_id": "escaped-prepass-episode-1",
+                    "cause": "escaped-prepass-defect",
+                    "trigger_ids": [
+                        "escaped-prepass-defect-1",
+                        "escaped-prepass-defect-2",
+                    ],
+                    "basis_revision": 3,
+                    "status": "open",
+                }
+            ],
+        }
+        self.write_selection_data(request_id, state)
+        result = self.run_validator("selection", request_id=request_id)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        normalized = self.read_selection_state(request_id)
+        self.assertEqual(
+            2,
+            len(normalized["review_alignment"]["escaped_prepass_defects"]),
+        )
+        self.assertEqual(
+            "FAIL",
+            normalized["review_alignment"]["escaped_prepass_defects"][1][
+                "batching_protocol_status"
+            ],
+        )
+
+        hidden_repeat = copy.deepcopy(normalized)
+        repeated = hidden_repeat["review_alignment"]["escaped_prepass_defects"][1]
+        repeated["batching_protocol_status"] = "PASS"
+        repeated.pop("protocol_validation_span_id")
+        self.write_selection_data(request_id, hidden_repeat)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "batching protocol status must be `FAIL`",
+            result.stdout,
+        )
+
+        missing_defect = copy.deepcopy(normalized)
+        missing_defect["review_alignment"]["escaped_prepass_defects"].pop()
+        missing_defect["dispatch_control"]["episodes"][0]["trigger_ids"].pop()
+        self.write_selection_data(request_id, missing_defect)
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            "must own exactly one escaped prepass defect record",
+            result.stdout,
+        )
+
+        unrelated_evidence = copy.deepcopy(normalized)
+        repeated = unrelated_evidence["review_alignment"][
+            "escaped_prepass_defects"
+        ][1]
+        finding_binding = next(
+            binding
+            for binding in unrelated_evidence["review_alignment"]["bindings"]
+            if binding["span_id"] == repeated["finding_span_id"]
+        )
+        unrelated_binding = next(
+            binding
+            for binding in finding_binding["evidence_bindings"]
+            if binding["bundle_id"] == "other-bundle"
+        )
+        unrelated_binding["evidence_fingerprint"] = "d" * 64
+        self.write_test_operation_journal(
+            self.selection_request_root(request_id),
+            request_id,
+            unrelated_evidence,
+        )
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+        new_evidence = copy.deepcopy(normalized)
+        repeated = new_evidence["review_alignment"]["escaped_prepass_defects"][1]
+        new_fingerprint = "e" * 64
+        finding_binding = next(
+            binding
+            for binding in new_evidence["review_alignment"]["bindings"]
+            if binding["span_id"] == repeated["finding_span_id"]
+        )
+        affected_binding = next(
+            binding
+            for binding in finding_binding["evidence_bindings"]
+            if binding["bundle_id"] == "domain-bundle"
+        )
+        affected_binding["evidence_fingerprint"] = new_fingerprint
+        repeated["source_evidence_bindings"][0]["evidence_fingerprint"] = (
+            new_fingerprint
+        )
+        repeated["new_source_evidence"] = True
+        repeated["batching_protocol_status"] = "PASS"
+        repeated.pop("protocol_validation_span_id")
+        self.write_test_operation_journal(
+            self.selection_request_root(request_id),
+            request_id,
+            new_evidence,
+        )
+        result = self.run_validator(
+            "selection",
+            request_id=request_id,
+            normalize_v5=False,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

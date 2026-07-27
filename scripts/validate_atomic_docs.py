@@ -125,6 +125,7 @@ SEMANTIC_REVIEW_STATUSES = {"current", "stale", "superseded"}
 OPERATION_METRIC_KINDS = {
     "bundle",
     "writer",
+    "maintenance",
     "development-review",
     "risk-review",
     "integration-review",
@@ -162,6 +163,21 @@ SEMANTIC_FAIL_ROOT_CATEGORIES = {
     "consumer-closure",
     "evidence-depth",
     "selected-claim-fidelity",
+    "escaped-prepass-defect",
+}
+MATERIAL_SAFETY_INVARIANTS = {
+    "permission",
+    "privacy",
+    "destructive",
+    "shared-contract",
+}
+EVIDENCE_MAINTENANCE_FIELDS = {
+    "evidence.md",
+    "inventory.md",
+    "contract-binding-locator",
+    "contract-binding-content-sha256",
+    "review-receipt",
+    "protocol-metadata",
 }
 EVIDENCE_COMMIT_RE = re.compile(
     r"^source_commit_observed:[ ]*`([0-9a-fA-F]{40}|[0-9a-fA-F]{64})`[ ]*$",
@@ -775,6 +791,39 @@ def required_final_validation_scope(state: dict[str, Any]) -> str:
     )
 
 
+def unresolved_protocol_validation_scopes(
+    spans: list[Any],
+    *,
+    before_sequence: int | None = None,
+) -> list[str]:
+    latest_by_scope: dict[str, dict[str, Any]] = {}
+    for span in spans:
+        if (
+            not isinstance(span, dict)
+            or span.get("kind") != "validation"
+            or span.get("scope") in {"docs", "baseline"}
+            or not isinstance(span.get("scope"), str)
+            or span.get("status") != "finished"
+            or type(span.get("finished_sequence")) is not int
+            or (
+                before_sequence is not None
+                and span["finished_sequence"] >= before_sequence
+            )
+        ):
+            continue
+        prior = latest_by_scope.get(span["scope"])
+        if (
+            prior is None
+            or span["finished_sequence"] > prior["finished_sequence"]
+        ):
+            latest_by_scope[span["scope"]] = span
+    return sorted(
+        scope
+        for scope, span in latest_by_scope.items()
+        if span.get("outcome") == "FAIL"
+    )
+
+
 def validate_operation_metrics(
     state: dict[str, Any],
     errors: list[str],
@@ -881,6 +930,10 @@ def validate_operation_metrics(
                 "outcome",
                 "rerun_of",
                 "rerun_reason",
+                "alignment_binding_sha256",
+                "acceptance_fingerprint",
+                "evidence_revision",
+                "evidence_fingerprint",
             },
             required_span,
             label,
@@ -921,7 +974,7 @@ def validate_operation_metrics(
             )
         if kind == "baseline-review" and scope != "project-wide":
             errors.append(f"{label} baseline-review scope must be `project-wide`")
-        if kind in {"bundle", "writer"} and scope not in metric_bundle_scopes:
+        if kind in {"bundle", "writer", "maintenance"} and scope not in metric_bundle_scopes:
             errors.append(
                 f"{label} v5 {kind} scope must be an active/retired stable "
                 "bundle_id"
@@ -932,6 +985,44 @@ def validate_operation_metrics(
         basis_revision = positive_integer(
             span.get("basis_revision"), f"{label} `basis_revision`", errors
         )
+        alignment_binding = span.get("alignment_binding_sha256")
+        if alignment_binding is not None:
+            sha256_value(
+                alignment_binding,
+                f"{label} `alignment_binding_sha256`",
+                errors,
+            )
+        maintenance_prior_fields = {
+            "acceptance_fingerprint",
+            "evidence_revision",
+            "evidence_fingerprint",
+        }
+        present_maintenance_fields = maintenance_prior_fields & set(span)
+        if kind == "maintenance":
+            if present_maintenance_fields != maintenance_prior_fields:
+                errors.append(
+                    f"{label} maintenance span must bind its prior acceptance and "
+                    "evidence revision/fingerprint"
+                )
+            sha256_value(
+                span.get("acceptance_fingerprint"),
+                f"{label} prior `acceptance_fingerprint`",
+                errors,
+            )
+            positive_integer(
+                span.get("evidence_revision"),
+                f"{label} prior `evidence_revision`",
+                errors,
+            )
+            sha256_value(
+                span.get("evidence_fingerprint"),
+                f"{label} prior `evidence_fingerprint`",
+                errors,
+            )
+        elif present_maintenance_fields:
+            errors.append(
+                f"{label} non-maintenance span must omit maintenance prior-state fields"
+            )
         span_status = nonempty_string(span.get("status"))
         if span_status not in {"active", "finished"}:
             errors.append(f"{label} `status` must be `active` or `finished`")
@@ -969,7 +1060,7 @@ def validate_operation_metrics(
             outcome = nonempty_string(span.get("outcome"))
             if outcome not in OPERATION_METRIC_OUTCOMES:
                 errors.append(f"finished {label} has unsupported `outcome`")
-            if kind in {"bundle", "writer"} and outcome == "PASS":
+            if kind in {"bundle", "writer", "maintenance"} and outcome == "PASS":
                 errors.append(
                     f"finished {label} {kind} outcome must be `completed` or `FAIL`"
                 )
@@ -1175,7 +1266,7 @@ def validate_operation_metrics(
     for span in spans:
         if (
             not isinstance(span, dict)
-            or span.get("kind") not in {"bundle", "writer"}
+            or span.get("kind") not in {"bundle", "writer", "maintenance"}
             or not isinstance(span.get("scope"), str)
             or not isinstance(span.get("attempt_id"), str)
             or type(span.get("basis_revision")) is not int
@@ -1339,6 +1430,12 @@ def validate_operation_metrics(
         )
     if mode in {"final-validation", "preterminal", "final"}:
         validate_operation_metric_completion_coverage(state, spans, errors)
+        unresolved_protocol = unresolved_protocol_validation_scopes(spans)
+        if unresolved_protocol:
+            errors.append(
+                "terminal validation is blocked by unresolved protocol validation "
+                "FAIL scope(s): " + ", ".join(unresolved_protocol)
+            )
     if mode == "final-validation":
         if validation_scope != required_final_scope:
             errors.append(
@@ -1570,6 +1667,7 @@ def validate_semantic_review_closure(
         review_passes = []
     passes_by_id: dict[str, dict[str, Any]] = {}
     current_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    current_evidence_by_scope: dict[str, dict[str, Any]] = {}
     metrics = state.get("operation_metrics")
     metric_spans = metrics.get("spans") if isinstance(metrics, dict) else None
     metric_spans_by_id = {
@@ -1592,6 +1690,7 @@ def validate_semantic_review_closure(
                 "verdict",
                 "status",
                 "receipt",
+                "review_mode",
             },
             {
                 "review_id",
@@ -1619,6 +1718,13 @@ def validate_semantic_review_closure(
                 f"{label} `reviewer_role` must be development, risk, integration, or baseline"
             )
             role = None
+        review_mode = review.get("review_mode", "full")
+        if review_mode not in {"full", "evidence-only"}:
+            errors.append(f"{label} `review_mode` must be `full` or `evidence-only`")
+        if review_mode == "evidence-only" and role != "development":
+            errors.append(
+                f"{label} evidence-only mode is allowed only for development review"
+            )
         scope = single_line_string(review.get("scope"), f"{label} `scope`", errors)
         validate_semantic_review_scope(
             role,
@@ -1627,6 +1733,10 @@ def validate_semantic_review_closure(
             label,
             errors,
         )
+        if review_mode == "evidence-only" and scope not in bundle_scopes:
+            errors.append(
+                f"{label} evidence-only mode requires an active/retired stable bundle scope"
+            )
         revision = positive_integer(
             review.get("basis_revision"), f"{label} `basis_revision`", errors
         )
@@ -1637,11 +1747,25 @@ def validate_semantic_review_closure(
         status = review.get("status")
         if status not in SEMANTIC_REVIEW_STATUSES:
             errors.append(f"{label} `status` must be current, stale, or superseded")
+        if review_mode == "evidence-only" and status == "stale":
+            errors.append(
+                f"{label} evidence-only PASS must be `current` or `superseded`, "
+                "not semantic `stale`"
+            )
         if status == "current" and role is not None and scope is not None:
             pair = (role, scope)
-            if pair in current_by_pair:
+            if review_mode == "evidence-only":
+                if scope in current_evidence_by_scope:
+                    errors.append(
+                        f"semantic review scope `{scope}` has more than one current "
+                        "evidence-only PASS"
+                    )
+                else:
+                    current_evidence_by_scope[scope] = review
+            elif pair in current_by_pair:
                 errors.append(
-                    f"semantic review role/scope `{role}`/`{scope}` has more than one current PASS"
+                    f"semantic review role/scope `{role}`/`{scope}` has more than "
+                    "one current full PASS"
                 )
             else:
                 current_by_pair[pair] = review
@@ -1656,6 +1780,13 @@ def validate_semantic_review_closure(
         ):
             errors.append(
                 f"{label} needs a matching finished semantic review metric PASS"
+            )
+
+    for scope, overlay in current_evidence_by_scope.items():
+        if ("development", scope) not in current_by_pair:
+            errors.append(
+                f"current evidence-only PASS for `{scope}` requires one current "
+                "full development PASS to retain accepted meaning"
             )
 
     invalidations = closure.get("invalidations")
@@ -1889,7 +2020,11 @@ def validate_semantic_review_closure(
     for review_id, review in passes_by_id.items():
         if review.get("status") == "stale" and review_id not in open_prior_ids:
             errors.append(f"stale semantic review `{review_id}` has no open invalidation")
-        if review.get("status") == "superseded" and review_id not in resolved_prior_ids:
+        if (
+            review.get("status") == "superseded"
+            and review.get("review_mode") != "evidence-only"
+            and review_id not in resolved_prior_ids
+        ):
             errors.append(
                 f"superseded semantic review `{review_id}` has no resolved invalidation"
             )
@@ -2444,6 +2579,1307 @@ def validate_review_receipt(
     return agent_id
 
 
+def build_review_alignment_contracts(
+    state: dict[str, Any],
+    *,
+    criteria_sha256: str,
+    inventory_fingerprints: dict[str, str],
+    evidence_fingerprints: dict[str, str],
+) -> dict[str, dict[str, Any]]:
+    """Derive the current bundle acceptance/evidence fingerprints.
+
+    The acceptance projection intentionally excludes mutable locators, content
+    digests, receipts, timestamps, and journal order.  Evidence changes can
+    therefore advance independently without pretending that accepted meaning
+    changed.
+    """
+    selection = state.get("context_selection")
+    candidates = (
+        selection.get("candidates") if isinstance(selection, dict) else None
+    )
+    candidate_records = [
+        item for item in (candidates if isinstance(candidates, list) else [])
+        if isinstance(item, dict)
+    ]
+    risk_records = [
+        item
+        for item in (
+            state.get("risk_triggers")
+            if isinstance(state.get("risk_triggers"), list)
+            else []
+        )
+        if isinstance(item, dict)
+    ]
+    contract_records = [
+        item
+        for item in (
+            state.get("shared_contracts")
+            if isinstance(state.get("shared_contracts"), list)
+            else []
+        )
+        if isinstance(item, dict)
+    ]
+    traces = [
+        item
+        for item in (
+            state.get("contract_binding_traces")
+            if isinstance(state.get("contract_binding_traces"), list)
+            else []
+        )
+        if isinstance(item, dict)
+    ]
+    contracts_by_id = {
+        item.get("contract_id"): item
+        for item in contract_records
+        if isinstance(item.get("contract_id"), str)
+    }
+    contract_semantic_keys = {
+        "contract_id",
+        "kind",
+        "owner_candidate_id",
+        "owner_atom_key",
+        "direct_consumer_candidate_ids",
+        "owner_bundle_id",
+        "consumer_bundle_ids",
+    }
+    trace_semantic_keys = {
+        "trace_id",
+        "risk_id",
+        "kind",
+        "owner_candidate_id",
+        "owner_atom_key",
+        "owner_contract",
+        "authority_status",
+        "applicability_status",
+        "applicability_basis",
+        "consumer_candidate_id",
+        "consumer_atom_key",
+        "consumer_bundle_id",
+        "resource_or_identifier",
+        "verdict",
+        "observed_conflict",
+        "permission_privacy",
+    }
+    trace_evidence_keys = {
+        "trace_id",
+        "risk_id",
+        "authority_revision",
+        "authority_locator",
+        "authority_content_sha256",
+        "implementation_locator",
+        "implementation_content_sha256",
+    }
+    queue = state.get("bundle_queue")
+    result: dict[str, dict[str, Any]] = {}
+    for bundle in queue if isinstance(queue, list) else []:
+        if not isinstance(bundle, dict) or not isinstance(bundle.get("bundle_id"), str):
+            continue
+        bundle_id = bundle["bundle_id"]
+        expected_keys = {
+            value
+            for value in (
+                bundle.get("expected_atom_keys")
+                if isinstance(bundle.get("expected_atom_keys"), list)
+                else []
+            )
+            if isinstance(value, str)
+        }
+        selected_candidates = []
+        selected_candidate_ids: set[str] = set()
+        for candidate in candidate_records:
+            keys = {
+                value
+                for value in (
+                    candidate.get("candidate_atom_keys")
+                    if isinstance(candidate.get("candidate_atom_keys"), list)
+                    else []
+                )
+                if isinstance(value, str)
+            }
+            merge_target = candidate.get("merge_target_atom_key")
+            if keys & expected_keys or (
+                isinstance(merge_target, str) and merge_target in expected_keys
+            ):
+                selected_candidates.append(candidate)
+                if isinstance(candidate.get("candidate_id"), str):
+                    selected_candidate_ids.add(candidate["candidate_id"])
+        selected_risks = [
+            risk
+            for risk in risk_records
+            if risk.get("candidate_id") in selected_candidate_ids
+            or risk.get("atom_key") in expected_keys
+        ]
+        risk_ids = {
+            risk["risk_id"]
+            for risk in selected_risks
+            if isinstance(risk.get("risk_id"), str)
+        }
+        contract_ids = {
+            value
+            for value in (
+                bundle.get("depends_on_contract_ids")
+                if isinstance(bundle.get("depends_on_contract_ids"), list)
+                else []
+            )
+            if isinstance(value, str)
+        }
+        contract_ids.update(
+            risk["shared_contract_id"]
+            for risk in selected_risks
+            if isinstance(risk.get("shared_contract_id"), str)
+        )
+        selected_traces = [
+            trace for trace in traces if trace.get("risk_id") in risk_ids
+        ]
+        acceptance_projection = {
+            "criteria_sha256": criteria_sha256,
+            "bundle": bundle,
+            "candidates": selected_candidates,
+            "risk_triggers": selected_risks,
+            "shared_contracts": [
+                {
+                    key: contracts_by_id[value][key]
+                    for key in sorted(
+                        contract_semantic_keys & set(contracts_by_id[value])
+                    )
+                }
+                for value in sorted(contract_ids)
+                if value in contracts_by_id
+            ],
+            "binding_meaning": [
+                {
+                    key: trace[key]
+                    for key in sorted(trace_semantic_keys & set(trace))
+                }
+                for trace in selected_traces
+            ],
+        }
+        evidence_projection = {
+            "source_commit_observed": state.get("source_commit_observed"),
+            "candidate_inventory": [
+                {
+                    "candidate_id": candidate_id,
+                    "sha256": inventory_fingerprints.get(
+                        candidate_id, hashlib.sha256(b"").hexdigest()
+                    ),
+                }
+                for candidate_id in sorted(selected_candidate_ids)
+            ],
+            "candidate_evidence": [
+                {
+                    "candidate_id": candidate_id,
+                    "sha256": evidence_fingerprints.get(
+                        candidate_id, hashlib.sha256(b"").hexdigest()
+                    ),
+                }
+                for candidate_id in sorted(selected_candidate_ids)
+            ],
+            "shared_contract_evidence": [
+                {
+                    "contract_id": value,
+                    "evidence_routes": contracts_by_id[value].get(
+                        "evidence_routes"
+                    ),
+                }
+                for value in sorted(contract_ids)
+                if value in contracts_by_id
+            ],
+            "binding_evidence": [
+                {
+                    key: trace[key]
+                    for key in sorted(trace_evidence_keys & set(trace))
+                }
+                for trace in selected_traces
+            ],
+        }
+        result[bundle_id] = {
+            "acceptance_fingerprint": canonical_json_sha256(
+                acceptance_projection
+            ),
+            "evidence_fingerprint": canonical_json_sha256(evidence_projection),
+        }
+    return result
+
+
+def _file_sha256_or_empty(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return hashlib.sha256(b"").hexdigest()
+
+
+def candidate_document_fingerprints(
+    path: Path,
+    candidate_ids: set[str],
+    *,
+    sectioned: bool,
+) -> dict[str, str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    result: dict[str, str] = {}
+    if sectioned:
+        sections: dict[str, list[str]] = {}
+        current: str | None = None
+        for line in text.splitlines():
+            if line.startswith("## "):
+                current = line[3:].strip()
+                sections.setdefault(current, [])
+            elif current is not None:
+                sections[current].append(line)
+        for candidate_id in candidate_ids:
+            lines = sections.get(candidate_id, [])
+            body = (
+                f"## {candidate_id}\n" + "\n".join(lines)
+                if candidate_id in sections
+                else ""
+            )
+            result[candidate_id] = hashlib.sha256(
+                body.encode("utf-8")
+            ).hexdigest()
+        return result
+    lines = text.splitlines()
+    for candidate_id in candidate_ids:
+        pattern = re.compile(
+            rf"(?<![a-z0-9-]){re.escape(candidate_id)}(?![a-z0-9-])"
+        )
+        matched = "\n".join(line for line in lines if pattern.search(line))
+        result[candidate_id] = hashlib.sha256(matched.encode("utf-8")).hexdigest()
+    return result
+
+
+def validate_review_alignment(
+    config: Config,
+    request_root: Path,
+    state: dict[str, Any],
+    review_entries: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> dict[str, dict[str, Any]]:
+    alignment = state.get("review_alignment")
+    if not isinstance(alignment, dict):
+        errors.append(
+            "v5 work-state requires `review_alignment.version` exact `1`; "
+            "create a new request instead of migrating, backfilling, or dual-reading "
+            "older review state"
+        )
+        return {}
+    keys = {
+        "version",
+        "acceptance_contracts",
+        "bindings",
+        "maintenance_attempts",
+        "escaped_prepass_defects",
+    }
+    validate_object_keys(alignment, keys, keys, "review alignment", errors)
+    if alignment.get("version") != "1":
+        errors.append("review alignment `version` must be exact `1`")
+
+    criteria_path = config.docs_root / "project" / "atomization-criteria.md"
+    selection = state.get("context_selection")
+    raw_candidates = (
+        selection.get("candidates") if isinstance(selection, dict) else []
+    )
+    candidate_ids = {
+        candidate["candidate_id"]
+        for candidate in (
+            raw_candidates if isinstance(raw_candidates, list) else []
+        )
+        if isinstance(candidate, dict)
+        and isinstance(candidate.get("candidate_id"), str)
+    }
+    expected = build_review_alignment_contracts(
+        state,
+        criteria_sha256=_file_sha256_or_empty(criteria_path),
+        inventory_fingerprints=candidate_document_fingerprints(
+            request_root / "inventory.md",
+            candidate_ids,
+            sectioned=False,
+        ),
+        evidence_fingerprints=candidate_document_fingerprints(
+            request_root / "evidence.md",
+            candidate_ids,
+            sectioned=True,
+        ),
+    )
+    raw_contracts = alignment.get("acceptance_contracts")
+    contracts_by_bundle: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw_contracts, list):
+        errors.append("review alignment `acceptance_contracts` must be a list")
+        raw_contracts = []
+    for index, contract in enumerate(raw_contracts, start=1):
+        label = f"review acceptance contract {index}"
+        if not isinstance(contract, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        fields = {
+            "bundle_id",
+            "acceptance_fingerprint",
+            "evidence_revision",
+            "evidence_fingerprint",
+        }
+        validate_object_keys(contract, fields, fields, label, errors)
+        bundle_id = lower_kebab_value(
+            contract.get("bundle_id"), f"{label} `bundle_id`", errors
+        )
+        if bundle_id is not None:
+            if bundle_id in contracts_by_bundle:
+                errors.append(f"{label} duplicates bundle `{bundle_id}`")
+            contracts_by_bundle[bundle_id] = contract
+        acceptance_fingerprint = sha256_value(
+            contract.get("acceptance_fingerprint"),
+            f"{label} `acceptance_fingerprint`",
+            errors,
+        )
+        positive_integer(
+            contract.get("evidence_revision"),
+            f"{label} `evidence_revision`",
+            errors,
+        )
+        evidence_fingerprint = sha256_value(
+            contract.get("evidence_fingerprint"),
+            f"{label} `evidence_fingerprint`",
+            errors,
+        )
+        expected_contract = expected.get(bundle_id or "")
+        if expected_contract is None:
+            errors.append(f"{label} bundle does not resolve to active selection")
+        else:
+            if (
+                acceptance_fingerprint
+                != expected_contract["acceptance_fingerprint"]
+            ):
+                errors.append(
+                    f"{label} acceptance fingerprint does not match canonical "
+                    "accepted meaning"
+                )
+            if evidence_fingerprint != expected_contract["evidence_fingerprint"]:
+                errors.append(
+                    f"{label} evidence fingerprint does not match current evidence "
+                    "projection"
+                )
+    if set(contracts_by_bundle) != set(expected):
+        errors.append(
+            "review alignment must contain exactly one acceptance contract for "
+            "every active bundle"
+        )
+
+    metrics = state.get("operation_metrics")
+    spans = metrics.get("spans") if isinstance(metrics, dict) else []
+    if not isinstance(spans, list):
+        spans = []
+    spans_by_id = {
+        span.get("span_id"): span
+        for span in spans
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
+    raw_bindings = alignment.get("bindings")
+    bindings_by_span: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw_bindings, list):
+        errors.append("review alignment `bindings` must be a list")
+        raw_bindings = []
+    for index, binding in enumerate(raw_bindings, start=1):
+        label = f"review alignment binding {index}"
+        if not isinstance(binding, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        validate_object_keys(
+            binding,
+            {"span_id", "acceptance_fingerprints", "evidence_bindings"},
+            {"span_id", "acceptance_fingerprints"},
+            label,
+            errors,
+        )
+        span_id = lower_kebab_value(
+            binding.get("span_id"), f"{label} `span_id`", errors
+        )
+        if span_id is not None:
+            if span_id in bindings_by_span:
+                errors.append(f"{label} duplicates span `{span_id}`")
+            bindings_by_span[span_id] = binding
+            if span_id not in spans_by_id:
+                errors.append(f"{label} span does not resolve")
+        fingerprints = string_list(
+            binding.get("acceptance_fingerprints"),
+            f"{label} `acceptance_fingerprints`",
+            errors,
+        )
+        for fingerprint in fingerprints:
+            sha256_value(fingerprint, f"{label} acceptance fingerprint", errors)
+        if fingerprints != sorted(set(fingerprints)):
+            errors.append(
+                f"{label} acceptance fingerprints must be sorted and unique"
+            )
+        evidence_bindings = binding.get("evidence_bindings")
+        if evidence_bindings is not None:
+            if not isinstance(evidence_bindings, list):
+                errors.append(f"{label} `evidence_bindings` must be a list")
+                evidence_bindings = []
+            bundle_order: list[str] = []
+            for evidence_index, evidence_binding in enumerate(
+                evidence_bindings, start=1
+            ):
+                evidence_label = f"{label} evidence binding {evidence_index}"
+                if not isinstance(evidence_binding, dict):
+                    errors.append(f"{evidence_label} must be an object")
+                    continue
+                evidence_fields = {
+                    "bundle_id",
+                    "evidence_revision",
+                    "evidence_fingerprint",
+                }
+                validate_object_keys(
+                    evidence_binding,
+                    evidence_fields,
+                    evidence_fields,
+                    evidence_label,
+                    errors,
+                )
+                bundle_id = lower_kebab_value(
+                    evidence_binding.get("bundle_id"),
+                    f"{evidence_label} `bundle_id`",
+                    errors,
+                )
+                if bundle_id is not None:
+                    bundle_order.append(bundle_id)
+                positive_integer(
+                    evidence_binding.get("evidence_revision"),
+                    f"{evidence_label} `evidence_revision`",
+                    errors,
+                )
+                sha256_value(
+                    evidence_binding.get("evidence_fingerprint"),
+                    f"{evidence_label} `evidence_fingerprint`",
+                    errors,
+                )
+            if bundle_order != sorted(set(bundle_order)):
+                errors.append(
+                    f"{label} evidence bindings must be sorted by unique bundle id"
+                )
+
+    active_contract_fingerprints = sorted(
+        contract.get("acceptance_fingerprint")
+        for contract in contracts_by_bundle.values()
+        if isinstance(contract.get("acceptance_fingerprint"), str)
+    )
+
+    def expected_bundle_ids_for_scope(scope: Any) -> list[str]:
+        if isinstance(scope, str) and scope in contracts_by_bundle:
+            return [scope]
+        if scope in {
+            "selection-readiness",
+            "affected-closure",
+            "project-wide",
+            "terminal-current-basis",
+        }:
+            return sorted(contracts_by_bundle)
+        return []
+
+    current_review_ids = {
+        review_id
+        for review_id, review in review_entries.items()
+        if review.get("status") == "current"
+        and (
+            review.get("scope") in contracts_by_bundle
+            or review.get("scope")
+            in {
+                "selection-readiness",
+                "affected-closure",
+                "project-wide",
+                "terminal-current-basis",
+            }
+        )
+    }
+    current_evidence_overlay_scopes = {
+        review.get("scope")
+        for review in review_entries.values()
+        if review.get("status") == "current"
+        and review.get("review_mode") == "evidence-only"
+        and isinstance(review.get("scope"), str)
+    }
+    closure = state.get("semantic_review_closure")
+    current_basis = (
+        closure.get("basis_revision") if isinstance(closure, dict) else None
+    )
+    challenge = state.get("semantic_challenge")
+    challenge_attempts = (
+        challenge.get("attempts") if isinstance(challenge, dict) else []
+    )
+    dedicated_challenge_ids = {
+        attempt.get("review_id")
+        for attempt in (
+            challenge_attempts if isinstance(challenge_attempts, list) else []
+        )
+        if isinstance(attempt, dict)
+        and attempt.get("mode") == "dedicated"
+        and attempt.get("verdict") == "PASS"
+        and isinstance(attempt.get("review_id"), str)
+    }
+    current_dedicated_challenge_ids = {
+        attempt.get("review_id")
+        for attempt in (
+            challenge_attempts if isinstance(challenge_attempts, list) else []
+        )
+        if isinstance(attempt, dict)
+        and attempt.get("mode") == "dedicated"
+        and attempt.get("verdict") == "PASS"
+        and attempt.get("basis_revision") == current_basis
+        and isinstance(attempt.get("review_id"), str)
+    }
+    diagnostics = state.get("semantic_fail_diagnostics")
+    diagnostic_review_ids = {
+        diagnostic.get("review_span_id")
+        for diagnostic in (
+            diagnostics if isinstance(diagnostics, list) else []
+        )
+        if isinstance(diagnostic, dict)
+        and isinstance(diagnostic.get("review_span_id"), str)
+    }
+    required_binding_ids = {
+        span.get("span_id")
+        for span in spans
+        if isinstance(span, dict)
+        and isinstance(span.get("span_id"), str)
+        and span.get("status") == "finished"
+        and (
+            (span.get("kind") == "writer" and span.get("outcome") == "completed")
+            or (
+                span.get("kind") in REVIEW_METRIC_KINDS.values()
+                and span.get("outcome") in {"PASS", "FAIL"}
+                and (
+                    span.get("span_id") in review_entries
+                    or span.get("span_id") in dedicated_challenge_ids
+                    or span.get("span_id") in diagnostic_review_ids
+                )
+            )
+        )
+    }
+    for span_id in sorted(
+        value for value in required_binding_ids if isinstance(value, str)
+    ):
+        if span_id not in bindings_by_span:
+            errors.append(
+                f"writer/reviewer span `{span_id}` must bind its review acceptance "
+                "fingerprint"
+            )
+            continue
+        span = spans_by_id.get(span_id)
+        if (
+            not isinstance(span, dict)
+            or span.get("alignment_binding_sha256")
+            != canonical_json_sha256(bindings_by_span[span_id])
+        ):
+            errors.append(
+                f"writer/reviewer span `{span_id}` must preserve its immutable "
+                "journal-bound review alignment binding"
+            )
+    latest_writer_by_scope: dict[str, dict[str, Any]] = {}
+    for span in spans:
+        if (
+            isinstance(span, dict)
+            and span.get("kind") == "writer"
+            and span.get("status") == "finished"
+            and span.get("outcome") == "completed"
+            and isinstance(span.get("scope"), str)
+        ):
+            latest_writer_by_scope[span["scope"]] = span
+    current_binding_ids = current_review_ids | current_dedicated_challenge_ids | {
+        span.get("span_id")
+        for scope, span in latest_writer_by_scope.items()
+        if scope in contracts_by_bundle and isinstance(span.get("span_id"), str)
+    }
+    for span_id in current_binding_ids:
+        span = spans_by_id.get(span_id)
+        binding = bindings_by_span.get(span_id)
+        if not isinstance(span, dict) or not isinstance(binding, dict):
+            continue
+        bundle_ids = expected_bundle_ids_for_scope(span.get("scope"))
+        expected_fingerprints = sorted(
+            contracts_by_bundle[bundle_id]["acceptance_fingerprint"]
+            for bundle_id in bundle_ids
+            if bundle_id in contracts_by_bundle
+        )
+        if binding.get("acceptance_fingerprints") != expected_fingerprints:
+            errors.append(
+                f"current writer/reviewer span `{span_id}` must bind the current "
+                "canonical acceptance fingerprint(s)"
+            )
+        if span.get("kind") == "writer":
+            if "evidence_bindings" in binding:
+                errors.append(
+                    f"writer span `{span_id}` must not bind mutable evidence revision"
+                )
+            continue
+        if span.get("scope") == "selection-readiness":
+            # Readiness is immutable evidence that the initial dispatch basis
+            # was reviewed.  A later evidence-only maintenance attempt may
+            # advance the bundle evidence revision without rerunning readiness;
+            # the linked evidence-only semantic review then owns currentness.
+            bound_evidence_by_bundle = {
+                item.get("bundle_id"): item
+                for item in (
+                    binding.get("evidence_bindings")
+                    if isinstance(binding.get("evidence_bindings"), list)
+                    else []
+                )
+                if isinstance(item, dict)
+                and isinstance(item.get("bundle_id"), str)
+            }
+            for bundle_id in bundle_ids:
+                if bundle_id in current_evidence_overlay_scopes:
+                    continue
+                expected_item = {
+                    "bundle_id": bundle_id,
+                    "evidence_revision": contracts_by_bundle[bundle_id][
+                        "evidence_revision"
+                    ],
+                    "evidence_fingerprint": contracts_by_bundle[bundle_id][
+                        "evidence_fingerprint"
+                    ],
+                }
+                if bound_evidence_by_bundle.get(bundle_id) != expected_item:
+                    errors.append(
+                        f"current readiness span `{span_id}` must retain current "
+                        f"evidence for bundle `{bundle_id}` unless that bundle has "
+                        "a current evidence-only overlay"
+                    )
+            continue
+        review_entry = review_entries.get(span_id)
+        if (
+            isinstance(review_entry, dict)
+            and review_entry.get("review_mode", "full") == "full"
+            and review_entry.get("reviewer_role") in {"development", "risk"}
+            and span.get("scope") in current_evidence_overlay_scopes
+        ):
+            # The full PASS continues to own accepted meaning.  A later
+            # evidence-only PASS for the same bundle is the current evidence
+            # overlay, so the immutable full-review evidence binding remains
+            # historical instead of being rewritten.
+            continue
+        expected_evidence = [
+            {
+                "bundle_id": bundle_id,
+                "evidence_revision": contracts_by_bundle[bundle_id][
+                    "evidence_revision"
+                ],
+                "evidence_fingerprint": contracts_by_bundle[bundle_id][
+                    "evidence_fingerprint"
+                ],
+            }
+            for bundle_id in bundle_ids
+            if bundle_id in contracts_by_bundle
+        ]
+        if binding.get("evidence_bindings") != expected_evidence:
+            errors.append(
+                f"current reviewer span `{span_id}` must bind the current evidence "
+                "revision/fingerprint"
+            )
+
+    raw_maintenance = alignment.get("maintenance_attempts")
+    if not isinstance(raw_maintenance, list):
+        errors.append("review alignment `maintenance_attempts` must be a list")
+        raw_maintenance = []
+    maintenance_ids: set[str] = set()
+    maintenance_review_ids: set[str] = set()
+    for index, attempt in enumerate(raw_maintenance, start=1):
+        label = f"evidence maintenance attempt {index}"
+        if not isinstance(attempt, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        fields = {
+            "maintenance_id",
+            "span_id",
+            "bundle_id",
+            "basis_revision",
+            "before_acceptance_fingerprint",
+            "after_acceptance_fingerprint",
+            "before_evidence_revision",
+            "after_evidence_revision",
+            "before_evidence_fingerprint",
+            "after_evidence_fingerprint",
+            "changed_fields",
+            "review_id",
+            "status",
+        }
+        validate_object_keys(attempt, fields, fields, label, errors)
+        maintenance_id = lower_kebab_value(
+            attempt.get("maintenance_id"),
+            f"{label} `maintenance_id`",
+            errors,
+        )
+        if maintenance_id is not None:
+            if maintenance_id in maintenance_ids:
+                errors.append(f"{label} duplicates maintenance id `{maintenance_id}`")
+            maintenance_ids.add(maintenance_id)
+        span_id = lower_kebab_value(
+            attempt.get("span_id"), f"{label} `span_id`", errors
+        )
+        bundle_id = lower_kebab_value(
+            attempt.get("bundle_id"), f"{label} `bundle_id`", errors
+        )
+        basis = positive_integer(
+            attempt.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        contract = contracts_by_bundle.get(bundle_id or "")
+        if contract is None:
+            errors.append(f"{label} bundle does not resolve")
+        before_acceptance = sha256_value(
+            attempt.get("before_acceptance_fingerprint"),
+            f"{label} `before_acceptance_fingerprint`",
+            errors,
+        )
+        after_acceptance = sha256_value(
+            attempt.get("after_acceptance_fingerprint"),
+            f"{label} `after_acceptance_fingerprint`",
+            errors,
+        )
+        if (
+            contract is not None
+            and (
+                before_acceptance != contract.get("acceptance_fingerprint")
+                or after_acceptance != contract.get("acceptance_fingerprint")
+            )
+        ):
+            errors.append(
+                f"{label} must preserve the canonical acceptance fingerprint; "
+                "meaning changes require a writer correction"
+            )
+        before_evidence = sha256_value(
+            attempt.get("before_evidence_fingerprint"),
+            f"{label} `before_evidence_fingerprint`",
+            errors,
+        )
+        before_evidence_revision = positive_integer(
+            attempt.get("before_evidence_revision"),
+            f"{label} `before_evidence_revision`",
+            errors,
+        )
+        after_evidence_revision = positive_integer(
+            attempt.get("after_evidence_revision"),
+            f"{label} `after_evidence_revision`",
+            errors,
+        )
+        after_evidence = sha256_value(
+            attempt.get("after_evidence_fingerprint"),
+            f"{label} `after_evidence_fingerprint`",
+            errors,
+        )
+        if before_evidence == after_evidence:
+            errors.append(f"{label} must record an actual evidence revision change")
+        if (
+            contract is not None
+            and after_evidence != contract.get("evidence_fingerprint")
+        ):
+            errors.append(
+                f"{label} after evidence fingerprint must match current evidence"
+            )
+        if (
+            before_evidence_revision is not None
+            and after_evidence_revision is not None
+            and after_evidence_revision != before_evidence_revision + 1
+        ):
+            errors.append(
+                f"{label} evidence revision must advance exactly once"
+            )
+        if (
+            contract is not None
+            and after_evidence_revision != contract.get("evidence_revision")
+        ):
+            errors.append(
+                f"{label} after evidence revision must match current evidence"
+            )
+        changed_fields = string_list(
+            attempt.get("changed_fields"), f"{label} `changed_fields`", errors
+        )
+        if not changed_fields:
+            errors.append(f"{label} must name changed evidence fields")
+        if changed_fields != sorted(set(changed_fields)):
+            errors.append(f"{label} changed fields must be sorted and unique")
+        for field in changed_fields:
+            if field not in EVIDENCE_MAINTENANCE_FIELDS:
+                errors.append(
+                    f"{label} field `{field}` is outside evidence-only maintenance"
+                )
+        if attempt.get("status") != "PASS":
+            errors.append(f"{label} `status` must be exact `PASS`")
+        span = spans_by_id.get(span_id or "")
+        if not (
+            isinstance(span, dict)
+            and span.get("kind") == "maintenance"
+            and span.get("scope") == bundle_id
+            and span.get("basis_revision") == basis
+            and span.get("status") == "finished"
+            and span.get("outcome") == "completed"
+        ):
+            errors.append(f"{label} must reference a completed maintenance span")
+        elif (
+            span.get("acceptance_fingerprint") != before_acceptance
+            or span.get("evidence_revision") != before_evidence_revision
+            or span.get("evidence_fingerprint") != before_evidence
+        ):
+            errors.append(
+                f"{label} before-state must match its immutable maintenance "
+                "span-start journal binding"
+            )
+        review_id = lower_kebab_value(
+            attempt.get("review_id"), f"{label} `review_id`", errors
+        )
+        if review_id is not None:
+            if review_id in maintenance_review_ids:
+                errors.append(f"{label} reuses evidence-only review `{review_id}`")
+            maintenance_review_ids.add(review_id)
+        review = review_entries.get(review_id or "")
+        if not (
+            isinstance(review, dict)
+            and review.get("reviewer_role") == "development"
+            and review.get("scope") == bundle_id
+            and review.get("basis_revision") == basis
+            and review.get("verdict") == "PASS"
+            and review.get("review_mode") == "evidence-only"
+        ):
+            errors.append(
+                f"{label} must link one same-basis evidence-only development PASS"
+            )
+        elif isinstance(review.get("receipt"), dict):
+            manifest = review["receipt"].get("basis_manifest")
+            documents = (
+                manifest.get("docs") if isinstance(manifest, dict) else []
+            )
+            document_paths = {
+                item.get("path")
+                for item in (
+                    documents if isinstance(documents, list) else []
+                )
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            required_raw_inputs = {
+                rel(config.project_root, request_root / "inventory.md"),
+                rel(config.project_root, request_root / "evidence.md"),
+            }
+            if not required_raw_inputs <= document_paths:
+                errors.append(
+                    f"{label} evidence-only review receipt must hash current "
+                    "inventory.md and evidence.md inputs"
+                )
+    evidence_only_review_ids = {
+        review_id
+        for review_id, review in review_entries.items()
+        if review.get("review_mode") == "evidence-only"
+    }
+    if evidence_only_review_ids != maintenance_review_ids:
+        errors.append(
+            "every evidence-only review must be owned by exactly one maintenance "
+            "attempt and vice versa"
+        )
+
+    raw_defects = alignment.get("escaped_prepass_defects")
+    defects_by_id: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw_defects, list):
+        errors.append("review alignment `escaped_prepass_defects` must be a list")
+        raw_defects = []
+    roots_seen: set[str] = set()
+    defect_revisions: list[int] = []
+    readiness = state.get("selection_readiness")
+    readiness_reviews = (
+        readiness.get("reviews") if isinstance(readiness, dict) else None
+    )
+    readiness_by_id = {
+        review.get("review_id"): review
+        for review in (
+            readiness_reviews if isinstance(readiness_reviews, list) else []
+        )
+        if isinstance(review, dict) and isinstance(review.get("review_id"), str)
+    }
+    diagnostics = state.get("semantic_fail_diagnostics")
+    diagnostic_by_span = {
+        item.get("review_span_id"): item
+        for item in (
+            diagnostics if isinstance(diagnostics, list) else []
+        )
+        if isinstance(item, dict) and isinstance(item.get("review_span_id"), str)
+    }
+    bundle_ids = set(contracts_by_bundle)
+    queue = state.get("bundle_queue")
+    atom_bundle_ids = {
+        atom_key: bundle.get("bundle_id")
+        for bundle in (queue if isinstance(queue, list) else [])
+        if isinstance(bundle, dict) and isinstance(bundle.get("bundle_id"), str)
+        for atom_key in (
+            bundle.get("expected_atom_keys")
+            if isinstance(bundle.get("expected_atom_keys"), list)
+            else []
+        )
+        if isinstance(atom_key, str)
+    }
+    selection = state.get("context_selection")
+    raw_candidates = (
+        selection.get("candidates") if isinstance(selection, dict) else []
+    )
+    candidate_bundle_ids: dict[str, set[str]] = {}
+    for candidate in (
+        raw_candidates if isinstance(raw_candidates, list) else []
+    ):
+        if not isinstance(candidate, dict) or not isinstance(
+            candidate.get("candidate_id"), str
+        ):
+            continue
+        keys = [
+            *(
+                candidate.get("candidate_atom_keys")
+                if isinstance(candidate.get("candidate_atom_keys"), list)
+                else []
+            ),
+            candidate.get("merge_target_atom_key"),
+        ]
+        candidate_bundle_ids[candidate["candidate_id"]] = {
+            atom_bundle_ids[key]
+            for key in keys
+            if isinstance(key, str) and key in atom_bundle_ids
+        }
+    raw_shared_contracts = state.get("shared_contracts")
+    shared_contract_bundle_ids = {
+        contract.get("contract_id"): {
+            bundle_id
+            for bundle_id in [
+                contract.get("owner_bundle_id"),
+                *(
+                    contract.get("consumer_bundle_ids")
+                    if isinstance(contract.get("consumer_bundle_ids"), list)
+                    else []
+                ),
+            ]
+            if isinstance(bundle_id, str)
+        }
+        for contract in (
+            raw_shared_contracts
+            if isinstance(raw_shared_contracts, list)
+            else []
+        )
+        if isinstance(contract, dict)
+        and isinstance(contract.get("contract_id"), str)
+    }
+    closure_invalidations = (
+        closure.get("invalidations") if isinstance(closure, dict) else []
+    )
+    invalidations_by_id = {
+        invalidation.get("invalidation_id"): invalidation
+        for invalidation in (
+            closure_invalidations
+            if isinstance(closure_invalidations, list)
+            else []
+        )
+        if isinstance(invalidation, dict)
+        and isinstance(invalidation.get("invalidation_id"), str)
+    }
+    root_evidence_bindings: dict[str, dict[str, tuple[Any, Any]]] = {}
+    recorded_finding_span_ids: list[str] = []
+    for index, defect in enumerate(raw_defects, start=1):
+        label = f"escaped prepass defect {index}"
+        if not isinstance(defect, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        status = defect.get("status")
+        required = {
+            "defect_id",
+            "root_id",
+            "finding_span_id",
+            "basis_revision",
+            "safety_invariants",
+            "affected_bundle_ids",
+            "new_source_evidence",
+            "source_evidence_bindings",
+            "batching_protocol_status",
+            "status",
+            "stale_readiness_review_id",
+        }
+        allowed = required | {
+            "protocol_validation_span_id",
+            "resolved_revision",
+            "resolution_readiness_review_id",
+            "resolution_invalidation_id",
+        }
+        if status == "resolved":
+            required |= {
+                "resolved_revision",
+                "resolution_readiness_review_id",
+                "resolution_invalidation_id",
+            }
+        if defect.get("batching_protocol_status") == "FAIL":
+            required.add("protocol_validation_span_id")
+        validate_object_keys(defect, allowed, required, label, errors)
+        defect_id = lower_kebab_value(
+            defect.get("defect_id"), f"{label} `defect_id`", errors
+        )
+        if defect_id is not None:
+            if defect_id in defects_by_id:
+                errors.append(f"{label} duplicates defect id `{defect_id}`")
+            defects_by_id[defect_id] = defect
+        root_id = lower_kebab_value(
+            defect.get("root_id"), f"{label} `root_id`", errors
+        )
+        repeated_root = root_id in roots_seen if root_id is not None else False
+        if root_id is not None:
+            roots_seen.add(root_id)
+        finding_span_id = lower_kebab_value(
+            defect.get("finding_span_id"),
+            f"{label} `finding_span_id`",
+            errors,
+        )
+        if finding_span_id is not None:
+            recorded_finding_span_ids.append(finding_span_id)
+        finding_span = spans_by_id.get(finding_span_id or "")
+        if not (
+            isinstance(finding_span, dict)
+            and finding_span.get("kind")
+            in {"integration-review", "baseline-review"}
+            and finding_span.get("status") == "finished"
+            and finding_span.get("outcome") == "FAIL"
+        ):
+            errors.append(
+                f"{label} must reference a material final semantic review FAIL"
+            )
+        diagnostic = diagnostic_by_span.get(finding_span_id or "")
+        if not (
+            isinstance(diagnostic, dict)
+            and diagnostic.get("root_category") == "escaped-prepass-defect"
+        ):
+            errors.append(
+                f"{label} finding must be classified as `escaped-prepass-defect`, "
+                "not as a writer failure"
+            )
+        revision = positive_integer(
+            defect.get("basis_revision"), f"{label} `basis_revision`", errors
+        )
+        if revision is not None:
+            defect_revisions.append(revision)
+            if (
+                isinstance(finding_span, dict)
+                and finding_span.get("basis_revision") != revision
+            ):
+                errors.append(f"{label} basis must match its finding span")
+            if (
+                isinstance(diagnostic, dict)
+                and diagnostic.get("basis_revision") != revision
+            ):
+                errors.append(f"{label} basis must match its semantic diagnostic")
+        invariants = string_list(
+            defect.get("safety_invariants"),
+            f"{label} `safety_invariants`",
+            errors,
+        )
+        if not invariants:
+            errors.append(f"{label} must name a material safety invariant")
+        for invariant in invariants:
+            if invariant not in MATERIAL_SAFETY_INVARIANTS:
+                errors.append(f"{label} has unsupported safety invariant `{invariant}`")
+        affected = string_list(
+            defect.get("affected_bundle_ids"),
+            f"{label} `affected_bundle_ids`",
+            errors,
+        )
+        if not affected:
+            errors.append(f"{label} must include the known root fan-out")
+        for bundle_id in affected:
+            if bundle_id not in bundle_ids:
+                errors.append(f"{label} affected bundle `{bundle_id}` does not resolve")
+        expected_affected: set[str] = set()
+        if isinstance(diagnostic, dict):
+            for candidate_id in diagnostic.get("candidate_ids", []):
+                if isinstance(candidate_id, str):
+                    expected_affected.update(
+                        candidate_bundle_ids.get(candidate_id, set())
+                    )
+            for contract_id in diagnostic.get("contract_ids", []):
+                if isinstance(contract_id, str):
+                    expected_affected.update(
+                        shared_contract_bundle_ids.get(contract_id, set())
+                    )
+        if set(affected) != expected_affected:
+            errors.append(
+                f"{label} affected bundles must exactly match its diagnostic "
+                "candidate/contract root fan-out"
+            )
+        source_evidence_bindings = defect.get("source_evidence_bindings")
+        finding_binding = bindings_by_span.get(finding_span_id or "")
+        finding_evidence_bindings = (
+            finding_binding.get("evidence_bindings")
+            if isinstance(finding_binding, dict)
+            else None
+        )
+        expected_source_evidence = (
+            [
+                binding
+                for binding in finding_evidence_bindings
+                if isinstance(binding, dict)
+                and binding.get("bundle_id") in set(affected)
+            ]
+            if isinstance(finding_evidence_bindings, list)
+            else None
+        )
+        if (
+            not isinstance(source_evidence_bindings, list)
+            or source_evidence_bindings != expected_source_evidence
+        ):
+            errors.append(
+                f"{label} source evidence must match its immutable final-review "
+                "evidence binding for exactly the affected root fan-out"
+            )
+            evidence_by_bundle: dict[str, tuple[Any, Any]] = {}
+        else:
+            evidence_by_bundle = {
+                binding["bundle_id"]: (
+                    binding.get("evidence_revision"),
+                    binding.get("evidence_fingerprint"),
+                )
+                for binding in source_evidence_bindings
+                if isinstance(binding, dict)
+                and isinstance(binding.get("bundle_id"), str)
+            }
+        new_evidence = defect.get("new_source_evidence")
+        if type(new_evidence) is not bool:
+            errors.append(f"{label} `new_source_evidence` must be boolean")
+        prior_root_evidence = (
+            root_evidence_bindings.get(root_id)
+            if root_id is not None
+            else None
+        )
+        expected_new_evidence = bool(
+            repeated_root
+            and evidence_by_bundle
+            and prior_root_evidence
+            and any(
+                bundle_id in prior_root_evidence
+                and prior_root_evidence[bundle_id] != evidence_binding
+                for bundle_id, evidence_binding in evidence_by_bundle.items()
+            )
+        )
+        if new_evidence is not expected_new_evidence:
+            errors.append(
+                f"{label} `new_source_evidence` must be derived from a changed "
+                "journal-bound final-review evidence binding"
+            )
+        if root_id is not None and evidence_by_bundle:
+            root_evidence_bindings[root_id] = {
+                **(prior_root_evidence or {}),
+                **evidence_by_bundle,
+            }
+        protocol_status = defect.get("batching_protocol_status")
+        expected_protocol = (
+            "FAIL" if repeated_root and not expected_new_evidence else "PASS"
+        )
+        if protocol_status != expected_protocol:
+            errors.append(
+                f"{label} batching protocol status must be `{expected_protocol}`"
+            )
+        protocol_span_id = defect.get("protocol_validation_span_id")
+        if protocol_status == "FAIL":
+            protocol_span = spans_by_id.get(protocol_span_id)
+            if not (
+                isinstance(protocol_span, dict)
+                and protocol_span.get("kind") == "validation"
+                and protocol_span.get("scope") == "prepass-batching"
+                and protocol_span.get("status") == "finished"
+                and protocol_span.get("outcome") == "FAIL"
+            ):
+                errors.append(
+                    f"{label} repeated root must retain the safety finding and "
+                    "record a separate failed prepass-batching validation"
+                )
+        elif "protocol_validation_span_id" in defect:
+            errors.append(
+                f"{label} protocol PASS must omit `protocol_validation_span_id`"
+            )
+        stale_id = nonempty_string(defect.get("stale_readiness_review_id"))
+        stale = readiness_by_id.get(stale_id or "")
+        expected_stale_status = "stale" if status == "open" else "superseded"
+        if not isinstance(stale, dict) or stale.get("status") != expected_stale_status:
+            errors.append(
+                f"{label} must reopen and stale the prior readiness PASS"
+            )
+        if status == "open":
+            if (
+                "resolved_revision" in defect
+                or "resolution_readiness_review_id" in defect
+                or "resolution_invalidation_id" in defect
+            ):
+                errors.append(f"{label} open defect must omit resolution fields")
+        elif status == "resolved":
+            resolved_revision = positive_integer(
+                defect.get("resolved_revision"),
+                f"{label} `resolved_revision`",
+                errors,
+            )
+            if (
+                revision is not None
+                and resolved_revision is not None
+                and resolved_revision < revision
+            ):
+                errors.append(f"{label} resolves before it opens")
+            resolution_id = nonempty_string(
+                defect.get("resolution_readiness_review_id")
+            )
+            resolution = readiness_by_id.get(resolution_id or "")
+            if not (
+                isinstance(resolution, dict)
+                and resolution.get("basis_revision") == resolved_revision
+                and resolution.get("verdict") == "PASS"
+            ):
+                errors.append(
+                    f"{label} resolution must point to its corrected readiness PASS"
+                )
+            invalidation_id = nonempty_string(
+                defect.get("resolution_invalidation_id")
+            )
+            invalidation = invalidations_by_id.get(invalidation_id or "")
+            required_reviews = (
+                invalidation.get("required_reviews")
+                if isinstance(invalidation, dict)
+                else []
+            )
+            required_development_scopes = {
+                item.get("scope")
+                for item in (
+                    required_reviews if isinstance(required_reviews, list) else []
+                )
+                if isinstance(item, dict)
+                and item.get("reviewer_role") == "development"
+            }
+            if not (
+                isinstance(invalidation, dict)
+                and invalidation.get("status") == "resolved"
+                and invalidation.get("resolved_revision") == resolved_revision
+                and set(invalidation.get("affected_bundles", [])) == set(affected)
+                and set(affected) <= required_development_scopes
+            ):
+                errors.append(
+                    f"{label} resolution must use one resolved affected semantic "
+                    "invalidation with development reruns for every affected bundle"
+                )
+        else:
+            errors.append(f"{label} `status` must be `open` or `resolved`")
+    escaped_diagnostic_span_ids = {
+        span_id
+        for span_id, diagnostic in diagnostic_by_span.items()
+        if diagnostic.get("root_category") == "escaped-prepass-defect"
+        and isinstance(spans_by_id.get(span_id), dict)
+        and spans_by_id[span_id].get("kind")
+        in {"integration-review", "baseline-review"}
+        and spans_by_id[span_id].get("status") == "finished"
+        and spans_by_id[span_id].get("outcome") == "FAIL"
+    }
+    if (
+        set(recorded_finding_span_ids) != escaped_diagnostic_span_ids
+        or len(recorded_finding_span_ids) != len(set(recorded_finding_span_ids))
+    ):
+        errors.append(
+            "every escaped-prepass final semantic FAIL diagnostic must own "
+            "exactly one escaped prepass defect record"
+        )
+    if defect_revisions != sorted(defect_revisions):
+        errors.append("escaped prepass defects must follow basis revision order")
+    return defects_by_id
+
+
 def validate_v5_semantic_integrity(
     config: Config,
     request_root: Path,
@@ -2454,6 +3890,20 @@ def validate_v5_semantic_integrity(
 ) -> None:
     review_entries: dict[str, dict[str, Any]] = {}
     review_agents: dict[str, str] = {}
+    closure = state.get("semantic_review_closure")
+    semantic_reviews = (
+        closure.get("review_passes") if isinstance(closure, dict) else []
+    )
+    current_evidence_overlay_scopes = {
+        review.get("scope")
+        for review in (
+            semantic_reviews if isinstance(semantic_reviews, list) else []
+        )
+        if isinstance(review, dict)
+        and review.get("status") == "current"
+        and review.get("review_mode") == "evidence-only"
+        and isinstance(review.get("scope"), str)
+    }
     readiness = state.get("selection_readiness")
     readiness_reviews = readiness.get("reviews") if isinstance(readiness, dict) else []
     if isinstance(readiness_reviews, list):
@@ -2478,7 +3928,10 @@ def validate_v5_semantic_integrity(
                     else None
                 ),
                 expected_verdict=nonempty_string(review.get("verdict")),
-                verify_current_docs=review.get("status") == "current",
+                verify_current_docs=(
+                    review.get("status") == "current"
+                    and not current_evidence_overlay_scopes
+                ),
             )
             if review_id is not None:
                 if review_id in review_entries:
@@ -2487,8 +3940,6 @@ def validate_v5_semantic_integrity(
                 if agent is not None:
                     review_agents[review_id] = agent
 
-    closure = state.get("semantic_review_closure")
-    semantic_reviews = closure.get("review_passes") if isinstance(closure, dict) else []
     if isinstance(semantic_reviews, list):
         for index, review in enumerate(semantic_reviews, start=1):
             if not isinstance(review, dict):
@@ -2578,6 +4029,13 @@ def validate_v5_semantic_integrity(
         review_agents,
         writer_agent,
         current_primary,
+        errors,
+    )
+    validate_review_alignment(
+        config,
+        request_root,
+        state,
+        review_entries,
         errors,
     )
     validate_semantic_review_operation_order(state, review_entries, errors)
@@ -3019,6 +4477,22 @@ def validate_semantic_review_operation_order(
         and type(span.get("started_sequence")) is int
     }
     bundle_ids = semantic_review_bundle_scopes(state, [])
+    alignment = state.get("review_alignment")
+    raw_maintenance = (
+        alignment.get("maintenance_attempts")
+        if isinstance(alignment, dict)
+        else None
+    )
+    maintenance_by_review = {
+        item.get("review_id"): item
+        for item in (raw_maintenance if isinstance(raw_maintenance, list) else [])
+        if isinstance(item, dict) and isinstance(item.get("review_id"), str)
+    }
+    spans_by_id = {
+        span.get("span_id"): span
+        for span in spans
+        if isinstance(span, dict) and isinstance(span.get("span_id"), str)
+    }
 
     completed_by_bundle: dict[str, list[tuple[int, int]]] = {}
     for bundle_id in bundle_ids:
@@ -3060,6 +4534,32 @@ def validate_semantic_review_operation_order(
         scope = review.get("scope")
         review_start = span_start_sequences.get(review_id)
         if scope not in bundle_ids or review_start is None:
+            continue
+        if review.get("review_mode") == "evidence-only":
+            maintenance = maintenance_by_review.get(review_id)
+            maintenance_span = (
+                spans_by_id.get(maintenance.get("span_id"))
+                if isinstance(maintenance, dict)
+                else None
+            )
+            if not (
+                isinstance(maintenance, dict)
+                and maintenance.get("bundle_id") == scope
+                and maintenance.get("basis_revision") == review.get("basis_revision")
+                and isinstance(maintenance_span, dict)
+                and maintenance_span.get("kind") == "maintenance"
+                and maintenance_span.get("scope") == scope
+                and maintenance_span.get("basis_revision")
+                == review.get("basis_revision")
+                and maintenance_span.get("status") == "finished"
+                and maintenance_span.get("outcome") == "completed"
+                and type(maintenance_span.get("finished_sequence")) is int
+                and maintenance_span["finished_sequence"] < review_start
+            ):
+                errors.append(
+                    f"evidence-only semantic review `{review_id}` must follow its "
+                    "completed same-basis maintenance attempt in journal order"
+                )
             continue
         completions = completed_by_bundle.get(scope, [])
         prior_completions = [item for item in completions if item[0] < review_start]
@@ -3205,7 +4705,7 @@ def validate_semantic_review_operation_order(
             (span.get("started_sequence"), span.get("basis_revision"))
             for span in spans
             if isinstance(span, dict)
-            and span.get("kind") in {"bundle", "writer"}
+            and span.get("kind") in {"bundle", "writer", "maintenance"}
             and span.get("scope") == next_bundle
             and type(span.get("started_sequence")) is int
             and effective_readiness_id(span["started_sequence"])
@@ -3671,13 +5171,27 @@ def validate_semantic_challenge(
                 )
             if type(challenge_start) is int:
                 if basis == current_basis:
+                    unresolved_protocol = unresolved_protocol_validation_scopes(
+                        (
+                            metric_spans
+                            if isinstance(metric_spans, list)
+                            else []
+                        ),
+                        before_sequence=challenge_start,
+                    )
+                    if unresolved_protocol:
+                        errors.append(
+                            f"{label} terminal-ready challenge is blocked by "
+                            "unresolved protocol validation FAIL scope(s): "
+                            + ", ".join(unresolved_protocol)
+                        )
                     later_or_active_work = [
                         span
                         for span in (
                             metric_spans if isinstance(metric_spans, list) else []
                         )
                         if isinstance(span, dict)
-                        and span.get("kind") in {"bundle", "writer"}
+                        and span.get("kind") in {"bundle", "writer", "maintenance"}
                         and (
                             span.get("status") != "finished"
                             or type(span.get("finished_sequence")) is not int
@@ -3833,7 +5347,7 @@ def validate_semantic_challenge(
                         metric_spans if isinstance(metric_spans, list) else []
                     )
                     if isinstance(span, dict)
-                    and span.get("kind") in {"bundle", "writer"}
+                    and span.get("kind") in {"bundle", "writer", "maintenance"}
                     and type(span.get("finished_sequence")) is int
                 ]
                 readiness = state.get("selection_readiness")
@@ -3903,8 +5417,8 @@ def validate_semantic_challenge(
                     and challenge_start <= max(work_finishes)
                 ):
                     errors.append(
-                        f"{label} must follow the last bundle/writer correction in "
-                        "journal order"
+                        f"{label} must follow the last bundle/writer correction or "
+                        "evidence maintenance in journal order"
                     )
                 if basis_readiness_finishes and challenge_start <= max(
                     basis_readiness_finishes
@@ -6028,6 +7542,25 @@ def validate_late_discovery_and_diagnostics_v4(
             f"first-attempt semantic review FAIL `{span_id}` needs a bounded diagnostic"
         )
 
+    alignment = state.get("review_alignment")
+    escaped_defects = (
+        alignment.get("escaped_prepass_defects")
+        if isinstance(alignment, dict)
+        else None
+    )
+    ordered_escaped_defects = [
+        item
+        for item in (
+            escaped_defects if isinstance(escaped_defects, list) else []
+        )
+        if isinstance(item, dict)
+    ]
+    escaped_defects_by_id = {
+        item.get("defect_id"): item
+        for item in ordered_escaped_defects
+        if isinstance(item.get("defect_id"), str)
+    }
+
     control = state.get("dispatch_control")
     if not isinstance(control, dict):
         errors.append("v5 work-state `dispatch_control` must be an object")
@@ -6097,7 +7630,11 @@ def validate_late_discovery_and_diagnostics_v4(
             episode_ids.add(episode_id)
         cause = episode_cause
         latest_trigger_finish_sequence: int | None = None
-        if cause not in {"late-shared-contract", "shared-root-semantic-fail"}:
+        if cause not in {
+            "late-shared-contract",
+            "shared-root-semantic-fail",
+            "escaped-prepass-defect",
+        }:
             errors.append(f"{label} has unsupported `cause`")
         trigger_ids = string_list(
             episode.get("trigger_ids"), f"{label} `trigger_ids`", errors
@@ -6221,6 +7758,52 @@ def validate_late_discovery_and_diagnostics_v4(
                     latest_trigger_finish_sequence = max(
                         concrete_finish_sequences
                     )
+        elif cause == "escaped-prepass-defect":
+            linked = [escaped_defects_by_id.get(value) for value in trigger_ids]
+            if not linked or any(item is None for item in linked):
+                errors.append(
+                    f"{label} must reference escaped-prepass defect records"
+                )
+            else:
+                positions = [
+                    ordered_escaped_defects.index(item)
+                    for item in linked
+                    if isinstance(item, dict)
+                ]
+                if positions != sorted(positions):
+                    errors.append(
+                        f"{label} escaped-prepass triggers must follow finding order"
+                    )
+                linked_revisions = [
+                    item.get("basis_revision")
+                    for item in linked
+                    if isinstance(item, dict)
+                    and type(item.get("basis_revision")) is int
+                ]
+                if (
+                    episode_revision is not None
+                    and linked_revisions
+                    and episode_revision != max(linked_revisions)
+                ):
+                    errors.append(
+                        f"{label} must use its latest escaped-prepass defect basis"
+                    )
+                finding_finish_sequences = [
+                    spans_by_id.get(item.get("finding_span_id"), {}).get(
+                        "finished_sequence"
+                    )
+                    for item in linked
+                    if isinstance(item, dict)
+                ]
+                concrete_finish_sequences = [
+                    sequence
+                    for sequence in finding_finish_sequences
+                    if type(sequence) is int
+                ]
+                if concrete_finish_sequences:
+                    latest_trigger_finish_sequence = max(
+                        concrete_finish_sequences
+                    )
         if status == "open":
             for field in (
                 "diagnosis",
@@ -6239,7 +7822,7 @@ def validate_late_discovery_and_diagnostics_v4(
                 errors,
             )
             if (
-                cause == "shared-root-semantic-fail"
+                cause in {"shared-root-semantic-fail", "escaped-prepass-defect"}
                 and resume_revision is not None
                 and episode_revision is not None
                 and resume_revision <= episode_revision
@@ -6294,7 +7877,7 @@ def validate_late_discovery_and_diagnostics_v4(
                     f"{label} non-current resume PASS needs a later readiness basis"
                 )
             if (
-                cause == "shared-root-semantic-fail"
+                cause in {"shared-root-semantic-fail", "escaped-prepass-defect"}
                 and latest_trigger_finish_sequence is not None
                 and (
                     type(resume_start_sequence) is not int
@@ -6303,7 +7886,7 @@ def validate_late_discovery_and_diagnostics_v4(
             ):
                 errors.append(
                     f"{label} resume readiness PASS must be recorded after its "
-                    "triggering semantic FAILs"
+                    "triggering semantic FAIL(s)"
                 )
             if (
                 cause == "late-shared-contract"
@@ -6320,7 +7903,12 @@ def validate_late_discovery_and_diagnostics_v4(
         else:
             errors.append(f"{label} `status` must be `open` or `resolved`")
         if (
-            cause in {"late-shared-contract", "shared-root-semantic-fail"}
+            cause
+            in {
+                "late-shared-contract",
+                "shared-root-semantic-fail",
+                "escaped-prepass-defect",
+            }
             and latest_trigger_finish_sequence is not None
         ):
             resume_finish_sequence = None
@@ -6390,6 +7978,39 @@ def validate_late_discovery_and_diagnostics_v4(
                 f"post-readiness discovery `{discovery_id}` needs exactly one matching "
                 "pause episode"
             )
+    for defect_id, defect in escaped_defects_by_id.items():
+        matches = [
+            episode
+            for episode, (cause, trigger_ids) in zip(
+                parsed_episodes, episode_trigger_sets
+            )
+            if cause == "escaped-prepass-defect" and defect_id in trigger_ids
+        ]
+        if len(matches) != 1 or matches[0].get("status") != defect.get("status"):
+            errors.append(
+                f"escaped prepass defect `{defect_id}` needs exactly one matching "
+                "pause episode"
+            )
+    escaped_ids_by_root: dict[str, set[str]] = {}
+    for defect_id, defect in escaped_defects_by_id.items():
+        root_id = defect.get("root_id")
+        if isinstance(root_id, str):
+            escaped_ids_by_root.setdefault(root_id, set()).add(defect_id)
+    for root_id, root_defect_ids in escaped_ids_by_root.items():
+        matching_episode_triggers = [
+            trigger_ids
+            for cause, trigger_ids in episode_trigger_sets
+            if cause == "escaped-prepass-defect"
+            and root_defect_ids & trigger_ids
+        ]
+        if (
+            len(matching_episode_triggers) != 1
+            or not root_defect_ids <= matching_episode_triggers[0]
+        ):
+            errors.append(
+                f"escaped prepass root `{root_id}` must batch every known defect "
+                "in one dispatch pause episode"
+            )
     for prior, latest in zip(ordered_diagnostics, ordered_diagnostics[1:]):
         prior_id = prior.get("diagnostic_id")
         latest_id = latest.get("diagnostic_id")
@@ -6399,6 +8020,7 @@ def validate_late_discovery_and_diagnostics_v4(
         if (
             diagnostic_roots.get(prior_id) == diagnostic_roots.get(latest_id)
             and prior_id in diagnostic_roots
+            and diagnostic_roots.get(prior_id) != "escaped-prepass-defect"
             and shared_refs
         ):
             pair = {prior_id, latest_id}
@@ -7652,6 +9274,7 @@ def validate_state_snapshot_completeness(
         "reviewer_handoffs",
         "semantic_challenge",
         "persistent_agent_ids",
+        "review_alignment",
     }
     for field in sorted((set(snapshot) | set(current_state)) - active_state_owners):
         if (

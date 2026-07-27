@@ -15,6 +15,8 @@
 
 This reference is the normative owner of semantic reviewer selection, findings-only report/verdict requirements, change-type routing, and rerun scope for the required domain development-quality reviewer, conditional risk/contract reviewer, and conditional affected-closure integration or project-wide baseline reviewer. `docs-generation-flow.md` owns when selected roles run; `shared-contract-readiness.md` owns v5 readiness and binding traces; `semantic-review-proof.md` owns receipt, primary/challenger identity, and handoff; `semantic-review-closure.md` owns invalidating and resolving PASS basis.
 
+All reviewer roles use the bundle acceptance contract owned by `shared-contract-readiness.md`. The contract is the common writer/reviewer success basis, not another checklist: it binds accepted candidate/output/owner, contract/risk meaning, material safety invariants, binding meaning, and criteria revision. A reviewer may inspect raw source to judge those claims, but ordinary local source discovery cannot silently expand the contract or writer scope.
+
 ## Findings-Only Report Contract
 
 Every PASS report contains only these fields. For Korean operation reports, use this visible order:
@@ -132,7 +134,7 @@ For `initial-baseline`, verify the latest selection preflight matches the final 
 
 For `baseline-diff-refresh`, verify the complete old-to-new diff and ownership/graph/criteria impact expansion, impacted bundle reviews at the new commit, and the recorded rationale for carrying each unaffected bundle class from the trusted prior baseline. Do not claim carried reviews ran at the new commit.
 
-Do not mechanically repeat every unchanged domain checklist or rediscover its source. If the current-corpus comparison exposes a local admission, depth, fidelity, or risk-routing defect, reopen that affected bundle; final review remains a safety net rather than ignoring a real defect because it is local. Apply the rerun table below, rerun the writer only when selected output or documented meaning changes, run only impact-selected reviewers, resolve closure, and then rerun this reviewer against the corrected current corpus.
+Do not mechanically repeat every unchanged domain checklist or rediscover its source. Reconcile the current corpus, owner/graph closure, and applicable acceptance contracts. The final review remains a safety net: when current-corpus comparison exposes a local admission, depth, fidelity, or risk-routing defect, reopen that affected bundle only for a directly evidenced missing permission, privacy, destructive-effect, or shared-contract invariant. Record a contract/prepass omission as `escaped_prepass_defect`, stale readiness, pause dispatch, and batch the known root fan-out before correction. A later same-root material finding is never discarded: without new source evidence it also records a separate batching protocol FAIL; with new source evidence it is an allowed new escape. Apply the rerun table below, rerun the writer only when selected output or documented meaning changes, run only impact-selected reviewers, resolve closure/readiness, and then rerun this reviewer against the corrected current corpus.
 
 Use a cross-domain decision table only when ownership, contracts, or baseline carry-forward alternatives cannot be judged reliably in concise findings. The ordinary PASS report remains findings-only.
 
@@ -154,7 +156,8 @@ Only the project-wide form of this reviewer can approve global baseline creation
 | Change after review | Required rerun |
 | --- | --- |
 | Markdown formatting, graph path repair, expected-key correction, or inventory count with unchanged selection/owner | structural preflight only |
-| Source locator/evidence index correction with unchanged documented claim | version-5 selection preflight, then narrowed source-evidence check by the development reviewer |
+| Source locator/evidence index correction with unchanged documented claim and acceptance fingerprint, including its receipt-input repair | version-5 selection preflight, then narrowed source-evidence check: one maintenance attempt and its `review_mode: evidence-only` development check; no writer pair |
+| Receipt/report or protocol metadata-only repair with unchanged evidence input projection | validate the receipt/protocol owner only; do not manufacture an evidence revision, writer pair, or semantic rerun |
 | Intent, important context, rule/contract, ownership, approved verification condition, or judgment label | development-quality reviewer for affected bundle(s) |
 | Risk-trigger, binding-trace, or candidate/Atom route change | version-5 selection preflight, then development-quality and applicable risk/contract reviewers on the corrected revision |
 | Adverse branch, permission, destructive effect, transaction/idempotency, recovery, sensitive data, or external contract | risk/contract reviewer; also development reviewer when the documented decision changed |

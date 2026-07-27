@@ -62,7 +62,14 @@ PAYLOAD_KEYS = {
     "operation-started": ({"started_at"}, set()),
     "span-started": (
         {"span_id", "kind", "scope", "attempt_id", "basis_revision", "started_at"},
-        {"rerun_of", "rerun_reason"},
+        {
+            "rerun_of",
+            "rerun_reason",
+            "alignment_binding_sha256",
+            "acceptance_fingerprint",
+            "evidence_revision",
+            "evidence_fingerprint",
+        },
     ),
     "span-finished": ({"span_id", "finished_at", "outcome"}, set()),
     "operation-finished": ({"finished_at"}, set()),
@@ -70,6 +77,7 @@ PAYLOAD_KEYS = {
 SPAN_KINDS = {
     "bundle",
     "writer",
+    "maintenance",
     "development-review",
     "risk-review",
     "integration-review",
@@ -358,6 +366,45 @@ def _validate_payload(
             raise OperationEventError(
                 f"{label} must not record a terminal metrics self-check span"
             )
+        alignment_hash = payload.get("alignment_binding_sha256")
+        if alignment_hash is not None and (
+            not isinstance(alignment_hash, str)
+            or LOWER_HASH_RE.fullmatch(alignment_hash) is None
+        ):
+            raise OperationEventError(
+                f"{label} alignment_binding_sha256 must be 64 lowercase hex characters"
+            )
+        maintenance_fields = {
+            "acceptance_fingerprint",
+            "evidence_revision",
+            "evidence_fingerprint",
+        }
+        present_maintenance_fields = maintenance_fields & set(payload)
+        if kind == "maintenance":
+            if present_maintenance_fields != maintenance_fields:
+                raise OperationEventError(
+                    f"{label} maintenance span must bind its prior acceptance and "
+                    "evidence revision/fingerprint"
+                )
+            for field in ("acceptance_fingerprint", "evidence_fingerprint"):
+                value = payload.get(field)
+                if not isinstance(value, str) or LOWER_HASH_RE.fullmatch(value) is None:
+                    raise OperationEventError(
+                        f"{label} {field} must be 64 lowercase hex characters"
+                    )
+            evidence_revision = payload.get("evidence_revision")
+            if (
+                isinstance(evidence_revision, bool)
+                or not isinstance(evidence_revision, int)
+                or evidence_revision <= 0
+            ):
+                raise OperationEventError(
+                    f"{label} evidence_revision must be a positive integer"
+                )
+        elif present_maintenance_fields:
+            raise OperationEventError(
+                f"{label} non-maintenance span must omit maintenance prior-state fields"
+            )
         _lower_kebab(payload.get("attempt_id"), f"{label} attempt_id")
         basis = payload.get("basis_revision")
         if isinstance(basis, bool) or not isinstance(basis, int) or basis <= 0:
@@ -382,7 +429,12 @@ def _validate_span_basis_against_state(
         return
     kind = payload.get("kind")
     scope = payload.get("scope")
-    if scope == "selection-readiness" and kind in {"bundle", "writer", "risk-review"}:
+    if scope == "selection-readiness" and kind in {
+        "bundle",
+        "writer",
+        "maintenance",
+        "risk-review",
+    }:
         raise OperationEventError(
             "span-started scope `selection-readiness` is reserved for the readiness review"
         )
@@ -419,7 +471,7 @@ def _validate_span_basis_against_state(
         raise OperationEventError(
             "risk-review scope must be an active/retired stable bundle_id"
         )
-    if kind in {"bundle", "writer"} and scope not in bundle_ids:
+    if kind in {"bundle", "writer", "maintenance"} and scope not in bundle_ids:
         raise OperationEventError(
             f"{kind} scope must be an active/retired stable bundle_id"
         )
@@ -477,8 +529,86 @@ def _validate_event_against_state(
     events: Sequence[Mapping[str, Any]],
 ) -> None:
     _validate_span_basis_against_state(state, event_type, payload)
+    if event_type == "span-finished" and payload.get("outcome") == "FAIL":
+        projection = _reduce_validated_events(events)
+        span_id = payload.get("span_id")
+        span = next(
+            (
+                item
+                for item in projection.get("spans", [])
+                if isinstance(item, Mapping) and item.get("span_id") == span_id
+            ),
+            None,
+        )
+        pass_ids: set[str] = set()
+        readiness = state.get("selection_readiness")
+        readiness_reviews = (
+            readiness.get("reviews") if isinstance(readiness, Mapping) else None
+        )
+        closure = state.get("semantic_review_closure")
+        semantic_reviews = (
+            closure.get("review_passes") if isinstance(closure, Mapping) else None
+        )
+        challenge = state.get("semantic_challenge")
+        challenge_attempts = (
+            challenge.get("attempts") if isinstance(challenge, Mapping) else None
+        )
+        for review in [
+            *(readiness_reviews if isinstance(readiness_reviews, list) else []),
+            *(semantic_reviews if isinstance(semantic_reviews, list) else []),
+            *(challenge_attempts if isinstance(challenge_attempts, list) else []),
+        ]:
+            if (
+                isinstance(review, Mapping)
+                and review.get("verdict") == "PASS"
+                and isinstance(review.get("review_id"), str)
+            ):
+                pass_ids.add(review["review_id"])
+        if (
+            isinstance(span, Mapping)
+            and span.get("kind")
+            in {
+                "development-review",
+                "risk-review",
+                "integration-review",
+                "baseline-review",
+            }
+            and span_id in pass_ids
+        ):
+            raise OperationEventError(
+                f"semantic PASS review span `{span_id}` must finish with `PASS`; "
+                "record chronology/receipt/order failure as a separate validation span"
+            )
     if event_type == "span-started":
         projection = _reduce_validated_events(events)
+        if payload.get("kind") == "maintenance":
+            alignment = state.get("review_alignment")
+            contracts = (
+                alignment.get("acceptance_contracts")
+                if isinstance(alignment, Mapping)
+                else None
+            )
+            contract = next(
+                (
+                    item
+                    for item in (contracts if isinstance(contracts, list) else [])
+                    if isinstance(item, Mapping)
+                    and item.get("bundle_id") == payload.get("scope")
+                ),
+                None,
+            )
+            if not isinstance(contract, Mapping) or any(
+                payload.get(field) != contract.get(field)
+                for field in (
+                    "acceptance_fingerprint",
+                    "evidence_revision",
+                    "evidence_fingerprint",
+                )
+            ):
+                raise OperationEventError(
+                    "maintenance span-started must bind the current canonical "
+                    "acceptance and evidence revision/fingerprint before correction"
+                )
         active_final_validations = [
             span.get("span_id")
             for span in projection.get("spans", [])
@@ -656,6 +786,14 @@ def _reduce_validated_events(events: Sequence[Mapping[str, Any]]) -> dict[str, A
                 "started_at": payload["started_at"],
                 "started_sequence": sequence,
             }
+            for field in (
+                "alignment_binding_sha256",
+                "acceptance_fingerprint",
+                "evidence_revision",
+                "evidence_fingerprint",
+            ):
+                if field in payload:
+                    span[field] = payload[field]
             if "rerun_of" in payload:
                 prior_id = payload["rerun_of"]
                 prior = spans_by_id.get(prior_id)
@@ -700,7 +838,7 @@ def _reduce_validated_events(events: Sequence[Mapping[str, Any]]) -> dict[str, A
                 raise OperationEventError(f"span `{span_id}` finishes more than once")
             span_kind = span.get("kind")
             outcome = payload.get("outcome")
-            if span_kind in {"bundle", "writer"} and outcome == "PASS":
+            if span_kind in {"bundle", "writer", "maintenance"} and outcome == "PASS":
                 raise OperationEventError(
                     f"{span_kind} span `{span_id}` outcome must be `completed` or `FAIL`"
                 )
@@ -987,6 +1125,13 @@ def _load_v5_state(root: Path, request_id: str) -> dict[str, Any]:
             "event recording requires exact context_selection.version `5`; "
             "create a new v5 request instead of migrating older state"
         )
+    alignment = state.get("review_alignment")
+    if not isinstance(alignment, dict) or alignment.get("version") != "1":
+        raise OperationEventError(
+            "event recording requires exact review_alignment.version `1`; "
+            "create a new v5 request instead of migrating, backfilling, or "
+            "dual-reading older review state"
+        )
     _operation_profile(state)
     state_request_id = state.get("request_id")
     if state_request_id is not None and state_request_id != request_id:
@@ -1225,6 +1370,15 @@ def _payload_from_args(args: argparse.Namespace) -> dict[str, Any]:
             payload["rerun_of"] = args.rerun_of
         if args.rerun_reason is not None:
             payload["rerun_reason"] = args.rerun_reason
+        for field in (
+            "alignment_binding_sha256",
+            "acceptance_fingerprint",
+            "evidence_revision",
+            "evidence_fingerprint",
+        ):
+            value = getattr(args, field)
+            if value is not None:
+                payload[field] = value
         return payload
     if args.command == "span-finished":
         return {
@@ -1257,6 +1411,10 @@ def build_parser() -> argparse.ArgumentParser:
     span_started.add_argument("--started-at", required=True)
     span_started.add_argument("--rerun-of")
     span_started.add_argument("--rerun-reason")
+    span_started.add_argument("--alignment-binding-sha256")
+    span_started.add_argument("--acceptance-fingerprint")
+    span_started.add_argument("--evidence-revision", type=int)
+    span_started.add_argument("--evidence-fingerprint")
 
     span_finished = commands.add_parser("span-finished")
     span_finished.add_argument("--span-id", required=True)

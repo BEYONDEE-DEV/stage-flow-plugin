@@ -2188,6 +2188,52 @@ class DocsSkillTests(unittest.TestCase):
             text.index("run structural selection validation"),
         )
 
+    def test_review_alignment_shares_acceptance_and_separates_protocol(self) -> None:
+        skill = read(SKILL)
+        readiness = read(REFS / "shared-contract-readiness.md")
+        generation = read(REFS / "docs-generation-flow.md")
+        reviewers = read(REFS / "reviewer-perspectives.md")
+        metrics = read(REFS / "operation-metrics.md")
+        proof = read(REFS / "semantic-review-proof.md")
+        validation = read(REFS / "validation-contract.md")
+        text = "\n".join(
+            (skill, readiness, generation, reviewers, metrics, proof, validation)
+        )
+        assert_all(
+            self,
+            text,
+            (
+                'review_alignment.version: "1"',
+                "hard-cut sub-contract",
+                "one acceptance contract for every active stable `bundle_id`",
+                "`acceptance_fingerprint`",
+                "`evidence_revision`",
+                "candidate-scoped inventory/evidence sections",
+                "Do not feed review result receipts",
+                "put mutable evidence digests into the acceptance fingerprint",
+                "`alignment_binding_sha256`",
+                "prior acceptance fingerprint",
+                "`review_mode: evidence-only`",
+                "does not require a fabricated same-basis bundle/writer pair",
+                "no writer pair",
+                "do not manufacture an evidence revision",
+                "latest current evidence-only PASS overlay",
+                "Preserve the original readiness receipt",
+                "`escaped_prepass_defect`",
+                "exactly one `escaped_prepass_defect`",
+                "unrelated bundle's evidence change",
+                "`prepass-batching`",
+                "preserve and correct the finding",
+                "New root-scoped source evidence permits a later same-root finding",
+                "semantic review span outcome",
+                "separate `validation` span",
+                "never rewrite semantic PASS",
+                "Operation readiness and terminal completion require both",
+                "must not remain `FAIL`",
+                "block the terminal-ready challenge until a later same-scope PASS",
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
