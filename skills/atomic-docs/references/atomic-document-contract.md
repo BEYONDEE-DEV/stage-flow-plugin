@@ -27,13 +27,32 @@ Every section is meaningful. `Sources` contains at least one valid source locato
 
 ## Project Glossary
 
-Create `project/project-glossary.md` only when multiple areas share an ambiguous, ownership-sensitive, or easily confused term. It contains `## Terms` and this exact table:
+Create `project/project-glossary.md` when the project has at least one term that a new developer needs defined to understand its requirements, docs, UI, API, or business behavior. This is a general project glossary, not a cross-Atom relationship table or evidence ledger. It contains `## Terms` and this exact table:
 
 ```text
-| Term | Meaning | Scope Or Owner | Source Of Truth | Do Not Confuse With | Sources |
+| Term | Definition |
 ```
 
-Every row describes a real term and includes at least one valid source locator. Delete the glossary if no qualifying term remains.
+Derive candidates from the project goal, the selected Atom docs, user-facing language, API concepts, and inspected source. Include a term when omitting its definition could make a new developer misunderstand the project. Cross-Atom reuse, ambiguity, or sensitive ownership strengthens the need for an entry but is never a prerequisite. Terms owned by one Atom still qualify.
+
+Cover the applicable vocabulary categories:
+
+- user roles and actors
+- core domain entities, important sub-entities, and their relationships
+- business actions, workflows, states, and results
+- project-specific identifiers, acronyms, aliases, and externally visible names
+- ordinary words that have a narrower or unusual meaning in this project
+
+Write one row per unique canonical term:
+
+- `Term`: the name used by the project.
+- `Definition`: a concise, non-circular explanation of what the term means and what role it has in this project. Make the definition understandable without requiring the reader to open the source.
+
+Explain a material distinction from a related term inside `Definition` when needed. If the project uses one term for a definition, issued instance, current state, or history, explain that usage clearly. Create separate rows only when the project itself has separate stable terms; do not invent artificial names solely to split lifecycle or abstraction levels.
+
+Do not add an isolated type, function, field, route parameter, or implementation symbol merely because it exists. Include it only when it is also meaningful project vocabulary. Do not put source locators, ownership metadata, source-of-truth claims, or review evidence in the glossary. Verify definitions against inspected source while writing and reviewing; keep persistent source evidence in the applicable Atom `Sources` sections.
+
+Delete the glossary only when no project term needs definition.
 
 ## Atom
 

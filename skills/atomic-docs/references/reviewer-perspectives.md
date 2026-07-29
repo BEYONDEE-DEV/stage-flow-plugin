@@ -15,6 +15,8 @@ The reviewer answers only:
 3. Are `Boundaries`, responsibilities, exclusions, handoffs, and contracts clear?
 4. Do `depends_on`, source locators, and active RIDs express the selected change consistently?
 
+When a glossary exists, questions 1 through 3 also cover all vocabulary exposed by the project goal and the selected Atom/source scope. Return `FAIL` when a material project term needed by a new developer is omitted, a definition is circular, vague, source-symbol-only, or inconsistent with project usage, related terms are merged in a misleading way, or artificial terms are invented only to classify lifecycle levels. A term does not need cross-Atom use to qualify. Do not require glossary ownership, source-of-truth, distinction, or source-locator columns; the glossary contains only `Term` and `Definition`, while source fidelity is checked from the review inputs.
+
 Return `PASS` or `FAIL` with concrete findings and exact affected paths or Atom keys. Do not add another reviewer, audit, challenge, or source-wide completeness pass.
 
 On `FAIL`, the writer corrects the findings once. Run structural validation on the corrected docs, then have the same reviewer check the original findings once against the corrected diff. New observations may be reported, but they do not open an automatic loop. If any material finding remains, stop and ask the user whether to accept, narrow, or revise the work. Run structural validation once more on the final reviewed docs before reporting completion.

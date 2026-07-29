@@ -272,23 +272,44 @@ checkout 모듈이 진입점이다.
         self.assert_fails("retired AID/AID-REF syntax is present")
         self.assert_fails("RID is allowed only in an Atom Changes section")
 
-    def test_optional_glossary_requires_exact_table_and_sources(self) -> None:
+    def test_optional_glossary_requires_exact_term_definition_table(self) -> None:
         glossary = self.tmp / "docs" / "project" / "project-glossary.md"
         glossary.write_text(
             """# Project Glossary
 
 ## Terms
 
-| Term | Meaning | Scope Or Owner | Source Of Truth | Do Not Confuse With | Sources |
-| --- | --- | --- | --- | --- | --- |
-| 승인 | 결제 승인 | 결제 | checkout | 환불 | `primary:checkout.py#charge` |
+| Term | Definition |
+| --- | --- |
+| 승인 | 결제 요청이 성공해 주문 금액을 청구할 수 있는 상태 |
 """,
             encoding="utf-8",
         )
         result = self.run_validator()
         self.assertEqual(result.returncode, 0, result.stdout)
-        glossary.write_text(glossary.read_text(encoding="utf-8").replace("| Sources |", "| Evidence |"), encoding="utf-8")
+        glossary.write_text(
+            glossary.read_text(encoding="utf-8").replace("| Definition |", "| Meaning |"),
+            encoding="utf-8",
+        )
         self.assert_fails("does not match the required columns")
+
+    def test_glossary_requires_nonempty_unique_terms_and_definitions(self) -> None:
+        glossary = self.tmp / "docs" / "project" / "project-glossary.md"
+        glossary.write_text(
+            """# Project Glossary
+
+## Terms
+
+| Term | Definition |
+| --- | --- |
+| 승인 | 결제 요청이 성공한 상태 |
+| `승인` | 같은 용어의 다른 설명 |
+| 환불 | |
+""",
+            encoding="utf-8",
+        )
+        self.assert_fails("duplicates Terms row 1")
+        self.assert_fails("must have two non-empty cells")
 
     def test_unapproved_permanent_file_is_rejected(self) -> None:
         (self.tmp / "docs" / "project" / "atomization-criteria.md").write_text("# Legacy\n", encoding="utf-8")

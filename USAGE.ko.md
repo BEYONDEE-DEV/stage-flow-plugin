@@ -152,7 +152,7 @@ atomic-docs inspect로 현재 문서와 소스의 차이를 점검해줘.
 ```text
 .stageflow/atomic-docs.json
 <docs-root>/project/project-goal.md
-<docs-root>/project/project-glossary.md  # 필요한 공유 용어가 있을 때만
+<docs-root>/project/project-glossary.md  # 새 개발자에게 정의가 필요한 프로젝트 용어가 있을 때
 <docs-root>/<domain>/*-atom.md
 ```
 

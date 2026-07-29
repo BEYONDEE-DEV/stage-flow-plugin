@@ -89,6 +89,44 @@ class AtomicDocsSkillTests(unittest.TestCase):
         for legacy in ("Intent", "Outcomes", "Current Implementation", "Planned Changes", "Gaps"):
             self.assertNotIn(f"`{legacy}`", text)
 
+    def test_glossary_contract_is_a_general_project_dictionary(self) -> None:
+        skill = read(SKILL)
+        contract = read(REFS / "atomic-document-contract.md")
+        validation = read(REFS / "validation-contract.md")
+        for required in (
+            "general project glossary",
+            "a new developer must understand",
+            "even when a term belongs to only one Atom",
+            "Use only `Term` and `Definition`",
+            "without adding ownership, source, evidence, or control columns",
+            "do not invent artificial terms",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "This is a general project glossary",
+            "| Term | Definition |",
+            "Terms owned by one Atom still qualify",
+            "user roles and actors",
+            "core domain entities",
+            "business actions, workflows, states, and results",
+            "project-specific identifiers, acronyms, aliases",
+            "a concise, non-circular explanation",
+            "do not invent artificial names",
+            "Do not put source locators, ownership metadata, source-of-truth claims, or review evidence",
+        ):
+            self.assertIn(required, contract)
+        glossary_section = contract.split("## Project Glossary", 1)[1].split("## Atom", 1)[0]
+        for retired_column in (
+            "| Term | Meaning | Scope Or Owner |",
+            "`Scope Or Owner`",
+            "`Source Of Truth`",
+            "`Do Not Confuse With`",
+        ):
+            self.assertNotIn(retired_column, glossary_section)
+        self.assertNotIn("At least two Atom responsibilities", glossary_section)
+        self.assertIn("unique non-empty `Term` and `Definition` cells", validation)
+        self.assertIn("glossary coverage or definition accuracy", validation)
+
     def test_config_is_exact_v2_without_baseline_artifact(self) -> None:
         text = read(REFS / "docs-root-and-config.md")
         for required in (
@@ -144,6 +182,15 @@ class AtomicDocsSkillTests(unittest.TestCase):
             self.assertIn(required, text)
         self.assertIn("Do not add another reviewer, audit, challenge", text)
         self.assertIn("Do not persist review metadata or state", text)
+        for required in (
+            "project goal and the selected Atom/source scope",
+            "needed by a new developer is omitted",
+            "circular, vague, source-symbol-only",
+            "artificial terms are invented",
+            "does not need cross-Atom use",
+            "contains only `Term` and `Definition`",
+        ):
+            self.assertIn(required, text)
 
     def test_existing_delete_or_merge_needs_exact_key_approval(self) -> None:
         text = read(SKILL) + read(REFS / "refresh-flow.md")

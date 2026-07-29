@@ -10,7 +10,7 @@ Use `update all` for first creation or a complete replacement:
 
 1. Confirm the accepted storage target and managed write set.
 2. Capture a stable primary-source commit under `docs-root-and-config.md`.
-3. Inspect project purpose, vocabulary, durable domains, contracts, and implementation anchors.
+3. Inspect project purpose, user roles, domain vocabulary, durable domains, contracts, and implementation anchors. Build the general glossary from terms a new developer needs to understand the project, including terms owned by only one proposed Atom, under `atomic-document-contract.md`.
 4. Write `project-goal.md`, conditional glossary, and the complete Atom set.
 5. Validate structure.
 6. Run the single semantic review in `reviewer-perspectives.md`.
@@ -39,11 +39,13 @@ Update only this bounded set unless the user expands scope. Report:
 
 This is one-hop impact selection, not proof of complete closure. Auxiliary sources are excluded from the primary diff and inspected only when selected or when a retained claim depends on their exact pinned revision.
 
+Update glossary definitions when the changed source or selected Atoms introduce, change, or retire project vocabulary. Judge coverage only within the inspected changed scope.
+
 Stop and recommend `update all` or explicit `update targeted` when the baseline is null or unreachable, the primary tracked source is dirty, `HEAD` changes during the operation, or changed files cannot be mapped reliably.
 
 ## Update Targeted
 
-Accept explicit Atom keys, domains, or source paths. Inspect their source and only the direct dependencies needed to judge the selected change. State the selected and uninspected scope. A targeted update does not advance `last_full_source_commit`.
+Accept explicit Atom keys, domains, source paths, or the project glossary. Inspect their source and only the direct dependencies needed to judge the selected change. Update glossary entries affected by that vocabulary and state the selected and uninspected scope. A targeted update does not advance `last_full_source_commit`.
 
 ## Delete Or Merge
 

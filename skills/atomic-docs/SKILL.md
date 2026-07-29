@@ -13,7 +13,7 @@ Atomic Docs owns only:
 
 - `.stageflow/atomic-docs.json`
 - `<docs-root>/project/project-goal.md`
-- `<docs-root>/project/project-glossary.md` when shared, ambiguous, or ownership-sensitive terms actually exist
+- `<docs-root>/project/project-glossary.md` when the project has terms a new developer needs defined
 - `<docs-root>/<domain>/*-atom.md`
 
 Do not create any other permanent Atomic Docs output. Atomic Docs also does not create a Goal.
@@ -24,7 +24,7 @@ Do not create any other permanent Atomic Docs output. Atomic Docs also does not 
 - Use source as the default evidence. Write only context that remains useful after reading the code.
 - Support `repository` and `submodule` storage without assuming a fixed docs root.
 - Use `project-goal.md` for project-wide purpose, users, success, non-goals, and sources.
-- Create `project-glossary.md` only when real shared vocabulary needs a durable source of truth.
+- Create `project-glossary.md` as a general project glossary for vocabulary a new developer must understand to read the requirements, docs, UI, and API correctly. Include project roles, domain concepts, core entities and relationships, workflows and states, and important project-specific identifiers or acronyms even when a term belongs to only one Atom. Use only `Term` and `Definition`; verify definitions from inspected source without adding ownership, source, evidence, or control columns. Do not turn the glossary into an inventory of implementation types, functions, or fields, and do not invent artificial terms merely to split lifecycle levels.
 - Give every Atom one globally unique lower-kebab `atom_key` and required `depends_on`.
 - Give every Atom exactly these seven sections: `Purpose`, `Boundaries`, `Contracts`, `Implementation`, `Sources`, `Changes`, and `Open Questions`.
 - Keep every section meaningful. Use exact `- 없음` only for empty `Changes` or `Open Questions`.

@@ -32,14 +32,7 @@ ATOM_HEADINGS = [
     "Open Questions",
 ]
 GOAL_HEADINGS = ["Purpose", "Users", "Success", "Non-goals", "Sources"]
-GLOSSARY_HEADER = [
-    "Term",
-    "Meaning",
-    "Scope Or Owner",
-    "Source Of Truth",
-    "Do Not Confuse With",
-    "Sources",
-]
+GLOSSARY_HEADER = ["Term", "Definition"]
 KEY_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$")
 REVISION_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -398,18 +391,29 @@ class Validator:
         if len(separator) != len(GLOSSARY_HEADER) or not all(
             re.fullmatch(r":?-{3,}:?", cell) for cell in separator
         ):
-            self.error(path, "Terms separator", "is not a valid six-column Markdown separator", "fix the table")
+            self.error(path, "Terms separator", "is not a valid two-column Markdown separator", "fix the table")
+        seen_terms: dict[str, int] = {}
         for index, line in enumerate(lines[2:], start=1):
             cells = self.table_cells(line)
             if len(cells) != len(GLOSSARY_HEADER) or any(not cell for cell in cells):
                 self.error(
                     path,
                     f"Terms row {index}",
-                    "must have six non-empty cells",
+                    "must have two non-empty cells",
                     "complete or remove the invalid row",
                 )
                 continue
-            self.validate_sources(path, cells[-1], f"Terms row {index} Sources")
+            normalized_term = cells[0].strip().strip("`").casefold()
+            previous = seen_terms.get(normalized_term)
+            if previous is not None:
+                self.error(
+                    path,
+                    f"Terms row {index} Term",
+                    f"duplicates Terms row {previous}",
+                    "keep one canonical definition for the term",
+                )
+            else:
+                seen_terms[normalized_term] = index
 
     @staticmethod
     def table_cells(line: str) -> list[str]:
