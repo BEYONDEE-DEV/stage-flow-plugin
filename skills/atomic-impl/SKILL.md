@@ -1,56 +1,50 @@
 ---
 name: atomic-impl
-description: "Use when the user asks to implement code from requirements through atomic-docs first, invokes atomic-impl, wants requirements written into atomic docs before coding, asks for docs-first implementation, or wants implementation based on approved atomic-docs managed documentation. Guides Codex from requirements to implementation-basis atomic docs under existing atomic-docs gates, user approval, code implementation, implementation review, user approval, final atomic-docs update, and final docs/code compliance review."
+description: "Use when the user asks to implement code from requirements through atomic-docs first, invokes atomic-impl, wants requirements written into atomic docs before coding, asks for docs-first implementation, or wants implementation based on approved atomic-docs managed documentation."
 ---
 
 # Atomic Impl
 
-Use this skill to turn user requirements into approved atomic-docs implementation criteria before changing code. The goal is to prevent shallow implementation by making the required behavior explicit in managed docs first.
+Turn approved requirements into a small Atomic Docs change basis, implement the code, and leave durable docs describing the realized system.
 
-Required path: `requirements -> implementation-basis atomic docs -> user approval -> code implementation -> implementation review -> user approval -> final atomic-docs update -> final docs/code compliance`.
+## Required Flow
 
-## Core Contract
+1. Read `skills/atomic-docs/SKILL.md` and `references/implementation-flow.md`.
+2. Inspect the requirement, relevant source, config, and affected Atoms.
+3. Write each active requirement exactly once in the owning Atom's `Changes` section as `[RID:<atom_key>.<lower-kebab-slug>]`.
+4. Correct current source-backed ownership in `Boundaries` only when needed. Keep any future boundary change in its RID item until implementation is approved and complete.
+5. Run Atomic Docs structural validation and its single semantic review.
+6. Present the changed docs paths, RIDs, implementation behavior, and unresolved decisions. Require explicit user approval before code implementation.
+7. Implement the approved change using the project source and conventions.
+8. Run relevant tests and one implementation review against the approved RIDs, actual diff, and validation results.
+9. Present the implementation result and require explicit user approval before final Atomic Docs promotion.
+10. Remove completed RIDs, promote durable meaning into `Contracts` or `Boundaries`, refresh `Implementation` and `Sources`, validate, and run the bounded Atomic Docs review.
 
-- Treat the written or updated atomic docs as the source of truth for product decisions, required behavior, verification conditions, and boundaries in this request. Use project source and conventions for internal implementation mechanics.
-- Do not implement code before the relevant atomic docs are written or updated, summarized for the user, and explicitly approved as the implementation basis.
-- During the initial implementation-basis docs write, use `Intent` only for why the atom exists, `Outcomes` for the required normal observable result, `Boundaries` for accepted inclusion/exclusion and adjacent ownership, and `Rules` for required conditions, invariants, refusals, contracts, and effects. Put only the current-to-required unimplemented delta in `Planned Changes`, use `Gaps` or `confirmation_needed` for uncertainty, and use `Current Implementation` only for behavior already observed in source. Consume owning definitions with `[AID-REF:<value>]` instead of restating the requested behavior in `Planned Changes`.
-- Before code, require every changed in-scope required AID to include an observable verification condition or invariant in the same meaning item, and require the domain development-quality reviewer plus any applicable risk/contract reviewer to PASS.
-- Implementation-basis docs review must FAIL and code implementation must not begin when a changed in-scope required behavior lacks its required AID or that AID lacks a same-item observable verification condition or invariant. The looser context depth of ordinary Atomic Docs does not apply to these approved changes.
-- Do not bypass `atomic-docs` setup, docs-root discovery, criteria approval, docs write scope approval, Goal gate, writer/reviewer cycle, post-write gate, language policy, source-baseline, judgment label, AID, `atom_key`, or graph rules.
-- If `.stageflow/atomic-docs.json`, the managed docs root, or `project/atomization-criteria.md` is missing or unapproved, follow the `atomic-docs` bootstrap/criteria flow and stop for approval before docs generation or code implementation.
-- Before initial implementation-basis docs, final docs, or compliance work reuses a linked Atomic Docs request, accept only pre-Goal bootstrap state with no `context_selection` or post-Goal exact string `context_selection.version: "5"`. Reject missing, non-string, v1-v4, future, unknown, or unversioned post-Goal selection; do not mutate, resume, migrate, backfill, or dual-read it. Create a new version-5 Atomic Docs request under the existing approval/Goal gates.
-- Keep the managed docs write scope separate from code implementation approval. Writing docs does not automatically approve code changes.
-- If the written docs still contain blocking `confirmation_needed` gaps for the requested behavior, ask the user to resolve them before implementing that behavior.
-- After code implementation, run `Intent Compliance Review` and `Flow / Unexpected Issue Review`, summarize the implementation result for the user, and require explicit user approval before final atomic-docs update.
-- During implementation review, draft `## 구현 검증` in the linked Atomic Docs operation's `.stageflow/atomic-docs/requests/<request-id>/post-write-review.md`. Record docs and implementation basis once, then only changed in-scope required AIDs as explicit `[AID-REF:<value>]` consumers with implementation evidence, validation evidence, and verdict or gap.
-- After that approval, update final atomic docs through the existing `atomic-docs` gates; remove the completed delta from `Planned Changes` and add a concise realization under `Current Implementation` with source evidence and validation basis, while preserving the durable meaning in its owning `Outcomes`, `Boundaries`, or `Rules` section.
-- After final docs update, finalize that same `## 구현 검증` section during docs/code compliance. Do not copy the table into atoms, project inventory, `work-state.json`, or a separate trace file.
-- Final docs/code compliance must FAIL when any changed in-scope required AID lacks its definition, explicit `[AID-REF:...]` consumer row, implementation evidence, validation evidence, or verdict/gap.
-- Do not record out-of-plan changes, changed implementation behavior, or discovered pre-existing issues as confirmed behavior before user approval.
+Do not create operation state, a parallel compliance report, or another trace/control artifact.
 
-## Required Reference
+## Requirement Rules
 
-Read `references/implementation-flow.md` before taking action. It defines the required sequence from requirement intake through docs write approval, implementation, implementation review, final docs update, and compliance review.
+- A RID appears exactly once and only in the owning Atom's `Changes`.
+- The RID item states the required outcome or invariant clearly enough to implement and review.
+- Use `Open Questions` for a decision that still blocks a trustworthy implementation basis. Stop for the user rather than guessing.
+- Do not describe unimplemented behavior as current `Implementation`, durable `Contracts`, or established `Boundaries`.
+- Code scope is limited to the approved RIDs and necessary supporting changes.
+- Do not record out-of-scope implementation as approved product behavior.
 
-When writing or updating managed docs, also load `skills/atomic-docs/SKILL.md` and only the `atomic-docs` references it routes for the current docs operation.
+## Review Rules
 
-## User-Facing Approval Gate
+The docs review follows Atomic Docs: one independent semantic reviewer, one correction, and one recheck of the original findings.
 
-After the atomic docs write/review step and before code changes, show the user:
+The implementation review checks:
 
-- the changed or newly written docs paths
-- a concise behavior summary from those docs
-- any remaining `Gaps`, `confirmation_needed`, or out-of-scope items
-- the exact implementation basis you will follow
+- every approved RID has corresponding implementation evidence
+- the resulting behavior matches its documented outcome or invariant
+- relevant data flow, validation, state changes, side effects, and failure behavior are coherent
+- tests or targeted validation cover the material change
+- no material out-of-scope behavior was introduced
 
-Then ask for explicit approval to implement from those docs. Continue to code only after the user gives a clear positive approval.
+If implementation review fails, correct the implementation and rerun relevant validation before presenting the result. User approval of the result is still required before final docs promotion.
 
-## Implementation Basis
+## Completion
 
-During code implementation, compare every product decision and observable behavior change against the approved docs. Read source for architecture and implementation mechanics. If implementation reveals an unstated product rule, contract, verification condition, or conflict, return to the docs update/approval step instead of guessing in code.
-
-The implementation-verification table is scoped to the changed required AIDs, not every atom or AID in the project. If the docs or implementation basis changes, recheck only affected rows.
-
-## Final Docs Update Gate
-
-After implementation review, show the user the implementation summary, items implemented exactly as approved docs specified, items changed from plan, out-of-plan changes or discovered pre-existing issues, and final atomic docs paths/update contents. Only after explicit approval may a completed delta leave `Planned Changes` and receive its concise source realization in `Current Implementation`; its durable meaning stays in the owning section.
+Completed work has no RID left. Durable behavior belongs in `Contracts` or `Boundaries`; current realization and exact source anchors belong in `Implementation` and `Sources`. Report final docs paths, code paths, validation, review results, and remaining `Open Questions`.

@@ -123,27 +123,37 @@ Simple Workflow는 `.simple/requests/<request-id>/plan.md`를 중심으로 진�
 
 ## Atomic Docs
 
-새 문서화:
+전체 문서 생성 또는 교체:
 
 ```text
-atomic-docs로 이 프로젝트 문서화를 시작해줘.
+atomic-docs update all로 이 프로젝트 문서를 작성해줘.
 ```
 
-코드 변경 반영:
+기준 커밋 이후 변경 반영:
 
 ```text
-atomic-docs로 최근 코드 변경사항을 문서에 반영해줘.
+atomic-docs update changed로 최근 코드 변경사항을 문서에 반영해줘.
 ```
 
-의도/구현/갭 점검:
+대상 지정 갱신:
 
 ```text
-atomic-docs로 현재 구현 의도와 갭을 점검해줘.
+atomic-docs update targeted로 checkout-payment Atom만 갱신해줘.
+```
+
+쓰기 없는 점검:
+
+```text
+atomic-docs inspect로 현재 문서와 소스의 차이를 점검해줘.
 ```
 
 ## 생성 위치
 
 ```text
-.stageflow/requests/<request-id>/
 .stageflow/atomic-docs.json
+<docs-root>/project/project-goal.md
+<docs-root>/project/project-glossary.md  # 필요한 공유 용어가 있을 때만
+<docs-root>/<domain>/*-atom.md
 ```
+
+Atomic Docs는 위 config와 managed docs 외에 별도 request/work/review operation 디렉터리를 만들지 않습니다.

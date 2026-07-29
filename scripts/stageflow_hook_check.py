@@ -1502,11 +1502,7 @@ def normalize_tool_path(value: str) -> str:
 def is_atomic_docs_state_path(value: str) -> bool:
     normalized = normalize_tool_path(value).lower()
     return (
-        normalized == ".stageflow/atomic-docs"
-        or normalized.startswith(".stageflow/atomic-docs/")
-        or normalized == ".stageflow/atomic-docs.json"
-        or normalized.endswith("/.stageflow/atomic-docs")
-        or "/.stageflow/atomic-docs/" in normalized
+        normalized == ".stageflow/atomic-docs.json"
         or normalized.endswith("/.stageflow/atomic-docs.json")
     )
 
