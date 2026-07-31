@@ -4,13 +4,24 @@
 
 `inspect` is read-only. Read config, selected docs, and relevant source. Report stale claims, unresolved questions, relationship issues, and suggested update scope. Do not write configuration, managed docs, or operation state.
 
+## Writing Pass
+
+Apply this pass only within the selected and directly inspected scope. If a natural owner lies
+outside that scope, report the relationship and suggested update scope instead of expanding
+automatically.
+
+1. When the project goal is selected or materially affected, identify project-level observable outcomes for the intended human or system consumers.
+2. For each selected Atom, assign each durable rule to its natural Atom owner without inventing a shared hub.
+3. Separate contracts that must survive implementation changes from useful current mechanics.
+4. Remove copied generic mechanics while preserving domain-specific consequences and additional conditions.
+
 ## Update All
 
 Use `update all` for first creation or a complete replacement:
 
 1. Confirm the accepted storage target and managed write set.
 2. Capture a stable primary-source commit under `docs-root-and-config.md`.
-3. Inspect project purpose, user roles, domain vocabulary, durable domains, contracts, and implementation anchors. Build the general glossary from terms a new developer needs to understand the project, including terms owned by only one proposed Atom, under `atomic-document-contract.md`.
+3. Inspect project purpose, intended human or system consumers, project-level observable outcomes, domain vocabulary, durable domains, natural contract owners, and implementation anchors. Build the general glossary from terms a new developer needs to understand the project, including terms owned by only one proposed Atom, under `atomic-document-contract.md`.
 4. Write `project-goal.md`, conditional glossary, and the complete Atom set.
 5. Validate structure.
 6. Run the single semantic review in `reviewer-perspectives.md`.

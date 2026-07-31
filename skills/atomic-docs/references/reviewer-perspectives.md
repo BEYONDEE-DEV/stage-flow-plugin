@@ -15,6 +15,17 @@ The reviewer answers only:
 3. Are `Boundaries`, responsibilities, exclusions, handoffs, and contracts clear?
 4. Do `depends_on`, source locators, and active RIDs express the selected change consistently?
 
+Return `FAIL` when a material project `Success` statement is filled with generic implementation
+mechanics instead of project-level outcomes observable by its intended human or system consumers,
+unless the technical property is itself an intended project result. Return `FAIL` when a generic
+rule with a natural owning Atom is materially copied across dependent Atoms, or when
+`Contracts` contains current mechanics with no reason they must survive an implementation change.
+
+Do not require an artificial shared Atom, remove a dependent Atom's domain-specific consequence or
+additional condition, or reject an item merely because it mentions a route, page size, modal, query
+token, runtime setting, or another implementation-shaped name. Judge whether another consumer can
+observe or rely on it and whether retaining it helps a developer decide a change.
+
 When a glossary exists, questions 1 through 3 also cover all vocabulary exposed by the project goal and the selected Atom/source scope. Return `FAIL` when a material project term needed by a new developer is omitted, a definition is circular, vague, source-symbol-only, or inconsistent with project usage, related terms are merged in a misleading way, or artificial terms are invented only to classify lifecycle levels. A term does not need cross-Atom use to qualify. Do not require glossary ownership, source-of-truth, distinction, or source-locator columns; the glossary contains only `Term` and `Definition`, while source fidelity is checked from the review inputs.
 
 Return `PASS` or `FAIL` with concrete findings and exact affected paths or Atom keys. Do not add another reviewer, audit, challenge, or source-wide completeness pass.

@@ -127,6 +127,57 @@ class AtomicDocsSkillTests(unittest.TestCase):
         self.assertIn("unique non-empty `Term` and `Definition` cells", validation)
         self.assertIn("glossary coverage or definition accuracy", validation)
 
+    def test_writer_and_reviewer_share_minimal_decision_contract(self) -> None:
+        skill = read(SKILL)
+        contract = read(REFS / "atomic-document-contract.md")
+        flow = read(REFS / "refresh-flow.md")
+        reviewer = read(REFS / "reviewer-perspectives.md")
+        skill_flat = " ".join(skill.split())
+        contract_flat = " ".join(contract.split())
+        flow_flat = " ".join(flow.split())
+        reviewer_flat = " ".join(reviewer.split())
+
+        for required in (
+            "project-level outcomes observable by the intended human or system consumers",
+            "natural owning Atom",
+            "must survive an implementation change",
+            "domain-specific result or additional condition",
+            "Do not create a shared Atom solely to deduplicate mechanics",
+        ):
+            self.assertIn(required, skill_flat)
+
+        for required in (
+            "project-level outcomes observable by the intended human or system consumers",
+            "Do not assume every project has a human UI",
+            "must survive a change of implementation",
+            "natural Atom that owns the rule",
+            "domain-specific consequence or additional condition",
+            "Classify content by meaning, not vocabulary",
+            "put it in `Implementation` or omit it",
+        ):
+            self.assertIn(required, contract_flat)
+
+        for required in (
+            "selected and directly inspected scope",
+            "instead of expanding automatically",
+            "project-level observable outcomes",
+            "natural Atom owner without inventing a shared hub",
+            "Separate contracts that must survive implementation changes",
+            "Remove copied generic mechanics",
+        ):
+            self.assertIn(required, flow_flat)
+
+        for required in (
+            "Return `FAIL` when a material project `Success` statement",
+            "generic rule with a natural owning Atom is materially copied",
+            "`Contracts` contains current mechanics",
+            "Do not require an artificial shared Atom",
+            "domain-specific consequence or additional condition",
+            "reject an item merely because it mentions a route",
+            "whether another consumer can observe or rely on it",
+        ):
+            self.assertIn(required, reviewer_flat)
+
     def test_config_is_exact_v2_without_baseline_artifact(self) -> None:
         text = read(REFS / "docs-root-and-config.md")
         for required in (

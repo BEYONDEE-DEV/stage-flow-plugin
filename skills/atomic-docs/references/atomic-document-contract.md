@@ -25,6 +25,13 @@ Domain directories and Atom filenames use lower-kebab names. Do not create perma
 
 Every section is meaningful. `Sources` contains at least one valid source locator.
 
+Write `Success` as project-level outcomes observable by the intended human or system consumers. It
+must describe what successful use or operation of the project makes possible, not merely list
+generic request, state-management, validation, or rendering mechanics. A technical property belongs
+in `Success` when that property is itself an intended project-level result, such as the result of a
+library, service, or internal platform. Otherwise keep it in the Atom that naturally owns the
+contract. Do not assume every project has a human UI.
+
 ## Project Glossary
 
 Create `project/project-glossary.md` when the project has at least one term that a new developer needs defined to understand its requirements, docs, UI, API, or business behavior. This is a general project glossary, not a cross-Atom relationship table or evidence ledger. It contains `## Terms` and this exact table:
@@ -82,11 +89,22 @@ All sections are required. `Purpose`, `Boundaries`, `Contracts`, `Implementation
 
 - `Purpose`: why this area exists and the outcome it owns.
 - `Boundaries`: included responsibility, explicit exclusions, and handoffs.
-- `Contracts`: durable rules, externally observable behavior, invariants, and shared obligations.
-- `Implementation`: concise current orientation: entry points, important flow, persistence, integrations, or constraints.
+- `Contracts`: rules, externally observable behavior, invariants, and shared obligations that must survive a change of implementation.
+- `Implementation`: concise current orientation: entry points, important flow, persistence, integrations, constraints, or other current mechanics that help a developer find and change the code.
 - `Sources`: exact source evidence.
 - `Changes`: active approved Atomic Impl deltas only.
 - `Open Questions`: unresolved decisions that materially affect development.
+
+Before retaining a contract, identify the natural Atom that owns the rule. State a generic shared
+rule in that Atom instead of copying the same mechanics into every dependent Atom. A dependent Atom
+may still state its domain-specific consequence or additional condition. Do not create a shared
+Atom solely to deduplicate mechanics, and do not remove context that is necessary to decide a
+change in the dependent domain.
+
+Classify content by meaning, not vocabulary. A route, page size, modal, query token, runtime
+setting, or similar item may be a contract when another consumer can observe or rely on it. When it
+only describes the current way the code works, put it in `Implementation` or omit it if the source
+already makes it obvious and it does not help a developer decide a change.
 
 ## Source Locators
 
