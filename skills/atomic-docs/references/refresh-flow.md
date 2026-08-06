@@ -33,12 +33,22 @@ An incomplete or failed all-update must not advance the commit.
 
 ## Update Changed
 
-Use `git diff --name-only <last_full_source_commit>..HEAD` for the primary source. For each changed file:
+Preserve `last_full_source_commit` and capture the target primary-source `HEAD`. Before any write, require the current control file and managed docs worktree to be clean; in `submodule` mode also require the documentation submodule worktree and containing gitlink to be clean. Pre-existing dirty config/docs/submodule state stops the update rather than becoming part of the accepted current-operation write set.
+
+Use `git diff --name-only <previous-commit>..<target-HEAD>`. Before source-impact selection:
+
+- report and exclude a baseline-only `.stageflow/atomic-docs.json` change
+- report and exclude paths below `docs_root` and the containing documentation-submodule gitlink from source seeds; inspect their committed path diff or old-to-new submodule commit diff and include those changed docs in bounded semantic reconciliation
+- stop when another config field changed; use `update all` or an explicit config update with source inspection
+
+When only Atomic Docs config/docs output remains, validate current config/docs, semantically reconcile any committed managed-doc changes, report no primary source impact, and do not rewrite the commit value. For every remaining changed primary-source file:
 
 1. Find Atoms whose exact `Sources` locator names that file. These are seed Atoms.
 2. Add each seed's direct `depends_on` targets.
 3. Add Atoms that directly name a seed in their own `depends_on`.
 4. Inspect the changed file for new responsibility or contracts that existing locators do not cover.
+
+Every changed primary-source file must receive a reliable source-impact classification. A source change may be classified as requiring no managed-doc edit, but an unmapped material responsibility or uncertain impact stops the update rather than advancing the commit.
 
 Update only this bounded set unless the user expands scope. Report:
 
@@ -52,7 +62,16 @@ This is one-hop impact selection, not proof of complete closure. Auxiliary sourc
 
 Update glossary definitions when the changed source or selected Atoms introduce, change, or retire project vocabulary. Judge coverage only within the inspected changed scope.
 
-Stop and recommend `update all` or explicit `update targeted` when the baseline is null or unreachable, the primary tracked source is dirty, `HEAD` changes during the operation, or changed files cannot be mapped reliably.
+After the bounded writing pass, or after recording a source-impact no-doc result:
+
+1. Run structural validation.
+2. Run the single semantic review over the selected source, complete managed-docs diff, any no-doc decision, and any committed managed-doc range. Apply the existing one-correction rule.
+3. Run structural validation after any correction.
+4. Recheck that `HEAD` equals the captured target and tracked primary source outside the exact current-operation config/docs changes is clean.
+5. Set `last_full_source_commit` to the captured target, including for a successful no-doc result.
+6. Validate the final config and docs state.
+
+Stop when the baseline is null or unreachable, any required starting worktree is dirty, tracked primary source outside the current-operation write set is dirty, `HEAD` changes, a material changed file cannot be classified reliably, semantic reconciliation or review does not pass, or validation fails. Restore the previous commit value, validate the recovered state, and report the recovery instead of advancing the commit.
 
 ## Update Targeted
 

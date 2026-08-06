@@ -1,10 +1,12 @@
 # Reviewer Perspective
 
-Assign one independent semantic reviewer after the complete managed-docs diff is ready. Give the reviewer:
+Assign one independent semantic reviewer after the complete managed-docs diff is ready, before accepting an `update changed` source-impact no-doc result, or when reconciling a committed managed-doc range. Give the reviewer:
 
 - the requested update scope
 - the complete managed-docs diff
 - the changed or selected source files
+- the reason no managed-doc edit is needed when the proposed diff is empty
+- the committed managed-doc path diff or old-to-new documentation-submodule commit diff when present
 - exact auxiliary source content at the configured revision when used
 - validator output
 
@@ -14,6 +16,8 @@ The reviewer answers only:
 2. Are material claims faithful to inspected source within the selected scope?
 3. Are `Boundaries`, responsibilities, exclusions, handoffs, and contracts clear?
 4. Do `depends_on`, source locators, and active RIDs express the selected change consistently?
+5. When changed source produced no docs edit, is that disposition supported without leaving durable purpose, boundary, contract, implementation orientation, or project vocabulary stale?
+6. Do committed managed-doc changes remain faithful to current source and coherent with directly affected docs without being misclassified as source seeds?
 
 Return `FAIL` when a material project `Success` statement is filled with generic implementation
 mechanics instead of project-level outcomes observable by its intended human or system consumers,

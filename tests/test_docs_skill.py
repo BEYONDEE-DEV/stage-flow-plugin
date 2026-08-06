@@ -215,6 +215,77 @@ class AtomicDocsSkillTests(unittest.TestCase):
         ):
             self.assertIn(required, flow)
 
+    def test_successful_changed_update_advances_existing_commit_key(self) -> None:
+        skill = read(SKILL)
+        config = read(REFS / "docs-root-and-config.md")
+        flow = read(REFS / "refresh-flow.md")
+        usage = read(ROOT / "USAGE.ko.md")
+
+        for required in (
+            "advance that same commit key only after the complete changed update succeeds",
+            "Preserve the previous `last_full_source_commit`",
+            "Set `last_full_source_commit` to the captured target even when the successful source-impact result required no docs edit",
+            "restore the previous commit value",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "last reconciled by a successful `update all` or `update changed`",
+            "Do not add a separate baseline file or an incremental-cursor file",
+            "A reviewed conclusion that none of those source changes requires a managed-doc edit is still a successful changed update",
+        ):
+            self.assertIn(required, config)
+        for required in (
+            "capture the target primary-source `HEAD`",
+            "including for a successful no-doc result",
+            "Restore the previous commit value",
+        ):
+            self.assertIn(required, flow)
+        self.assertIn("다음 실행은 그 이후 변경만 확인합니다", usage)
+        self.assertNotIn("last_processed_source_commit", skill + config + flow)
+
+    def test_changed_update_distinguishes_source_impact_from_own_outputs(self) -> None:
+        skill = read(SKILL)
+        config = read(REFS / "docs-root-and-config.md")
+        flow = read(REFS / "refresh-flow.md")
+        reviewer = read(REFS / "reviewer-perspectives.md")
+
+        for required in (
+            "baseline-only `.stageflow/atomic-docs.json` changes",
+            "configured documentation-submodule gitlink",
+            "If any config field other than `last_full_source_commit` changed",
+            "If no primary source-impact file remains",
+            "include its changed docs in bounded semantic reconciliation instead of guessing who wrote them",
+            "A pre-existing dirty value or document is not an approved write-set exception",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "`last_full_source_commit` is the only changed field",
+            "Any other config field change is meaningful configuration",
+            "containing documentation-submodule gitlink",
+            "do not rewrite the commit value merely to follow those output commits",
+            "Do not infer authorship or prior acceptance from their path",
+        ):
+            self.assertIn(required, config)
+        for required in (
+            "When only Atomic Docs config/docs output remains",
+            "Every changed primary-source file must receive a reliable source-impact classification",
+            "material changed file cannot be classified reliably",
+            "Pre-existing dirty config/docs/submodule state stops the update",
+        ):
+            self.assertIn(required, flow)
+        self.assertIn("source-impact no-doc result", reviewer)
+        self.assertIn("the reason no managed-doc edit is needed", reviewer)
+        self.assertIn("old-to-new documentation-submodule commit diff", reviewer)
+        self.assertNotIn("known accepted", skill + config + flow)
+
+        start_clean = skill.index("Before writing, separately require")
+        source_diff = skill.index("Diff the previous commit to the captured target")
+        baseline_write = skill.index("Set `last_full_source_commit` to the captured target")
+        final_validation = skill.index("then validate the final config and docs state", baseline_write)
+        self.assertLess(start_clean, source_diff)
+        self.assertLess(source_diff, baseline_write)
+        self.assertLess(baseline_write, final_validation)
+
     def test_single_bounded_reviewer_has_one_correction(self) -> None:
         text = read(REFS / "reviewer-perspectives.md")
         for required in (

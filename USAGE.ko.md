@@ -135,6 +135,8 @@ atomic-docs update all로 이 프로젝트 문서를 작성해줘.
 atomic-docs update changed로 최근 코드 변경사항을 문서에 반영해줘.
 ```
 
+성공한 `update changed`는 처리한 source `HEAD`를 기존 `last_full_source_commit`에 기록하므로 다음 실행은 그 이후 변경만 확인합니다. source 변경을 검사한 결과 문서 수정이 필요 없는 경우도 성공 기준점을 전진시키지만, Atomic Docs config·managed docs·문서 submodule 포인터 변경만 있는 경우에는 기준점을 다시 쓰지 않습니다. 커밋된 managed docs 변경은 작성자를 추측하지 않고 별도 문서 변경 범위로 검사하며, 작업 전 config·managed docs·문서 submodule이 dirty하면 중단합니다. 다른 config 설정 변경이나 신뢰할 수 없는 source mapping은 자동으로 넘기지 않고 `update all` 또는 명시적 처리가 필요합니다.
+
 대상 지정 갱신:
 
 ```text
