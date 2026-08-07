@@ -249,16 +249,34 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
             raise ManifestError(f"slot {slot_name!r} repository {name!r} rotation source mismatch")
     if "last_rotation" in identity:
         receipt = identity["last_rotation"]
-        receipt_fields = {
+        legacy_receipt_fields = {
             "target_branch",
             "target_branch_generation",
             "source_sha",
             "target_head_sha",
             "result_tree_sha",
         }
+        receipt_fields = legacy_receipt_fields | {
+            "from_branch",
+            "from_branch_generation",
+            "from_head_sha",
+        }
+        invalid_source_evidence = False
+        if isinstance(receipt, dict) and set(receipt) == receipt_fields:
+            invalid_source_evidence = (
+                not isinstance(receipt["from_branch"], str)
+                or not receipt["from_branch"]
+                or receipt["from_branch"] == receipt["target_branch"]
+                or type(receipt["from_branch_generation"]) is not int
+                or receipt["from_branch_generation"] <= 0
+                or receipt["from_branch_generation"] + 1
+                != receipt["target_branch_generation"]
+                or not is_object_id(receipt["from_head_sha"])
+            )
         if (
             not isinstance(receipt, dict)
-            or set(receipt) != receipt_fields
+            or frozenset(receipt)
+            not in {frozenset(legacy_receipt_fields), frozenset(receipt_fields)}
             or not isinstance(receipt["target_branch"], str)
             or not receipt["target_branch"]
             or type(receipt["target_branch_generation"]) is not int
@@ -270,6 +288,7 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
             or receipt["target_branch"] != identity["branch"]
             or receipt["target_branch_generation"] != identity["branch_generation"]
             or receipt["source_sha"] != identity["branch_base_sha"]
+            or invalid_source_evidence
         ):
             raise ManifestError(
                 f"slot {slot_name!r} repository {name!r} has an invalid rotation receipt"
@@ -1087,7 +1106,7 @@ def complete_rotation(
         or not is_object_id(result_tree_sha)
     ):
         raise ManifestError(f"repository {repo!r} rotation completion has invalid object evidence")
-    receipt = {
+    requested_receipt = {
         "target_branch": target_branch,
         "target_branch_generation": target_generation,
         "source_sha": source_sha,
@@ -1096,11 +1115,13 @@ def complete_rotation(
     }
     rotation = identity.get("rotation")
     if rotation is None:
+        receipt = identity.get("last_rotation")
         if (
             identity["branch"] == target_branch
             and identity["branch_generation"] == target_generation
             and identity["branch_base_sha"] == source_sha
-            and identity.get("last_rotation") == receipt
+            and isinstance(receipt, dict)
+            and all(receipt.get(field) == value for field, value in requested_receipt.items())
         ):
             return slot
         raise ManifestError(f"repository {repo!r} has no matching completed rotation")
@@ -1113,6 +1134,12 @@ def complete_rotation(
         or rotation["result_tree_sha"] != result_tree_sha
     ):
         raise ManifestError(f"repository {repo!r} rotation completion mismatch")
+    receipt = {
+        "from_branch": rotation["from_branch"],
+        "from_branch_generation": rotation["from_branch_generation"],
+        "from_head_sha": rotation["from_head_sha"],
+        **requested_receipt,
+    }
     identity["branch"] = rotation["target_branch"]
     identity["branch_generation"] = rotation["target_branch_generation"]
     identity["branch_base_sha"] = rotation["source_sha"]

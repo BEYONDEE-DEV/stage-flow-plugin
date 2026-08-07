@@ -32,7 +32,7 @@ An explicit write-keyword request authorizes that keyword's routine writes. `sta
 
 Do not ask for routine commands, task-related path lists, generated Korean text, or manifest-proven transitions. Ask one consolidated question only for conflicting permanent facts, ambiguous/secret/unrelated content, an inseparable PR correction, stale-lock recovery, or conflict recovery.
 
-Never reset, clean, force checkout, force push, rewrite published history, amend, stash, auto-resolve conflicts, or delete a remote branch. A clean internal correction worktree and its unpublished temporary local branch may be removed after exact remote and manifest verification. A journaled internal generation worktree may be populated from the exact result tree and removed without force only after its source/index/tree/HEAD are proven. These are bounded routine cleanups, not slot release.
+Never reset, clean, force checkout, force push to update a branch, rewrite published history, amend, stash, or auto-resolve conflicts. A clean internal correction worktree and its unpublished temporary local branch may be removed after exact remote and manifest verification. A journaled internal generation worktree may be populated from the exact result tree and removed without force only after its source/index/tree/HEAD are proven. During explicit `sync`, the old submitted local branch and its remote ref may also be removed only after exact merged-PR, completed-rotation, worktree, and ref proof. The remote operation is an expected-head deletion lease, not permission to update or rewrite a branch. These are bounded routine cleanups, not slot release.
 
 ## Roles And Generation-Branch Flow
 
@@ -266,7 +266,7 @@ Commit clearly task-related future work first. Fetch and pin the stored remote s
 
 Run the common rotation before the first remote publication. After rotation, validate `pinned-source...active-HEAD` contains only future work. If empty, do not push or create a PR; the fresh branch at pinned source remains a successful synchronized no-op. Otherwise follow Submit NONE's push/create/verify flow and immediately record the new PR generation with the new submitted HEAD boundary.
 
-Old submitted branches and remote PR branches are not reused or automatically deleted.
+Old submitted branches and remote PR branches are not reused. `submit` does not delete them; an explicit later `sync` performs the exact merged-branch cleanup after it proves the continuation is preserved.
 
 ## Common Generation Rotation
 
@@ -329,7 +329,9 @@ python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
   --target-head-sha "<verified-target-sha>" --result-tree-sha "<result-tree-sha>"
 ```
 
-Completion sets active branch/generation/base to target/next/source, stores an exact `last_rotation` receipt containing target commit and result tree, and removes only the journal. A retry without a journal succeeds only when every supplied value exactly matches that receipt; it never treats an unrelated no-journal state or a moved target ref as completed.
+Completion sets active branch/generation/base to target/next/source, stores an exact `last_rotation` receipt containing the source branch/head plus target commit and result tree, and removes only the journal. Older schema-5 receipts without source fields remain readable but cannot authorize local submitted-branch deletion. A retry without a journal succeeds only when every supplied target value exactly matches that receipt; it never treats an unrelated no-journal state or a moved target ref as completed.
+
+Rotation itself never deletes the old submitted branch. For `MERGED` sync, keep its submission and `last_rotation` evidence intact until the cleanup helper has either deleted or confirmed absent both old refs. If cleanup is incomplete, retry it before any later source-advance rotation could replace the last-rotation receipt.
 
 Crash retry rules:
 
@@ -402,8 +404,29 @@ Do not use plain `git pull`, merge commits, rebase, reset, branch switching, or 
 
 - **NONE**: use `branch_base_sha` as boundary. If pinned source equals branch base, no-op. If advanced, rotate net unsubmitted work to the next local branch generation; do not push or create a PR.
 - **OPEN**: verify exact PR/base/head and fetch source, then report `PR 병합 대기`. Do not rotate, switch, stage, commit, push, or mutate submission evidence even when source advanced.
-- **MERGED, not yet rotated** (`branch == submission.head_branch`): use `submission.continuation_boundary_sha` and rotate future work onto pinned source.
-- **MERGED, already rotated** (`branch != submission.head_branch`): use `branch_base_sha`; rotate again only if pinned source advanced.
+- **MERGED, not yet rotated** (`branch == submission.head_branch`): use `submission.continuation_boundary_sha`, rotate future work onto pinned source, complete the rotation receipt, then clean the old submitted branch.
+- **MERGED, already rotated** (`branch != submission.head_branch`): clean or retry cleanup of the submitted branch first. Only after both old refs are absent, use `branch_base_sha` and rotate again if pinned source advanced.
 - **mixed bundle**: run each rule independently. A waiting or dirty OPEN repository does not stop an eligible clean NONE/MERGED sibling. A dirty repository or repository-local 3-way conflict is reported `failed/skipped unchanged` and does not undo recorded sibling success.
 
 Dirty `sync` does not stash or make a WIP commit. Report the dirty paths unchanged. After the relevant PR is merged, a later `submit` may commit clearly task-related paths with Korean text and call the same common rotation.
+
+### Cleanup Of Submitted Branches
+
+This cleanup is part of explicit `sync`, never `status`, `pull`, ordinary `OPEN`, or a read-only inspection. Immediately before it, query the recorded PR again with the exact repository and obtain `number`, `url`, `state`, `isDraft`, `baseRefName`, `headRefName`, `headRefOid`, `mergedAt`, and `mergeCommit.oid`. Require non-draft `MERGED`, exact manifest base/head/head SHA, a non-null merge time/commit, and the fetched source ref to contain that merge commit. Do not require the PR head commit itself to be an ancestor of source: a squash merge intentionally does not have that ancestry.
+
+After the rotation receipt is complete and while the exact slot operation lock remains held, run:
+
+```bash
+python3 "<skill-dir>/scripts/cleanup_merged_branch.py" \
+  --root "<workspace-root>" --slot "<slot>" --repository "<repo>" \
+  --token "<held-operation-lock-token>" \
+  --github-number "<number>" --github-url "<url>" \
+  --github-state MERGED --github-is-draft false \
+  --github-base "<baseRefName>" --github-head "<headRefName>" \
+  --github-head-sha "<headRefOid>" --github-merged-at "<mergedAt>" \
+  --github-merge-commit "<mergeCommit.oid>" --execute
+```
+
+The helper derives the repository path, remote, source, active branch, and submitted branch only from the slot manifest. It requires a clean exact active development branch, no active rotation journal, and no checkout of the old branch in any worktree. When the old local ref exists, it must still equal the receipt's exact `from_head_sha`; the helper also recomputes the explicit-boundary 3-way result and requires it to equal both the completed rotation receipt and active generation tree. Therefore even a tree-identical new commit on the old branch blocks deletion. It separately requires the remote ref, when present, to equal the recorded observed PR head. A corrected remote PR head and the local B-continuation head may differ and are checked against their separate manifest values.
+
+Deletion order is remote then local. The remote deletion uses only `--force-with-lease=refs/heads/<head>:<observed-head>` with a delete refspec, and the local deletion uses `git update-ref -d refs/heads/<head> <observed-local-head>`; never use blind `git push --delete`, `git branch -D`, or an unleased deletion. Re-read actual refs after each command. If GitHub already deleted the remote branch, continue with the locally proven branch. If one ref was deleted before a crash, the next `sync` treats it as an exact idempotent partial state. If a ref advanced, became checked out, the active tree moved, or proof is missing, preserve every remaining ref, report the repository-local blocker, and do not perform another rotation.

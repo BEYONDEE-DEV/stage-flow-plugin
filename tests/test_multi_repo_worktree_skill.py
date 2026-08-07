@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ REFERENCE = SKILL_DIR / "references" / "worktree-operations.md"
 INSPECTOR = SKILL_DIR / "scripts" / "inspect_worktrees.py"
 SLOT_MANIFEST = SKILL_DIR / "scripts" / "slot_manifest.py"
 GENERATION_PREPARER = SKILL_DIR / "scripts" / "prepare_generation_branch.py"
+MERGED_BRANCH_CLEANER = SKILL_DIR / "scripts" / "cleanup_merged_branch.py"
 OPENAI_YAML = SKILL_DIR / "agents" / "openai.yaml"
 PLUGIN_JSON = ROOT / ".codex-plugin" / "plugin.json"
 OID_1 = "1" * 40
@@ -75,7 +77,9 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("Do not ask for routine command", text)
         self.assertIn("Ask one consolidated question only", text)
         self.assertIn("records each confirmed remote source SHA", text)
-        self.assertIn("Never reset, clean, force checkout, force push", text)
+        self.assertIn("Never reset, clean, force checkout, force push to update a branch", text)
+        self.assertIn("exact remote deletion lease", text)
+        self.assertIn("compare-and-delete local ref", text)
         self.assertIn("`sync` runs only in the development bundle", text)
         self.assertIn("inseparable PR correction", text)
         for obsolete in [
@@ -103,6 +107,7 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
             "## Retry, Legacy Recovery, And Partial Results",
             "## Pull",
             "## Sync",
+            "### Cleanup Of Submitted Branches",
             "`help`",
             "`status`",
             "`create`",
@@ -285,6 +290,24 @@ class MultiRepoWorktreeSkillTests(unittest.TestCase):
         self.assertIn("Do not use plain `git pull`", reference)
         self.assertIn("never changes the original worktree's checked-out state", reference)
         self.assertIn("It never invokes `pull`", reference)
+        self.assertIn("cleanup_merged_branch.py", skill)
+        self.assertIn("cleanup_merged_branch.py", reference)
+        self.assertIn("Do not require the PR head commit itself to be an ancestor of source", reference)
+        self.assertIn("git update-ref -d", reference)
+        self.assertIn("--force-with-lease=refs/heads/<head>:<observed-head>", reference)
+
+    def test_merged_branch_cleaner_uses_exact_ref_deletion_primitives(self) -> None:
+        text = read(MERGED_BRANCH_CLEANER)
+        tree = ast.parse(text)
+
+        self.assertIn('"merge-base",\n        "--is-ancestor",\n        merge_commit,', text)
+        self.assertIn('"merge-tree",\n        "--write-tree"', text)
+        self.assertIn('"push", lease, remote, f":refs/heads/{old_branch}"', text)
+        self.assertIn('"update-ref", "-d", local_ref, local_head', text)
+        self.assertIn('require_operation_lock(args.root, args.slot, args.token)', text)
+        self.assertIn('if not args.execute:', text)
+        self.assertNotIn('"branch", "-D"', text)
+        self.assertIsInstance(tree, ast.Module)
 
     def test_status_output_policy_uses_single_line_repo_summary(self) -> None:
         skill = read(SKILL)
@@ -1820,6 +1843,9 @@ with module["manifest_lock"](path, timeout_seconds=1.0):
             self.assertEqual(identity["branch_generation"], 2)
             self.assertEqual(identity["branch_base_sha"], next_source)
             self.assertNotIn("rotation", identity)
+            self.assertEqual(identity["last_rotation"]["from_branch"], "task-a")
+            self.assertEqual(identity["last_rotation"]["from_branch_generation"], 1)
+            self.assertEqual(identity["last_rotation"]["from_head_sha"], local_head)
             self.assertEqual(identity["last_rotation"]["target_head_sha"], result_tree)
             self.assertEqual(identity["submission"]["continuation_boundary_sha"], submitted)
             repeated = self.run_manifest(
@@ -3904,6 +3930,24 @@ class PullAndSyncFlowTests(unittest.TestCase):
             text=True,
         )
 
+    def run_manifest(self, root: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SLOT_MANIFEST), "--root", str(root), *arguments],
+            check=check,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+    def run_cleaner(self, root: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(MERGED_BRANCH_CLEANER), "--root", str(root), *arguments],
+            check=check,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
     def make_remote_fixture(self, root: Path) -> tuple[Path, Path, Path]:
         remote = root / "remote.git"
         seed = root / "seed"
@@ -3930,6 +3974,241 @@ class PullAndSyncFlowTests(unittest.TestCase):
         self.git(seed, "commit", "-am", content.strip())
         self.git(seed, "push", "origin", "main")
         return self.git(seed, "rev-parse", "HEAD").stdout.strip()
+
+    def prepare_squash_merged_cleanup_fixture(self, root: Path) -> dict[str, Any]:
+        remote, seed, original = self.make_remote_fixture(root)
+        slot_path = root / "worktrees" / "slot-1"
+        slot_path.mkdir(parents=True)
+        derived = slot_path / "service-a"
+        self.git(original, "worktree", "add", "-b", "task", str(derived), "main")
+        original_head = self.git(original, "rev-parse", "HEAD").stdout.strip()
+
+        (derived / "a.txt").write_text("submitted A\n", encoding="utf-8")
+        self.git(derived, "add", "a.txt")
+        self.git(derived, "commit", "-m", "작업 A")
+        submitted_head = self.git(derived, "rev-parse", "HEAD").stdout.strip()
+        self.git(derived, "push", "origin", "task")
+
+        (derived / "b.txt").write_text("continued B\n", encoding="utf-8")
+        self.git(derived, "add", "b.txt")
+        self.git(derived, "commit", "-m", "작업 B")
+        local_head = self.git(derived, "rev-parse", "HEAD").stdout.strip()
+
+        (seed / "a.txt").write_text("submitted A\n", encoding="utf-8")
+        (seed / "source.txt").write_text("source after squash\n", encoding="utf-8")
+        self.git(seed, "add", "a.txt", "source.txt")
+        self.git(seed, "commit", "-m", "작업 A 스쿼시 병합")
+        merge_commit = self.git(seed, "rev-parse", "HEAD").stdout.strip()
+        self.git(seed, "push", "origin", "main")
+
+        self.git(derived, "fetch", "--prune", "origin")
+        source = self.git(derived, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+        self.assertEqual(source, merge_commit)
+        self.assertNotEqual(
+            self.git(
+                derived,
+                "merge-base",
+                "--is-ancestor",
+                submitted_head,
+                source,
+                check=False,
+            ).returncode,
+            0,
+        )
+
+        self.run_manifest(
+            root,
+            "initialize",
+            "--slot", "slot-1",
+            "--path", str(slot_path),
+            "--repository", "service-a", "task", "main", "origin", original_head,
+        )
+        self.run_manifest(root, "lock", "--slot", "slot-1", "--token", "sync-a")
+        self.run_manifest(
+            root,
+            "record-batch",
+            "--slot", "slot-1",
+            "--token", "sync-a",
+            "--repository-update", "service-a", "0", "17", "task",
+            submitted_head, submitted_head,
+        )
+
+        plan = json.loads(self.run_preparer(
+            "analyze",
+            "--repo", str(derived),
+            "--from-head", local_head,
+            "--boundary", submitted_head,
+            "--source", source,
+            "--branch-family", "task",
+            "--target-generation", "2",
+        ).stdout)["result"]
+        temporary = generation_temporary_worktree(
+            derived,
+            "task",
+            2,
+            workspace_root=root,
+            repository="service-a",
+        )
+        self.run_manifest(
+            root,
+            "begin-rotation",
+            "--slot", "slot-1",
+            "--token", "sync-a",
+            "--repository-rotation",
+            "service-a", "task", "1", local_head, submitted_head, source,
+            str(plan["source_tree_sha"]), str(plan["target_branch"]), "2",
+            str(plan["result_tree_sha"]), "feat: 작업 B 보존", str(temporary),
+        )
+        created = json.loads(self.run_preparer(
+            "create",
+            "--repo", str(derived),
+            "--source", source,
+            "--result-tree", str(plan["result_tree_sha"]),
+            "--branch-family", "task",
+            "--target-generation", "2",
+            "--message", "feat: 작업 B 보존",
+            "--temporary-worktree", str(temporary),
+            "--workspace-root", str(root),
+            "--slot", "slot-1",
+            "--repository", "service-a",
+        ).stdout)["result"]
+        target = str(plan["target_branch"])
+        target_head = str(created["target_sha"])
+        self.run_manifest(
+            root,
+            "advance-rotation",
+            "--slot", "slot-1",
+            "--token", "sync-a",
+            "--repository", "service-a",
+            "--expected-phase", "planned",
+            "--target-phase", "branch-created",
+        )
+        self.git(derived, "switch", target)
+        self.run_manifest(
+            root,
+            "advance-rotation",
+            "--slot", "slot-1",
+            "--token", "sync-a",
+            "--repository", "service-a",
+            "--expected-phase", "branch-created",
+            "--target-phase", "switched",
+        )
+        self.run_manifest(
+            root,
+            "complete-rotation",
+            "--slot", "slot-1",
+            "--token", "sync-a",
+            "--repository", "service-a",
+            "--target-branch", target,
+            "--target-generation", "2",
+            "--source-sha", source,
+            "--target-head-sha", target_head,
+            "--result-tree-sha", str(plan["result_tree_sha"]),
+        )
+        return {
+            "remote": remote,
+            "seed": seed,
+            "original": original,
+            "derived": derived,
+            "original_head": original_head,
+            "submitted_head": submitted_head,
+            "local_head": local_head,
+            "merge_commit": merge_commit,
+            "source": source,
+            "target": target,
+            "target_head": target_head,
+        }
+
+    def cleanup_arguments(self, fixture: dict[str, Any]) -> list[str]:
+        return [
+            "--slot", "slot-1",
+            "--repository", "service-a",
+            "--token", "sync-a",
+            "--github-number", "17",
+            "--github-url", "https://github.com/example/service-a/pull/17",
+            "--github-state", "MERGED",
+            "--github-is-draft", "false",
+            "--github-base", "main",
+            "--github-head", "task",
+            "--github-head-sha", str(fixture["submitted_head"]),
+            "--github-merged-at", "2026-08-07T00:00:00Z",
+            "--github-merge-commit", str(fixture["merge_commit"]),
+            "--execute",
+        ]
+
+    def test_sync_cleanup_deletes_squash_merged_local_and_remote_branches_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = self.prepare_squash_merged_cleanup_fixture(root)
+            derived = fixture["derived"]
+            original = fixture["original"]
+
+            cleaned = self.run_cleaner(root, *self.cleanup_arguments(fixture))
+            payload = json.loads(cleaned.stdout)["result"]
+            self.assertEqual(payload["status"], "deleted")
+            self.assertTrue(payload["local_deleted"])
+            self.assertTrue(payload["remote_deleted"])
+            self.assertNotEqual(
+                self.git(derived, "rev-parse", "--verify", "refs/heads/task", check=False).returncode,
+                0,
+            )
+            self.assertEqual(
+                self.git(
+                    derived,
+                    "ls-remote",
+                    "--heads",
+                    "origin",
+                    "refs/heads/task",
+                ).stdout,
+                "",
+            )
+            self.assertEqual(self.git(derived, "branch", "--show-current").stdout.strip(), fixture["target"])
+            self.assertEqual(self.git(derived, "show", "HEAD:b.txt").stdout, "continued B\n")
+            self.assertEqual(self.git(original, "rev-parse", "HEAD").stdout.strip(), fixture["original_head"])
+            self.assertEqual(self.git(original, "branch", "--show-current").stdout.strip(), "main")
+
+            retried = self.run_cleaner(root, *self.cleanup_arguments(fixture))
+            self.assertEqual(json.loads(retried.stdout)["result"]["status"], "already-absent")
+
+    def test_sync_cleanup_preserves_refs_when_old_local_branch_has_new_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = self.prepare_squash_merged_cleanup_fixture(root)
+            derived = fixture["derived"]
+            old_head = str(fixture["local_head"])
+            old_tree = self.git(derived, "rev-parse", f"{old_head}^{{tree}}").stdout.strip()
+            advanced = self.git(
+                derived,
+                "commit-tree",
+                old_tree,
+                "-p",
+                old_head,
+                "-m",
+                "old branch advanced",
+            ).stdout.strip()
+            self.git(derived, "update-ref", "refs/heads/task", advanced, old_head)
+
+            blocked = self.run_cleaner(
+                root,
+                *self.cleanup_arguments(fixture),
+                check=False,
+            )
+            self.assertEqual(blocked.returncode, 2)
+            self.assertIn("old local branch moved", blocked.stderr)
+            self.assertEqual(
+                self.git(derived, "rev-parse", "refs/heads/task").stdout.strip(),
+                advanced,
+            )
+            self.assertEqual(
+                self.git(
+                    derived,
+                    "ls-remote",
+                    "--heads",
+                    "origin",
+                    "refs/heads/task",
+                ).stdout.split()[0],
+                fixture["submitted_head"],
+            )
 
     def test_pull_fetch_then_fast_forwards_only_the_original(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
