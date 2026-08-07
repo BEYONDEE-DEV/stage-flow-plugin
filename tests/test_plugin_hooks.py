@@ -91,15 +91,22 @@ class PluginHookAtomicDocsStateTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.hook = load_stageflow_hook_check()
 
-    def test_only_atomic_docs_config_is_carved_out(self) -> None:
-        config_paths = [
+    def test_retired_atomic_docs_config_is_a_stageflow_path(self) -> None:
+        retired_config_paths = [
             ".stageflow/atomic-docs.json",
             "/repo/.stageflow/atomic-docs.json",
             r"C:\repo\.stageflow\atomic-docs.json",
         ]
-        for path in config_paths:
+        for path in retired_config_paths:
             with self.subTest(path=path):
-                self.assertTrue(self.hook.is_atomic_docs_state_path(path))
+                self.assertTrue(self.hook.is_stageflow_path(path))
+
+        for path in (
+            "docs/atomic-docs.json",
+            "/repo/docs/atomic-docs.json",
+            r"C:\repo\docs\atomic-docs.json",
+        ):
+            with self.subTest(path=path):
                 self.assertFalse(self.hook.is_stageflow_path(path))
 
         retired_state_paths = [
@@ -110,7 +117,6 @@ class PluginHookAtomicDocsStateTests(unittest.TestCase):
         ]
         for path in retired_state_paths:
             with self.subTest(path=path):
-                self.assertFalse(self.hook.is_atomic_docs_state_path(path))
                 self.assertTrue(self.hook.is_stageflow_path(path))
 
         self.assertTrue(self.hook.is_stageflow_path(".stageflow/requests/req-1/state.json"))
@@ -140,7 +146,13 @@ class PluginHookAtomicDocsStateTests(unittest.TestCase):
             "tool_name": "shell",
             "tool_input": {"command": "cat >.stageflow/atomic-docs.json"},
         }
-        self.assertFalse(self.hook.is_stageflow_artifact_write(config_redirection_payload))
+        self.assertTrue(self.hook.is_stageflow_artifact_write(config_redirection_payload))
+
+        docs_config_payload = {
+            "tool_name": "shell",
+            "tool_input": {"command": "cat >docs/atomic-docs.json"},
+        }
+        self.assertFalse(self.hook.is_stageflow_artifact_write(docs_config_payload))
 
         mixed_stageflow_payload = {
             "tool_name": "shell",

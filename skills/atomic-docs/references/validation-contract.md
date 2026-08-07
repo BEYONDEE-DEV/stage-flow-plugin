@@ -4,11 +4,14 @@ Run:
 
 ```text
 python3 <plugin-root>/scripts/validate_atomic_docs.py --root <primary-project-root>
+python3 <plugin-root>/scripts/validate_atomic_docs.py --root <primary-project-root> --config <docs-root>/atomic-docs.json
 ```
+
+`--config` is optional and is relative to the primary root unless absolute. Before parsing JSON, the validator searches the contained primary project for the exact file name `atomic-docs.json`, excluding Git internals. Exactly one regular-file candidate must exist even when `--config` is supplied, and the explicit path must select that candidate. The candidate must not be a symbolic link, must be inside the primary project, must use the exact file name, must avoid the retired `.stageflow` location, and must have a parent equal to resolved `docs_root`. A submodule-root invocation must direct the user back to the primary project root.
 
 The validator checks only deterministic structure:
 
-- exact config version, keys, values, paths, and reachable revisions
+- unique config discovery, exact config version, keys, values, docs-root placement, paths, and reachable revisions
 - required project goal and conditional glossary shape, including unique non-empty `Term` and `Definition` cells
 - Atom frontmatter, unique keys, required heading order, and section content
 - valid and resolvable `depends_on`

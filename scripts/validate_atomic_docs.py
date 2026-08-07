@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -67,10 +68,12 @@ class Atom:
 
 
 class Validator:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, config_path: Path | None = None) -> None:
         self.root = root.resolve()
+        self.requested_config_path = config_path
         self.errors: list[str] = []
         self.config: dict[str, Any] | None = None
+        self.config_path: Path | None = None
         self.docs_root: Path | None = None
         self.sources: dict[str, SourceRoot] = {}
         self.atoms: list[Atom] = []
@@ -91,15 +94,10 @@ class Validator:
         return not self.errors
 
     def validate_config(self) -> None:
-        path = self.root / ".stageflow" / "atomic-docs.json"
-        if not path.is_file():
-            self.error(
-                path,
-                "config",
-                "required config file is missing",
-                "create the exact Atomic Docs v2 config",
-            )
+        path = self.select_config_path()
+        if path is None:
             return
+        self.config_path = path
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -137,11 +135,27 @@ class Validator:
                 "set a valid language tag",
             )
 
+        if value.get("storage_mode") == "submodule" and path.parent.resolve() == self.root:
+            self.error(
+                path,
+                "primary project root",
+                "a documentation-submodule checkout cannot validate its primary-relative config alone",
+                "rerun from the primary project root and select this config there",
+            )
+            return
+
         docs_root = self.resolve_primary_path(path, "docs_root", value.get("docs_root"), allow_dot=False)
         source_root = self.resolve_primary_path(path, "source_root", value.get("source_root"), allow_dot=True)
         if docs_root is not None:
             if not docs_root.is_dir():
                 self.error(path, "docs_root", "configured directory does not exist", "create the accepted docs root")
+            elif path.parent.resolve() != docs_root:
+                self.error(
+                    path,
+                    "docs_root",
+                    "config parent does not match the configured docs root",
+                    "move `atomic-docs.json` to the docs root or correct `docs_root`",
+                )
             else:
                 self.docs_root = docs_root
         if source_root is not None:
@@ -218,6 +232,93 @@ class Validator:
                     )
                     if isinstance(revision, str) and REVISION_RE.fullmatch(revision):
                         self.validate_revision(path, f"{field}.revision", aux_root, revision)
+
+    def select_config_path(self) -> Path | None:
+        candidates: list[Path] = []
+        for directory, subdirectories, filenames in os.walk(self.root, followlinks=False):
+            subdirectories[:] = [name for name in subdirectories if name != ".git"]
+            if "atomic-docs.json" in filenames:
+                candidates.append(Path(directory) / "atomic-docs.json")
+        candidates.sort(key=lambda item: item.relative_to(self.root).as_posix())
+
+        if len(candidates) != 1:
+            labels = [candidate.relative_to(self.root).as_posix() for candidate in candidates]
+            cause = "no candidate exists" if not labels else f"multiple candidates exist: {labels}"
+            self.error(
+                self.root / "atomic-docs.json",
+                "config discovery",
+                cause,
+                "keep exactly one `<docs-root>/atomic-docs.json` in the primary project",
+            )
+            return None
+
+        candidate = candidates[0]
+        if candidate.is_symlink():
+            self.error(
+                candidate,
+                "config location",
+                "config must be a regular file rather than a symbolic link",
+                "replace the link with `<docs-root>/atomic-docs.json` as a regular file",
+            )
+            return None
+        if not candidate.is_file():
+            self.error(
+                candidate,
+                "config location",
+                "config must be a regular file",
+                "replace the special file with `<docs-root>/atomic-docs.json` as a regular file",
+            )
+            return None
+        resolved_candidate = candidate.resolve()
+        if not resolved_candidate.is_relative_to(self.root):
+            self.error(
+                candidate,
+                "config location",
+                "candidate resolves outside the primary project",
+                "keep `atomic-docs.json` as a contained file in the docs root",
+            )
+            return None
+        retired = self.root / ".stageflow" / "atomic-docs.json"
+        if resolved_candidate == retired.resolve():
+            self.error(
+                candidate,
+                "config location",
+                "the retired `.stageflow/atomic-docs.json` location is not supported",
+                "move the config to `<docs-root>/atomic-docs.json`",
+            )
+            return None
+
+        if self.requested_config_path is not None:
+            requested = self.requested_config_path
+            if not requested.is_absolute():
+                requested = self.root / requested
+            if requested.name != "atomic-docs.json":
+                self.error(
+                    requested,
+                    "--config",
+                    "file name must be exactly `atomic-docs.json`",
+                    "select the config at `<docs-root>/atomic-docs.json`",
+                )
+                return None
+            requested = requested.resolve()
+            if not requested.is_relative_to(self.root):
+                self.error(
+                    requested,
+                    "--config",
+                    "path resolves outside the primary project",
+                    "select the unique config contained by `--root`",
+                )
+                return None
+            if requested != resolved_candidate:
+                self.error(
+                    requested,
+                    "--config",
+                    "path does not select the unique discovered config",
+                    "select the unique `<docs-root>/atomic-docs.json` candidate",
+                )
+                return None
+
+        return candidate
 
     def resolve_primary_path(
         self,
@@ -328,11 +429,17 @@ class Validator:
                 "no `*-atom.md` files exist",
                 "create at least one source-backed Atom",
             )
-        allowed = {goal.resolve(), glossary.resolve(), *(path.resolve() for path in atom_paths)}
+        allowed = {
+            goal.relative_to(self.docs_root),
+            glossary.relative_to(self.docs_root),
+            *(path.relative_to(self.docs_root) for path in atom_paths),
+        }
+        if self.config_path is not None:
+            allowed.add(self.config_path.resolve().relative_to(self.docs_root))
         for path in sorted(self.docs_root.rglob("*")):
             if not path.is_file() or path.name == ".git":
                 continue
-            if path.resolve() not in allowed:
+            if path.relative_to(self.docs_root) not in allowed:
                 self.error(
                     path,
                     "managed path",
@@ -776,12 +883,19 @@ class Validator:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="primary project root")
+    parser.add_argument(
+        "--config",
+        help="explicit atomic-docs.json path, relative to --root or absolute",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    validator = Validator(Path(args.root))
+    validator = Validator(
+        Path(args.root),
+        Path(args.config) if args.config is not None else None,
+    )
     if validator.run():
         print(
             "PASS atomic-docs: "

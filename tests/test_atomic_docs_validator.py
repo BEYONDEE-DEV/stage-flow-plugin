@@ -15,7 +15,6 @@ VALIDATOR = ROOT / "scripts" / "validate_atomic_docs.py"
 class AtomicDocsValidatorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="atomic-docs-v2-"))
-        (self.tmp / ".stageflow").mkdir()
         (self.tmp / "src").mkdir()
         (self.tmp / "src" / "checkout.py").write_text(
             "def charge():\n    return True\n\ndef refund():\n    return True\n",
@@ -30,7 +29,12 @@ class AtomicDocsValidatorTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def write_config(self, **overrides: object) -> None:
+    def write_config(
+        self,
+        *,
+        config_path: str = "docs/atomic-docs.json",
+        **overrides: object,
+    ) -> None:
         config: dict[str, object] = {
             "version": 2,
             "storage_mode": "repository",
@@ -41,7 +45,9 @@ class AtomicDocsValidatorTests(unittest.TestCase):
             "auxiliary_sources": [],
         }
         config.update(overrides)
-        (self.tmp / ".stageflow" / "atomic-docs.json").write_text(
+        path = self.tmp / config_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
             json.dumps(config),
             encoding="utf-8",
         )
@@ -127,9 +133,12 @@ checkout 모듈이 진입점이다.
         path.write_text(self.atom_text(key, **kwargs), encoding="utf-8")
         return path
 
-    def run_validator(self) -> subprocess.CompletedProcess[str]:
+    def run_validator(self, config: str | Path | None = None) -> subprocess.CompletedProcess[str]:
+        command = ["python3", str(VALIDATOR), "--root", str(self.tmp)]
+        if config is not None:
+            command.extend(["--config", str(config)])
         return subprocess.run(
-            ["python3", str(VALIDATOR), "--root", str(self.tmp)],
+            command,
             text=True,
             capture_output=True,
             check=False,
@@ -146,6 +155,116 @@ checkout 모듈이 진입점이다.
         result = self.run_validator()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("PASS atomic-docs: atoms=1 sources=1", result.stdout)
+
+    def test_explicit_config_selects_the_unique_docs_root_candidate(self) -> None:
+        for path in ("docs/atomic-docs.json", self.tmp / "docs" / "atomic-docs.json"):
+            with self.subTest(path=path):
+                result = self.run_validator(path)
+                self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_config_discovery_requires_exactly_one_candidate(self) -> None:
+        config = self.tmp / "docs" / "atomic-docs.json"
+        config.unlink()
+        self.assert_fails("no candidate exists")
+
+        self.write_config()
+        duplicate = self.tmp / "other" / "atomic-docs.json"
+        duplicate.parent.mkdir()
+        duplicate.write_text("{}", encoding="utf-8")
+        result = self.run_validator()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("multiple candidates exist", result.stdout)
+
+    def test_explicit_config_does_not_bypass_a_second_malformed_candidate(self) -> None:
+        duplicate = self.tmp / "other" / "atomic-docs.json"
+        duplicate.parent.mkdir()
+        duplicate.write_text("not-json", encoding="utf-8")
+        result = self.run_validator("docs/atomic-docs.json")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("multiple candidates exist", result.stdout)
+        self.assertNotIn("cannot read valid JSON", result.stdout)
+
+    def test_retired_config_location_is_rejected_alone_or_with_new_location(self) -> None:
+        retired = self.tmp / ".stageflow" / "atomic-docs.json"
+        retired.parent.mkdir()
+        retired.write_text(
+            (self.tmp / "docs" / "atomic-docs.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        result = self.run_validator()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("multiple candidates exist", result.stdout)
+
+        (self.tmp / "docs" / "atomic-docs.json").unlink()
+        result = self.run_validator()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retired `.stageflow/atomic-docs.json` location", result.stdout)
+
+    def test_config_parent_must_match_docs_root(self) -> None:
+        (self.tmp / "other-docs").mkdir()
+        self.write_config(docs_root="other-docs")
+        self.assert_fails("config parent does not match the configured docs root")
+
+    def test_explicit_config_must_use_exact_name_inside_primary_root(self) -> None:
+        wrong_name = self.run_validator("docs/config.json")
+        self.assertNotEqual(wrong_name.returncode, 0)
+        self.assertIn("file name must be exactly `atomic-docs.json`", wrong_name.stdout)
+
+        outside = self.run_validator(self.tmp.parent / "atomic-docs.json")
+        self.assertNotEqual(outside.returncode, 0)
+        self.assertIn("path resolves outside the primary project", outside.stdout)
+
+    def test_discovered_config_cannot_resolve_outside_primary_root(self) -> None:
+        outside = Path(tempfile.mkdtemp(prefix="atomic-docs-outside-"))
+        self.addCleanup(shutil.rmtree, outside, True)
+        target = outside / "atomic-docs.json"
+        target.write_text(
+            (self.tmp / "docs" / "atomic-docs.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (self.tmp / "docs" / "atomic-docs.json").unlink()
+        (self.tmp / "docs" / "atomic-docs.json").symlink_to(target)
+        self.assert_fails("config must be a regular file rather than a symbolic link")
+
+    def test_config_symlink_inside_primary_root_is_rejected(self) -> None:
+        target = self.tmp / ".git" / "atomic-docs.json"
+        target.parent.mkdir()
+        target.write_text(
+            (self.tmp / "docs" / "atomic-docs.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (self.tmp / "docs" / "atomic-docs.json").unlink()
+        (self.tmp / "docs" / "atomic-docs.json").symlink_to(target)
+        self.assert_fails("config must be a regular file rather than a symbolic link")
+
+    def test_config_special_file_is_rejected_before_json_read(self) -> None:
+        config = self.tmp / "docs" / "atomic-docs.json"
+        config.unlink()
+        os.mkfifo(config)
+        self.assert_fails("config must be a regular file")
+
+    def test_submodule_shaped_docs_root_keeps_config_with_the_docs(self) -> None:
+        docs = self.tmp / "docs"
+        submodule = self.tmp / "docs-repository"
+        docs.rename(submodule)
+        self.write_config(
+            config_path="docs-repository/atomic-docs.json",
+            storage_mode="submodule",
+            docs_root="docs-repository",
+        )
+        result = self.run_validator()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue((submodule / "atomic-docs.json").is_file())
+
+        standalone = subprocess.run(
+            ["python3", str(VALIDATOR), "--root", str(submodule)],
+            text=True,
+            capture_output=True,
+            check=False,
+            env={**os.environ, "PYTHONPATH": ""},
+        )
+        self.assertNotEqual(standalone.returncode, 0)
+        self.assertIn("rerun from the primary project root", standalone.stdout)
 
     def test_config_requires_exact_v2_schema(self) -> None:
         self.write_config(version="2", source_baseline="legacy")
@@ -313,6 +432,10 @@ checkout 모듈이 진입점이다.
 
     def test_unapproved_permanent_file_is_rejected(self) -> None:
         (self.tmp / "docs" / "project" / "atomization-criteria.md").write_text("# Legacy\n", encoding="utf-8")
+        self.assert_fails("not a supported permanent Atomic Docs output")
+
+    def test_symlink_alias_to_allowed_config_is_rejected(self) -> None:
+        (self.tmp / "docs" / "notes.txt").symlink_to("atomic-docs.json")
         self.assert_fails("not a supported permanent Atomic Docs output")
 
     def test_auxiliary_source_uses_unique_name_path_and_reachable_revision(self) -> None:

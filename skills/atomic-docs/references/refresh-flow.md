@@ -20,28 +20,28 @@ automatically.
 Use `update all` for first creation or a complete replacement:
 
 1. Confirm the accepted storage target and managed write set.
-2. Capture a stable primary-source commit under `docs-root-and-config.md`.
+2. Capture stable primary `HEAD` and select its latest first-parent source-impact commit under `docs-root-and-config.md`.
 3. Inspect project purpose, intended human or system consumers, project-level observable outcomes, domain vocabulary, durable domains, natural contract owners, and implementation anchors. Build the general glossary from terms a new developer needs to understand the project, including terms owned by only one proposed Atom, under `atomic-document-contract.md`.
 4. Write `project-goal.md`, conditional glossary, and the complete Atom set.
 5. Validate structure.
 6. Run the single semantic review in `reviewer-perspectives.md`.
 7. Validate again after any review correction.
-8. Recheck source stability, then update `last_full_source_commit`.
+8. Recheck source stability, then write the selected source-impact commit to `last_full_source_commit`.
 9. Validate the final config and docs state. Restore the previous commit value if this check fails.
 
 An incomplete or failed all-update must not advance the commit.
 
 ## Update Changed
 
-Preserve `last_full_source_commit` and capture the target primary-source `HEAD`. Before any write, require the current control file and managed docs worktree to be clean; in `submodule` mode also require the documentation submodule worktree and containing gitlink to be clean. Pre-existing dirty config/docs/submodule state stops the update rather than becoming part of the accepted current-operation write set.
+Preserve `last_full_source_commit` and capture target primary `HEAD`. Require the previous commit on the target's first-parent history. Before any write, require `<docs-root>/atomic-docs.json` and managed docs to be clean; in `submodule` mode also require the documentation submodule worktree and containing gitlink to be clean. Pre-existing dirty state stops the update rather than joining the current-operation write set.
 
-Use `git diff --name-only <previous-commit>..<target-HEAD>`. Before source-impact selection:
+Walk each first-parent commit after the previous commit and compare it with its first parent. A merge that differs from its first parent on a non-output path is source-impact. Before source-impact selection:
 
-- report and exclude a baseline-only `.stageflow/atomic-docs.json` change
+- in repository mode, report and exclude `<docs-root>/atomic-docs.json` when only `last_full_source_commit` changed
 - report and exclude paths below `docs_root` and the containing documentation-submodule gitlink from source seeds; inspect their committed path diff or old-to-new submodule commit diff and include those changed docs in bounded semantic reconciliation
 - stop when another config field changed; use `update all` or an explicit config update with source inspection
 
-When only Atomic Docs config/docs output remains, validate current config/docs, semantically reconcile any committed managed-doc changes, report no primary source impact, and do not rewrite the commit value. For every remaining changed primary-source file:
+Select the latest first-parent commit with any non-output path as the source-impact target. When only Atomic Docs config/docs/gitlink output remains, validate current config/docs, semantically reconcile committed managed-doc changes, report no primary source impact, and retain the previous commit value. For every changed primary-source file from the source-impact commits:
 
 1. Find Atoms whose exact `Sources` locator names that file. These are seed Atoms.
 2. Add each seed's direct `depends_on` targets.
@@ -68,10 +68,10 @@ After the bounded writing pass, or after recording a source-impact no-doc result
 2. Run the single semantic review over the selected source, complete managed-docs diff, any no-doc decision, and any committed managed-doc range. Apply the existing one-correction rule.
 3. Run structural validation after any correction.
 4. Recheck that `HEAD` equals the captured target and tracked primary source outside the exact current-operation config/docs changes is clean.
-5. Set `last_full_source_commit` to the captured target, including for a successful no-doc result.
+5. Set `last_full_source_commit` to the latest first-parent source-impact commit, including for a successful no-doc result. Never advance it to trailing config/docs/gitlink-only commits.
 6. Validate the final config and docs state.
 
-Stop when the baseline is null or unreachable, any required starting worktree is dirty, tracked primary source outside the current-operation write set is dirty, `HEAD` changes, a material changed file cannot be classified reliably, semantic reconciliation or review does not pass, or validation fails. Restore the previous commit value, validate the recovered state, and report the recovery instead of advancing the commit.
+Stop when the baseline is null, unreachable, or outside the target's first-parent history; any required starting worktree is dirty; tracked primary source outside the current-operation write set is dirty; `HEAD` changes; a material changed file cannot be classified reliably; semantic reconciliation or review does not pass; or validation fails. Restore the previous commit value, validate the recovered state, and report the recovery instead of advancing the commit.
 
 ## Update Targeted
 

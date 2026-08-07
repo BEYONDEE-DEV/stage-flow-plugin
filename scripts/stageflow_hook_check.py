@@ -1499,18 +1499,8 @@ def normalize_tool_path(value: str) -> str:
     return value.replace("\\", "/").strip()
 
 
-def is_atomic_docs_state_path(value: str) -> bool:
-    normalized = normalize_tool_path(value).lower()
-    return (
-        normalized == ".stageflow/atomic-docs.json"
-        or normalized.endswith("/.stageflow/atomic-docs.json")
-    )
-
-
 def is_stageflow_path(value: str) -> bool:
     normalized = normalize_tool_path(value).lower()
-    if is_atomic_docs_state_path(normalized):
-        return False
     return (
         normalized == ".stageflow"
         or normalized.startswith(".stageflow/")

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,104 @@ def read(path: Path) -> str:
 
 
 class AtomicDocsSkillTests(unittest.TestCase):
+    def test_first_parent_source_baseline_with_real_git_history(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="atomic-docs-history-") as directory:
+            root = Path(directory)
+            docs_origin = root / "docs-origin"
+            project = root / "primary"
+
+            def git(repository: Path, *args: str) -> str:
+                return subprocess.run(
+                    ["git", "-C", str(repository), *args],
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout.strip()
+
+            def commit_file(repository: Path, path: str, content: str, message: str) -> str:
+                target = repository / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+                git(repository, "add", path)
+                git(repository, "commit", "-qm", message)
+                return git(repository, "rev-parse", "HEAD")
+
+            def selected_baseline(previous: str, target: str) -> str:
+                latest = previous
+                commits = git(
+                    project,
+                    "rev-list",
+                    "--first-parent",
+                    "--reverse",
+                    f"{previous}..{target}",
+                ).splitlines()
+                for commit in commits:
+                    parent = git(project, "rev-parse", f"{commit}^1")
+                    changed = git(project, "diff", "--name-only", parent, commit).splitlines()
+                    if any(
+                        not (path.startswith("docs/") or path == "docs-repository")
+                        for path in changed
+                    ):
+                        latest = commit
+                return latest
+
+            git(root, "init", "-q", "-b", "main", str(docs_origin))
+            git(docs_origin, "config", "user.email", "docs@example.com")
+            git(docs_origin, "config", "user.name", "Docs")
+            commit_file(docs_origin, "atomic-docs.json", "{}\n", "docs config")
+
+            git(root, "init", "-q", "-b", "main", str(project))
+            git(project, "config", "user.email", "primary@example.com")
+            git(project, "config", "user.name", "Primary")
+            git(
+                project,
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "-q",
+                str(docs_origin),
+                "docs-repository",
+            )
+            (project / "docs").mkdir()
+            (project / "docs" / "atomic-docs.json").write_text("{}\n", encoding="utf-8")
+            git(project, "add", ".gitmodules", "docs-repository", "docs/atomic-docs.json")
+            git(project, "commit", "-qm", "setup outputs")
+            setup = git(project, "rev-parse", "HEAD")
+
+            source = commit_file(project, "src/base.py", "BASE = True\n", "source")
+            config_only = commit_file(
+                project,
+                "docs/atomic-docs.json",
+                '{"last_full_source_commit":"source"}\n',
+                "config only",
+            )
+            self.assertEqual(selected_baseline(setup, config_only), source)
+            self.assertEqual(selected_baseline(source, config_only), source)
+
+            submodule = project / "docs-repository"
+            git(submodule, "config", "user.email", "docs@example.com")
+            git(submodule, "config", "user.name", "Docs")
+            commit_file(submodule, "note.md", "updated\n", "docs update")
+            git(project, "add", "docs-repository")
+            git(project, "commit", "-qm", "gitlink only")
+            gitlink_only = git(project, "rev-parse", "HEAD")
+            self.assertEqual(selected_baseline(source, gitlink_only), source)
+
+            git(project, "switch", "-q", "-c", "side")
+            commit_file(project, "src/side.py", "SIDE = True\n", "side source")
+            git(project, "switch", "-q", "main")
+            commit_file(project, "src/main.py", "MAIN = True\n", "main source")
+            git(project, "merge", "-q", "--no-ff", "side", "-m", "merge source branches")
+            merge = git(project, "rev-parse", "HEAD")
+            trailing_output = commit_file(
+                project,
+                "docs/atomic-docs.json",
+                '{"last_full_source_commit":"merge"}\n',
+                "trailing config",
+            )
+            self.assertEqual(selected_baseline(gitlink_only, trailing_output), merge)
+
     def test_changed_scope_fixture_observes_seed_one_hop_and_unmapped_boundaries(self) -> None:
         fixture = json.loads(
             (ROOT / "tests" / "fixtures" / "atomic-docs-changed-scope.json").read_text(
@@ -60,7 +160,7 @@ class AtomicDocsSkillTests(unittest.TestCase):
     def test_skill_exposes_only_minimal_permanent_outputs(self) -> None:
         text = read(SKILL)
         for required in (
-            ".stageflow/atomic-docs.json",
+            "<docs-root>/atomic-docs.json",
             "project/project-goal.md",
             "project/project-glossary.md",
             "<docs-root>/<domain>/*-atom.md",
@@ -68,6 +168,40 @@ class AtomicDocsSkillTests(unittest.TestCase):
             "does not create a Goal",
         ):
             self.assertIn(required, text)
+        permanent_outputs = text.split("## Permanent Outputs", 1)[1].split("## Core Contract", 1)[0]
+        self.assertNotIn(".stageflow/atomic-docs.json", permanent_outputs)
+
+    def test_config_lives_with_docs_and_discovery_is_fail_closed(self) -> None:
+        skill = read(SKILL)
+        config = read(REFS / "docs-root-and-config.md")
+        validation = read(REFS / "validation-contract.md")
+        usage = read(ROOT / "USAGE.ko.md")
+
+        for required in (
+            "locate exactly one `atomic-docs.json`",
+            "An explicit config path does not permit a second candidate",
+            "One docs root belongs to one primary project",
+            "validation and updates still run from the primary project",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "`<docs-root>/atomic-docs.json`",
+            "Its resolved directory must be the config file's parent",
+            "Exactly one regular-file candidate is required",
+            "does not permit another candidate elsewhere",
+            "retired `.stageflow/atomic-docs.json` location",
+            "opening the docs repository does not make standalone validation or update supported",
+        ):
+            self.assertIn(required, config)
+        for required in (
+            "--config <docs-root>/atomic-docs.json",
+            "Before parsing JSON",
+            "Exactly one regular-file candidate must exist even when `--config` is supplied",
+            "parent equal to resolved `docs_root`",
+        ):
+            self.assertIn(required, validation)
+        self.assertIn("<docs-root>/atomic-docs.json", usage)
+        self.assertIn("Submodule 방식에서는 config가 문서 저장소에 함께 보이지만", usage)
 
     def test_atom_contract_is_exact(self) -> None:
         text = read(REFS / "atomic-document-contract.md")
@@ -222,25 +356,25 @@ class AtomicDocsSkillTests(unittest.TestCase):
         usage = read(ROOT / "USAGE.ko.md")
 
         for required in (
-            "advance that same commit key only after the complete changed update succeeds",
+            "advance that same commit key to the latest first-parent source-impact commit",
             "Preserve the previous `last_full_source_commit`",
-            "Set `last_full_source_commit` to the captured target even when the successful source-impact result required no docs edit",
+            "Set `last_full_source_commit` to the latest first-parent source-impact commit even when the successful source-impact result required no docs edit",
             "restore the previous commit value",
         ):
             self.assertIn(required, skill)
         for required in (
-            "last reconciled by a successful `update all` or `update changed`",
-            "Do not add a separate baseline file or an incremental-cursor file",
-            "A reviewed conclusion that none of those source changes requires a managed-doc edit is still a successful changed update",
+            "latest reconciled source-impact commit on the primary HEAD's first-parent history",
+            "Do not add a separate baseline file, primary-project pointer, copied config, or incremental-cursor file",
+            "A reviewed conclusion that no managed-doc edit is needed is still a successful changed update",
         ):
             self.assertIn(required, config)
         for required in (
-            "capture the target primary-source `HEAD`",
+            "capture target primary `HEAD`",
             "including for a successful no-doc result",
             "Restore the previous commit value",
         ):
             self.assertIn(required, flow)
-        self.assertIn("다음 실행은 그 이후 변경만 확인합니다", usage)
+        self.assertIn("다음 실행은 그 이후 source 변경만 확인합니다", usage)
         self.assertNotIn("last_processed_source_commit", skill + config + flow)
 
     def test_changed_update_distinguishes_source_impact_from_own_outputs(self) -> None:
@@ -250,27 +384,28 @@ class AtomicDocsSkillTests(unittest.TestCase):
         reviewer = read(REFS / "reviewer-perspectives.md")
 
         for required in (
-            "baseline-only `.stageflow/atomic-docs.json` changes",
+            "`<docs-root>/atomic-docs.json`",
+            "config-only changes",
             "configured documentation-submodule gitlink",
             "If any config field other than `last_full_source_commit` changed",
-            "If no primary source-impact file remains",
+            "If no first-parent source-impact commit remains",
             "include its changed docs in bounded semantic reconciliation instead of guessing who wrote them",
             "A pre-existing dirty value or document is not an approved write-set exception",
         ):
             self.assertIn(required, skill)
         for required in (
-            "`last_full_source_commit` is the only changed field",
-            "Any other config field change is meaningful configuration",
+            "repository-mode config diff is baseline-only when `last_full_source_commit` is the only changed field",
+            "Any other config field change stops changed processing",
             "containing documentation-submodule gitlink",
-            "do not rewrite the commit value merely to follow those output commits",
-            "Do not infer authorship or prior acceptance from their path",
+            "retain the previous baseline",
+            "without inferring authorship or acceptance",
         ):
             self.assertIn(required, config)
         for required in (
-            "When only Atomic Docs config/docs output remains",
+            "When only Atomic Docs config/docs/gitlink output remains",
             "Every changed primary-source file must receive a reliable source-impact classification",
             "material changed file cannot be classified reliably",
-            "Pre-existing dirty config/docs/submodule state stops the update",
+            "Pre-existing dirty state stops the update",
         ):
             self.assertIn(required, flow)
         self.assertIn("source-impact no-doc result", reviewer)
@@ -279,12 +414,40 @@ class AtomicDocsSkillTests(unittest.TestCase):
         self.assertNotIn("known accepted", skill + config + flow)
 
         start_clean = skill.index("Before writing, separately require")
-        source_diff = skill.index("Diff the previous commit to the captured target")
-        baseline_write = skill.index("Set `last_full_source_commit` to the captured target")
-        final_validation = skill.index("then validate the final config and docs state", baseline_write)
+        source_diff = skill.index("Walk the target's first-parent history")
+        baseline_write = skill.index("Set `last_full_source_commit` to the latest first-parent source-impact commit")
+        final_validation = skill.index("Then validate the final config and docs state", baseline_write)
         self.assertLess(start_clean, source_diff)
         self.assertLess(source_diff, baseline_write)
         self.assertLess(baseline_write, final_validation)
+
+    def test_source_baseline_uses_first_parent_and_ignores_trailing_outputs(self) -> None:
+        skill = read(SKILL)
+        config = read(REFS / "docs-root-and-config.md")
+        flow = read(REFS / "refresh-flow.md")
+        usage = read(ROOT / "USAGE.ko.md")
+
+        for required in (
+            "not on the target's first-parent history",
+            "compare each commit with its first parent",
+            "A merge is source-impact when it changes a non-output path compared with its first parent",
+            "Do not advance it to trailing config/docs/gitlink-only commits",
+        ):
+            self.assertIn(required, skill)
+        for required in (
+            "Walk its first-parent history",
+            "compare each commit with its first parent",
+            "including source brought in from the merged branch",
+            "trailing output-only commits do not advance it",
+        ):
+            self.assertIn(required, config)
+        for required in (
+            "A merge that differs from its first parent on a non-output path is source-impact",
+            "Select the latest first-parent commit",
+            "Never advance it to trailing config/docs/gitlink-only commits",
+        ):
+            self.assertIn(required, flow)
+        self.assertIn("first-parent 이력에서 마지막 source-impact commit", usage)
 
     def test_single_bounded_reviewer_has_one_correction(self) -> None:
         text = read(REFS / "reviewer-perspectives.md")
