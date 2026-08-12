@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -134,10 +135,18 @@ def validate_rotation(
         "temporary_worktree",
     }
     current_fields = legacy_fields | {"source_tree_sha", "transfer_subject"}
-    allowed_fields = legacy_fields if legacy_schema == 4 else current_fields
-    if not isinstance(rotation, dict) or set(rotation) != allowed_fields:
+    current_with_target = current_fields | {"target_head_sha"}
+    allowed_field_sets = (
+        {frozenset(legacy_fields)}
+        if legacy_schema == 4
+        else {frozenset(current_fields), frozenset(current_with_target)}
+    )
+    if not isinstance(rotation, dict) or frozenset(rotation) not in allowed_field_sets:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
-    if rotation["phase"] not in {"planned", "branch-created", "switched"}:
+    phases = {"planned", "branch-created", "switched"}
+    if legacy_schema != 4:
+        phases.add("retired")
+    if rotation["phase"] not in phases:
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation phase")
     if (
         not isinstance(rotation["from_branch"], str)
@@ -164,6 +173,10 @@ def validate_rotation(
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
     if legacy_schema == 4:
         return
+    if "target_head_sha" in rotation and not is_object_id(rotation["target_head_sha"]):
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid target head")
+    if rotation["phase"] == "retired" and "target_head_sha" not in rotation:
+        raise ManifestError(f"slot {slot_name!r} repository {name!r} retired without target head")
     if not is_object_id(rotation["source_tree_sha"]):
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has invalid rotation journal")
     subject = rotation["transfer_subject"]
@@ -198,7 +211,14 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
         "submission",
     }
     if not required_fields.issubset(identity) or set(identity) - (
-        required_fields | {"rotation", "last_rotation", "last_reconciliation", "legacy_schema"}
+        required_fields
+        | {
+            "rotation",
+            "last_rotation",
+            "last_reconciliation",
+            "pending_remote_cleanups",
+            "legacy_schema",
+        }
     ):
         raise ManifestError(f"slot {slot_name!r} repository {name!r} has unexpected fields")
     if not isinstance(identity["branch_family"], str) or not identity["branch_family"]:
@@ -345,6 +365,79 @@ def validate_repository(name: str, identity: Any, slot_name: str) -> None:
             raise ManifestError(
                 f"slot {slot_name!r} repository {name!r} has an invalid reconciliation receipt"
             )
+    if "pending_remote_cleanups" in identity:
+        pending_cleanups = identity["pending_remote_cleanups"]
+        if not isinstance(pending_cleanups, list) or not pending_cleanups:
+            raise ManifestError(
+                f"slot {slot_name!r} repository {name!r} has invalid pending remote cleanup"
+            )
+        seen_cleanup_prs: set[str] = set()
+        for cleanup in pending_cleanups:
+            if not isinstance(cleanup, dict) or set(cleanup) != {"pr", "submission", "last_rotation"}:
+                raise ManifestError(
+                    f"slot {slot_name!r} repository {name!r} has invalid pending remote cleanup"
+                )
+            cleanup_pr = cleanup["pr"]
+            submission = cleanup["submission"]
+            receipt = cleanup["last_rotation"]
+            legacy_cleanup_receipt_fields = {
+                "target_branch",
+                "target_branch_generation",
+                "source_sha",
+                "target_head_sha",
+                "result_tree_sha",
+            }
+            cleanup_receipt_fields = legacy_cleanup_receipt_fields | {
+                "from_branch",
+                "from_branch_generation",
+                "from_head_sha",
+            }
+            invalid_cleanup_receipt = receipt is not None and (
+                not isinstance(receipt, dict)
+                or frozenset(receipt)
+                not in {
+                    frozenset(legacy_cleanup_receipt_fields),
+                    frozenset(cleanup_receipt_fields),
+                }
+                or not isinstance(receipt["target_branch"], str)
+                or not receipt["target_branch"]
+                or type(receipt["target_branch_generation"]) is not int
+                or receipt["target_branch_generation"] <= 1
+                or not all(
+                    is_object_id(receipt[field])
+                    for field in ("source_sha", "target_head_sha", "result_tree_sha")
+                )
+                or (
+                    set(receipt) == cleanup_receipt_fields
+                    and (
+                        not isinstance(receipt["from_branch"], str)
+                        or not receipt["from_branch"]
+                        or type(receipt["from_branch_generation"]) is not int
+                        or receipt["from_branch_generation"] <= 0
+                        or not is_object_id(receipt["from_head_sha"])
+                    )
+                )
+            )
+            if (
+                not isinstance(cleanup_pr, str)
+                or not cleanup_pr
+                or cleanup_pr == identity["pr"]
+                or cleanup_pr in seen_cleanup_prs
+                or not isinstance(submission, dict)
+                or set(submission)
+                != {"generation", "head_branch", "continuation_boundary_sha", "observed_head_sha"}
+                or type(submission["generation"]) is not int
+                or submission["generation"] <= 0
+                or not isinstance(submission["head_branch"], str)
+                or not submission["head_branch"]
+                or not is_object_id(submission["continuation_boundary_sha"])
+                or not is_object_id(submission["observed_head_sha"])
+                or invalid_cleanup_receipt
+            ):
+                raise ManifestError(
+                    f"slot {slot_name!r} repository {name!r} has invalid pending remote cleanup"
+                )
+            seen_cleanup_prs.add(cleanup_pr)
 
 
 def validate_manifest_v5(data: Any) -> dict[str, Any]:
@@ -1065,8 +1158,18 @@ def begin_rotations(
     return slot
 
 
-def advance_rotation(data: dict[str, Any], name: str, repo: str, expected: str, target: str) -> dict[str, Any]:
-    transitions = {("planned", "branch-created"), ("branch-created", "switched")}
+def advance_rotation(
+    data: dict[str, Any],
+    name: str,
+    repo: str,
+    expected: str,
+    target: str,
+    target_head_sha: str | None = None,
+) -> dict[str, Any]:
+    transitions = {
+        ("planned", "branch-created"),
+        ("branch-created", "switched"),
+    }
     if (expected, target) not in transitions:
         raise ManifestError("invalid rotation phase transition")
     slot = require_slot(data, name)
@@ -1077,12 +1180,38 @@ def advance_rotation(data: dict[str, Any], name: str, repo: str, expected: str, 
     rotation = identity.get("rotation")
     if rotation is None:
         raise ManifestError(f"repository {repo!r} has no rotation journal")
+    if (expected, target) == ("planned", "branch-created"):
+        if target_head_sha is None or not is_object_id(target_head_sha):
+            raise ManifestError(f"repository {repo!r} branch creation requires exact target head")
+        journaled_target = rotation.get("target_head_sha")
+        if journaled_target is not None and journaled_target != target_head_sha:
+            raise ManifestError(f"repository {repo!r} target head mismatch")
+        rotation["target_head_sha"] = target_head_sha
+    elif target_head_sha is not None:
+        raise ManifestError("target head is valid only while recording branch creation")
     if rotation["phase"] == target:
         return slot
     if rotation["phase"] != expected:
         raise ManifestError(f"repository {repo!r} rotation phase mismatch")
+    if (expected, target) == ("branch-created", "switched") and "target_head_sha" not in rotation:
+        raise ManifestError(f"repository {repo!r} target head has not been recorded")
     rotation["phase"] = target
     return slot
+
+
+def git_value(repo: Path, *arguments: str, allow_absent: bool = False) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *arguments],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if allow_absent and result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown Git error"
+        raise ManifestError(f"git {' '.join(arguments)} failed: {detail}")
+    return result.stdout.strip()
 
 
 def complete_rotation(
@@ -1123,17 +1252,63 @@ def complete_rotation(
             and isinstance(receipt, dict)
             and all(receipt.get(field) == value for field, value in requested_receipt.items())
         ):
+            repository_path = (Path(slot["path"]) / repo).resolve()
+            actual_root = Path(
+                git_value(repository_path, "rev-parse", "--show-toplevel") or ""
+            ).resolve()
+            if actual_root != repository_path:
+                raise ManifestError(f"repository {repo!r} manifest path resolves elsewhere")
+            if git_value(repository_path, "branch", "--show-current") != target_branch:
+                raise ManifestError(f"repository {repo!r} target is not checked out")
+            if (
+                git_value(
+                    repository_path,
+                    "rev-parse",
+                    "--verify",
+                    f"refs/heads/{target_branch}",
+                )
+                != target_head_sha
+                or git_value(repository_path, "rev-parse", "--verify", "HEAD")
+                != target_head_sha
+            ):
+                raise ManifestError(f"repository {repo!r} completed target ref moved")
+            if git_value(repository_path, "status", "--porcelain", "--untracked-files=all"):
+                raise ManifestError(f"repository {repo!r} development worktree is dirty")
             return slot
         raise ManifestError(f"repository {repo!r} has no matching completed rotation")
-    if rotation["phase"] != "switched":
-        raise ManifestError(f"repository {repo!r} rotation is not switched")
+    if rotation["phase"] != "retired":
+        raise ManifestError(f"repository {repo!r} rotation has not retired its old branch")
     if (
         rotation["target_branch"] != target_branch
         or rotation["target_branch_generation"] != target_generation
         or rotation["source_sha"] != source_sha
         or rotation["result_tree_sha"] != result_tree_sha
+        or rotation.get("target_head_sha") != target_head_sha
     ):
         raise ManifestError(f"repository {repo!r} rotation completion mismatch")
+    repository_path = (Path(slot["path"]) / repo).resolve()
+    actual_root = Path(git_value(repository_path, "rev-parse", "--show-toplevel") or "").resolve()
+    if actual_root != repository_path:
+        raise ManifestError(f"repository {repo!r} manifest path resolves elsewhere")
+    if git_value(repository_path, "branch", "--show-current") != target_branch:
+        raise ManifestError(f"repository {repo!r} target is not checked out")
+    if (
+        git_value(repository_path, "rev-parse", "--verify", f"refs/heads/{target_branch}")
+        != target_head_sha
+        or git_value(repository_path, "rev-parse", "--verify", "HEAD") != target_head_sha
+    ):
+        raise ManifestError(f"repository {repo!r} target ref moved before completion")
+    if git_value(
+        repository_path,
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"refs/heads/{rotation['from_branch']}",
+        allow_absent=True,
+    ) is not None:
+        raise ManifestError(f"repository {repo!r} old branch still exists")
+    if git_value(repository_path, "status", "--porcelain", "--untracked-files=all"):
+        raise ManifestError(f"repository {repo!r} development worktree is dirty")
     receipt = {
         "from_branch": rotation["from_branch"],
         "from_branch_generation": rotation["from_branch_generation"],
@@ -1365,6 +1540,16 @@ def record_batch(
         pending.append((repo, expected_generation, pr, submission))
 
     for repo, expected_generation, pr, submission in pending:
+        identity = repositories[repo]
+        if expected_generation > 0:
+            cleanup = {
+                "pr": identity["pr"],
+                "submission": identity["submission"],
+                "last_rotation": identity.get("last_rotation"),
+            }
+            cleanups = identity.setdefault("pending_remote_cleanups", [])
+            if cleanup not in cleanups:
+                cleanups.append(cleanup)
         repositories[repo]["generation"] = expected_generation + 1
         repositories[repo]["pr"] = pr
         repositories[repo]["submission"] = submission
@@ -1615,8 +1800,9 @@ def parser() -> argparse.ArgumentParser:
     advance.add_argument("--repository", required=True)
     advance.add_argument("--expected-phase", required=True)
     advance.add_argument("--target-phase", required=True)
+    advance.add_argument("--target-head-sha")
 
-    complete = subparsers.add_parser("complete-rotation", help="Commit one switched generation binding")
+    complete = subparsers.add_parser("complete-rotation", help="Commit one retired generation binding")
     complete.add_argument("--slot", required=True)
     complete.add_argument("--token", required=True)
     complete.add_argument("--repository", required=True)
@@ -1717,6 +1903,7 @@ def main() -> int:
                         args.repository,
                         args.expected_phase,
                         args.target_phase,
+                        args.target_head_sha,
                     )
                 elif args.command == "complete-rotation":
                     require_operation_lock(args.root, args.slot, args.token)

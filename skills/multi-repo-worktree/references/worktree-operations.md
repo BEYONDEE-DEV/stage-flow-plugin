@@ -32,7 +32,7 @@ An explicit write-keyword request authorizes that keyword's routine writes. `sta
 
 Do not ask for routine commands, task-related path lists, generated Korean text, or manifest-proven transitions. Ask one consolidated question only for conflicting permanent facts, ambiguous/secret/unrelated content, an inseparable PR correction, stale-lock recovery, or conflict recovery.
 
-Never reset, clean, force checkout, force push to update a branch, rewrite published history, amend, stash, or auto-resolve conflicts. A clean internal correction worktree and its unpublished temporary local branch may be removed after exact remote and manifest verification. A journaled internal generation worktree may be populated from the exact result tree and removed without force only after its source/index/tree/HEAD are proven. During explicit `sync`, the old submitted local branch and its remote ref may also be removed only after exact merged-PR, completed-rotation, worktree, and ref proof. The remote operation is an expected-head deletion lease, not permission to update or rewrite a branch. These are bounded routine cleanups, not slot release.
+Never reset, clean, force checkout, force push to update a branch, rewrite published history, amend, stash, or auto-resolve conflicts. A clean internal correction worktree and its unpublished temporary local branch may be removed after exact remote and manifest verification. A journaled internal generation worktree may be populated from the exact result tree and removed without force only after its source/index/tree/HEAD are proven. Every common rotation retires only its journal-proven old local generation after the target is switched and verified. During explicit `sync`, an exact merged remote PR ref may also be removed; a legacy local ref may be removed only with exact completed-rotation proof. The remote operation is an expected-head deletion lease, not permission to update or rewrite a branch. These are bounded routine cleanups, not slot release.
 
 ## Roles And Generation-Branch Flow
 
@@ -92,7 +92,7 @@ There is no slot freeze, release, reassignment, or task-start `create`. The slot
 - `branch_base_sha` is the remote source commit on which the active branch was last prepared. It is the explicit base for an unsubmitted or already-rotated branch.
 - PR generation `0` requires `pr: null` and `submission: null`. Positive PR generations require both a PR and exact submission evidence.
 - `continuation_boundary_sha` is fixed for that submitted PR even if an isolated correction advances `observed_head_sha`. It identifies the local tree before future work began.
-- `rotation` is present only during a generation rotation and is a crash journal, not a lifecycle state.
+- `rotation` is present only during a generation rotation and is a crash journal, not a lifecycle state. Its phase is `planned`, `branch-created`, `switched`, or `retired`. Before `switched`, the top-level branch is effective active; in `switched`/`retired`, the exact journal target is effective active while the top-level binding intentionally remains the old source until completion.
 
 Example journal:
 
@@ -170,7 +170,7 @@ Primary status format:
 <repo>: 폴더 <relative-folder> / 현재 브랜치 <branch> / 변경상태 <dirty|clean>
 ```
 
-Add manifest PR/branch generation and a held operation lock or rotation journal as secondary lines. An absent lock is normal. Do not use a Markdown table. Status never enriches legacy evidence.
+Add manifest PR/branch generation and a held operation lock or rotation journal as secondary lines. During `switched` or `retired`, report the journal target as effective active and the top-level branch binding as pending completion; never present the old top-level branch as current. An absent lock is normal. Do not use a Markdown table. Status never enriches legacy evidence.
 
 ## Complete-Bundle Preflight
 
@@ -266,7 +266,7 @@ Commit clearly task-related future work first. Fetch and pin the stored remote s
 
 Run the common rotation before the first remote publication. After rotation, validate `pinned-source...active-HEAD` contains only future work. If empty, do not push or create a PR; the fresh branch at pinned source remains a successful synchronized no-op. Otherwise follow Submit NONE's push/create/verify flow and immediately record the new PR generation with the new submitted HEAD boundary.
 
-Old submitted branches and remote PR branches are not reused. `submit` does not delete them; an explicit later `sync` performs the exact merged-branch cleanup after it proves the continuation is preserved.
+Old submitted branch names and remote PR refs are not reused. Rotation during `submit` retires its exact old local generation, but `submit` never deletes the remote PR ref. Before recording the new PR, `record-batch` durably moves the replaced PR/submission/rotation identity into `pending_remote_cleanups`. An explicit later `sync` selects that exact pending record, performs merged remote cleanup after proving the continuation is preserved, and removes only the completed record. Multiple pending records remain independently addressable instead of being overwritten by the newest submission.
 
 ## Common Generation Rotation
 
@@ -319,7 +319,19 @@ python3 "<skill-dir>/scripts/prepare_generation_branch.py" create \
   --workspace-root "<workspace-root>" --slot "<slot>" --repository "<repo>"
 ```
 
-For an empty result, omit `--message`; target points directly at source. `create` and `verify` require the journaled `--source-tree` and compare it with the actual `source^{tree}` before adopting or publishing a target. Otherwise the helper creates exactly one transfer commit whose sole parent is source, tree is the computed result, and `%s` equals the journaled subject. It independently recomputes the deterministic workspace/slot/repository/target path, rejects traversal or any original/development/other worktree path, requires a registered retry to have detached HEAD, restores the exact result tree there, and uses normal `git commit`, so configured commit hooks and signing policy run. A retry recognizes only these exact states at that path: clean source HEAD with source/result index, or a clean one-parent completed result commit with the exact subject. Any unregistered existing path, missing registered worktree, attached branch, unexpected index, unstaged content, ignored or ordinary untracked content, HEAD, tree, parent, source-tree evidence, or subject blocks without overwrite. If a commit hook changes the subject, preserve the temporary state, publish no target ref, report the mismatch, and do not loop by automatically recreating it. The helper removes only a proven clean temporary worktree without force before publishing the target ref; a rejected hook or cleanup failure publishes no target ref and reports the journaled path. Run the repository's required validation on the switched target before any push. Advance journal `planned -> branch-created`, run helper `verify` with the same `--source-tree` and, for a non-empty result, the same `--message`, switch the same development worktree with `git switch <target>`, verify clean HEAD/tree and original-worktree invariants, then advance `branch-created -> switched`. Complete with the exact verified target commit and result-tree evidence:
+For an empty result, omit `--message`; target points directly at source. `create` and `verify` require the journaled `--source-tree` and compare it with the actual `source^{tree}` before adopting or publishing a target. Otherwise the helper creates exactly one transfer commit whose sole parent is source, tree is the computed result, and `%s` equals the journaled subject. It independently recomputes the deterministic workspace/slot/repository/target path, rejects traversal or any original/development/other worktree path, requires a registered retry to have detached HEAD, restores the exact result tree there, and uses normal `git commit`, so configured commit hooks and signing policy run. A retry recognizes only these exact states at that path: clean source HEAD with source/result index, or a clean one-parent completed result commit with the exact subject. Any unregistered existing path, missing registered worktree, attached branch, unexpected index, unstaged content, ignored or ordinary untracked content, HEAD, tree, parent, source-tree evidence, or subject blocks without overwrite. If a commit hook changes the subject, preserve the temporary state, publish no target ref, report the mismatch, and do not loop by automatically recreating it. The helper removes only a proven clean temporary worktree without force before publishing the target ref; a rejected hook or cleanup failure publishes no target ref and reports the journaled path. Run the repository's required validation on the switched target before any push. Advance journal `planned -> branch-created` with `--target-head-sha <created-or-verified-target-sha>` so the exact target becomes durable before any old-ref deletion. A legacy schema-5 `branch-created` retry without that field must repeat this same transition to bind it before switching. Run helper `verify` with the same `--source-tree` and, for a non-empty result, the same `--message`, switch the same development worktree with `git switch <target>`, verify clean HEAD/tree and original-worktree invariants, then advance `branch-created -> switched`.
+
+While the exact operation lock remains held, retire only the journal's `from_branch`:
+
+```bash
+python3 "<skill-dir>/scripts/retire_generation_branch.py" \
+  --root "<workspace-root>" --slot "<slot>" --repository "<repo>" \
+  --token "<held-operation-lock-token>" --execute
+```
+
+The retirement helper holds the manifest lock, re-reads the authoritative manifest and operation lock, derives the bound repository, treats the target as effective active, and requires its exact clean checkout, ref, commit parent/subject, source tree, and result tree. Before deletion it durably binds the exact target SHA in the rotation journal. It protects the source and target names, scans all worktree checkouts, and requires the old ref to equal `from_head_sha`. One `git update-ref --stdin` transaction verifies the persisted target ref and compare-deletes the old ref; no standalone phase command can mark retirement. Only after deletion or an exact absent retry does the helper durably record `retired`. An absent old ref in `switched` is the exact retry state for a crash after deletion; a moved, foreign, checked-out, dirty, or mismatched ref is preserved. Do not start another rotation for that repository until phase reaches completion. Clean siblings continue independently.
+
+Only after phase `retired`, complete with the exact verified target commit and result-tree evidence:
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
@@ -331,7 +343,7 @@ python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" \
 
 Completion sets active branch/generation/base to target/next/source, stores an exact `last_rotation` receipt containing the source branch/head plus target commit and result tree, and removes only the journal. Older schema-5 receipts without source fields remain readable but cannot authorize local submitted-branch deletion. A retry without a journal succeeds only when every supplied target value exactly matches that receipt; it never treats an unrelated no-journal state or a moved target ref as completed.
 
-Rotation itself never deletes the old submitted branch. For `MERGED` sync, keep its submission and `last_rotation` evidence intact until the cleanup helper has either deleted or confirmed absent both old refs. If cleanup is incomplete, retry it before any later source-advance rotation could replace the last-rotation receipt.
+Every common rotation retires its exact old local generation, regardless of `NONE`, `MERGED`, submit, sync, or an already-rotated unsubmitted state. The submitted remote ref is separate: for `MERGED` sync, keep submission and `last_rotation` evidence intact until remote cleanup confirms it absent. The cleanup helper remains backward-compatible with a legacy local ref that predates mandatory retirement.
 
 Crash retry rules:
 
@@ -341,8 +353,21 @@ Crash retry rules:
 - `planned` + exact parent/tree/subject target: adopt it and advance.
 - `branch-created` + old branch checked out: verify and switch.
 - `branch-created` + exact target already checked out: treat this as a crash after `git switch`; verify target commit/tree and clean worktree, then adopt `branch-created -> switched`.
-- `switched` + exact target checked out: complete manifest.
+- `switched` + exact target checked out + exact old ref: compare-delete old ref, then advance to `retired`.
+- `switched` + exact target checked out + absent old ref: treat this as a crash after compare-delete and advance to `retired`.
+- `retired` + exact target checked out + absent old ref: complete manifest only.
 - a target with a different tree/parent, unexpected checked-out branch, changed source/head/boundary, or impossible phase blocks without overwrite or deletion.
+
+At steady state, a newly managed repository has one local branch-family ref: the effective active generation. The only accepted transient extra is the exact journaled `from_branch` while retirement is pending. Existing historical refs are not retroactively treated as managed transient refs and are never bulk-deleted.
+
+For read-only legacy analysis, run:
+
+```bash
+python3 "<skill-dir>/scripts/audit_generation_branches.py" \
+  --root "<workspace-root>" --slot "<slot>"
+```
+
+Optionally pass repeated `--merged-pr-evidence "<repo>" "<pr>" "<branch>" "<head-sha>"` values only after an exact external MERGED query. The audit enumerates exact family names, classifies active/source/checked-out protection and actual ancestry from protected refs, recognizes exact current rotation or last-rotation source evidence, and otherwise reports unresolved history. Names, same-tree results, and reflogs are context only and never safety proof. The audit changes no ref, worktree, manifest, lock, remote, or GitHub state.
 
 ## Retry, Legacy Recovery, And Partial Results
 
@@ -404,7 +429,7 @@ Do not use plain `git pull`, merge commits, rebase, reset, branch switching, or 
 
 - **NONE**: use `branch_base_sha` as boundary. If pinned source equals branch base, no-op. If advanced, rotate net unsubmitted work to the next local branch generation; do not push or create a PR.
 - **OPEN**: verify exact PR/base/head and fetch source, then report `PR 병합 대기`. Do not rotate, switch, stage, commit, push, or mutate submission evidence even when source advanced.
-- **MERGED, not yet rotated** (`branch == submission.head_branch`): use `submission.continuation_boundary_sha`, rotate future work onto pinned source, complete the rotation receipt, then clean the old submitted branch.
+- **MERGED, not yet rotated** (`branch == submission.head_branch`): use `submission.continuation_boundary_sha`, rotate future work onto pinned source, retire the old local generation, complete the rotation receipt, then clean the exact remote submitted ref.
 - **MERGED, already rotated** (`branch != submission.head_branch`): clean or retry cleanup of the submitted branch first. Only after both old refs are absent, use `branch_base_sha` and rotate again if pinned source advanced.
 - **mixed bundle**: run each rule independently. A waiting or dirty OPEN repository does not stop an eligible clean NONE/MERGED sibling. A dirty repository or repository-local 3-way conflict is reported `failed/skipped unchanged` and does not undo recorded sibling success.
 
@@ -427,6 +452,6 @@ python3 "<skill-dir>/scripts/cleanup_merged_branch.py" \
   --github-merge-commit "<mergeCommit.oid>" --execute
 ```
 
-The helper derives the repository path, remote, source, active branch, and submitted branch only from the slot manifest. It requires a clean exact active development branch, no active rotation journal, and no checkout of the old branch in any worktree. When the old local ref exists, it must still equal the receipt's exact `from_head_sha`; the helper also recomputes the explicit-boundary 3-way result and requires it to equal both the completed rotation receipt and active generation tree. Therefore even a tree-identical new commit on the old branch blocks deletion. It separately requires the remote ref, when present, to equal the recorded observed PR head. A corrected remote PR head and the local B-continuation head may differ and are checked against their separate manifest values.
+The helper derives the repository path, remote, source, active branch, and submitted branch from exactly one current or `pending_remote_cleanups` record in the slot manifest. It requires a clean exact active development branch and no active rotation journal. The old local ref is normally absent because rotation already retired it. When a pre-retirement/legacy local ref exists, it must still equal that cleanup record's exact `last_rotation.from_head_sha`, be absent from all worktree checkouts, and reproduce the completed rotation tree; otherwise it is preserved. It separately requires the remote ref, when present, to equal the cleanup record's observed PR head. A corrected remote PR head and the local B-continuation head may differ and are checked against their separate manifest values. After both refs are absent, a pending record is removed while the manifest lock remains held; current submission identity is never cleared by cleanup.
 
 Deletion order is remote then local. The remote deletion uses only `--force-with-lease=refs/heads/<head>:<observed-head>` with a delete refspec, and the local deletion uses `git update-ref -d refs/heads/<head> <observed-local-head>`; never use blind `git push --delete`, `git branch -D`, or an unleased deletion. Re-read actual refs after each command. If GitHub already deleted the remote branch, continue with the locally proven branch. If one ref was deleted before a crash, the next `sync` treats it as an exact idempotent partial state. If a ref advanced, became checked out, the active tree moved, or proof is missing, preserve every remaining ref, report the repository-local blocker, and do not perform another rotation.

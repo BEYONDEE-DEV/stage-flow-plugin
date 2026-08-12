@@ -14,9 +14,11 @@ from slot_manifest import (
     ManifestError,
     is_object_id,
     load_manifest,
+    manifest_lock,
     manifest_path,
     require_operation_lock,
     require_slot,
+    write_manifest,
 )
 
 
@@ -77,6 +79,15 @@ def checked_out_branches(repo: Path) -> dict[str, list[str]]:
     return result
 
 
+def require_direct_ref(repo: Path, ref: str) -> None:
+    symbolic = git(repo, "symbolic-ref", "-q", ref, check=False)
+    if symbolic.returncode == 0:
+        raise CleanupError(f"symbolic branch ref is foreign and was preserved: {ref}")
+    if symbolic.returncode != 1:
+        detail = symbolic.stderr.strip() or symbolic.stdout.strip() or "unknown Git error"
+        raise CleanupError(f"cannot verify direct ref {ref!r}: {detail}")
+
+
 def require_clean_development_state(repo: Path, active_branch: str, active_head: str) -> None:
     actual_root = Path(git(repo, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
     if actual_root != repo:
@@ -108,11 +119,15 @@ def require_clean_development_state(repo: Path, active_branch: str, active_head:
             raise CleanupError(f"development worktree has an in-progress Git operation: {name}")
 
 
-def require_github_merge_evidence(args: argparse.Namespace, identity: dict[str, Any]) -> None:
-    submission = identity.get("submission")
-    if not isinstance(submission, dict) or identity.get("pr") is None:
+def require_github_merge_evidence(
+    args: argparse.Namespace,
+    source_branch: str,
+    pr: str,
+    submission: dict[str, Any],
+) -> None:
+    if not isinstance(submission, dict):
         raise CleanupError("repository has no exact submission evidence to clean")
-    recorded_pr = str(identity["pr"])
+    recorded_pr = str(pr)
     if recorded_pr not in {str(args.github_number), args.github_url}:
         raise CleanupError(
             f"GitHub PR identity does not match recorded PR {recorded_pr!r}"
@@ -124,7 +139,7 @@ def require_github_merge_evidence(args: argparse.Namespace, identity: dict[str, 
     if not is_object_id(args.github_merge_commit):
         raise CleanupError("merged PR evidence has an invalid merge commit")
     if (
-        args.github_base != identity["source_branch"]
+        args.github_base != source_branch
         or args.github_head != submission["head_branch"]
         or args.github_head_sha != submission["observed_head_sha"]
     ):
@@ -160,10 +175,11 @@ def require_merge_commit_on_source(
 def require_local_transfer_proof(
     repo: Path,
     identity: dict[str, Any],
+    receipt: dict[str, Any] | None,
+    submission: dict[str, Any],
     old_branch: str,
     old_head: str,
 ) -> None:
-    receipt = identity.get("last_rotation")
     if not isinstance(receipt, dict):
         raise CleanupError("local merged branch has no completed rotation receipt")
     from_generation = receipt.get("from_branch_generation")
@@ -187,7 +203,6 @@ def require_local_transfer_proof(
     active_tree = ref_target(repo, f"{active_head}^{{tree}}") if active_head is not None else None
     if active_tree != receipt.get("result_tree_sha"):
         raise CleanupError("active generation tree does not match completed rotation")
-    submission = identity["submission"]
     boundary = submission["continuation_boundary_sha"]
     source = receipt["source_sha"]
     ancestor = git(repo, "merge-base", "--is-ancestor", boundary, old_head, check=False)
@@ -217,8 +232,10 @@ def require_local_transfer_proof(
         )
 
 
-def repository_context(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
-    data = load_manifest(manifest_path(args.root))
+def repository_context(
+    args: argparse.Namespace,
+    data: dict[str, Any],
+) -> tuple[Path, dict[str, Any]]:
     slot = require_slot(data, args.slot)
     require_operation_lock(args.root, args.slot, args.token)
     repositories = slot["repositories"]
@@ -236,12 +253,31 @@ def repository_context(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
     return repo, identity
 
 
-def cleanup(args: argparse.Namespace) -> dict[str, Any]:
+def select_cleanup(
+    args: argparse.Namespace,
+    identity: dict[str, Any],
+) -> tuple[str, dict[str, Any], dict[str, Any] | None, int | None]:
+    candidates: list[tuple[str, dict[str, Any], dict[str, Any] | None, int | None]] = []
+    if identity.get("pr") is not None and isinstance(identity.get("submission"), dict):
+        candidates.append((identity["pr"], identity["submission"], identity.get("last_rotation"), None))
+    for index, cleanup in enumerate(identity.get("pending_remote_cleanups", [])):
+        candidates.append((cleanup["pr"], cleanup["submission"], cleanup["last_rotation"], index))
+    matches = [
+        candidate
+        for candidate in candidates
+        if str(candidate[0]) in {str(args.github_number), args.github_url}
+    ]
+    if len(matches) != 1:
+        raise CleanupError("GitHub PR identity does not match one cleanup record")
+    return matches[0]
+
+
+def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any]) -> dict[str, Any]:
     if not args.execute:
         raise CleanupError("merged branch cleanup is destructive and requires --execute")
-    repo, identity = repository_context(args)
-    require_github_merge_evidence(args, identity)
-    submission = identity["submission"]
+    repo, identity = repository_context(args, data)
+    cleanup_pr, submission, receipt, pending_index = select_cleanup(args, identity)
+    require_github_merge_evidence(args, identity["source_branch"], cleanup_pr, submission)
     old_branch = submission["head_branch"]
     active_branch = identity["branch"]
     source_branch = identity["source_branch"]
@@ -264,6 +300,8 @@ def cleanup(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     local_ref = f"refs/heads/{old_branch}"
+    require_direct_ref(repo, f"refs/heads/{active_branch}")
+    require_direct_ref(repo, local_ref)
     local_head = ref_target(repo, local_ref)
     expected_remote_head = submission["observed_head_sha"]
     remote_head = remote_branch_target(repo, remote, old_branch)
@@ -272,7 +310,7 @@ def cleanup(args: argparse.Namespace) -> dict[str, Any]:
             f"remote branch advanced: expected {expected_remote_head}, found {remote_head}"
         )
     if local_head is not None:
-        require_local_transfer_proof(repo, identity, old_branch, local_head)
+        require_local_transfer_proof(repo, identity, receipt, submission, old_branch, local_head)
 
     remote_deleted = remote_head is None
     local_deleted = local_head is None
@@ -302,9 +340,18 @@ def cleanup(args: argparse.Namespace) -> dict[str, Any]:
             )
         local_deleted = True
 
+    if pending_index is not None:
+        cleanups = identity["pending_remote_cleanups"]
+        if cleanups[pending_index]["pr"] != cleanup_pr:
+            raise CleanupError("pending remote cleanup changed before completion")
+        cleanups.pop(pending_index)
+        if not cleanups:
+            identity.pop("pending_remote_cleanups")
+        write_manifest(path, data)
+
     return {
         "repository": args.repository,
-        "pr": identity["pr"],
+        "pr": cleanup_pr,
         "merged_branch": old_branch,
         "active_branch": active_branch,
         "source_head_sha": source_head,
@@ -312,6 +359,13 @@ def cleanup(args: argparse.Namespace) -> dict[str, Any]:
         "local_deleted": local_deleted,
         "status": "already-absent" if remote_head is None and local_head is None else "deleted",
     }
+
+
+def cleanup(args: argparse.Namespace) -> dict[str, Any]:
+    path = manifest_path(args.root)
+    with manifest_lock(path):
+        data = load_manifest(path)
+        return cleanup_locked(args, path, data)
 
 
 def parser() -> argparse.ArgumentParser:
