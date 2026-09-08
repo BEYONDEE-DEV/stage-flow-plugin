@@ -443,7 +443,12 @@ def resolve_workflow_root(
     if not continuation_request_id and session_root is not None:
         continuation_request_id = session_pointer_request_id(session_root, session_id)
 
-    if bundle is not None and bundle_pointer_matches(bundle, session_id, continuation_request_id):
+    if bundle is not None and bundle_pointer_matches(
+        bundle,
+        session_id,
+        continuation_request_id,
+        include_inactive=bool(request_id),
+    ):
         return resolved_root(start, bundle, "bundle", "slot_manifest_continuation", manifest, True)
 
     if session_root is not None:
@@ -512,15 +517,35 @@ def path_contains(parent: Path, child: Path) -> bool:
         return False
 
 
-def bundle_pointer_matches(bundle: Path, session_id: str, request_id: str) -> bool:
-    selected = session_pointer_request_id(bundle, session_id)
+def bundle_pointer_matches(
+    bundle: Path,
+    session_id: str,
+    request_id: str,
+    *,
+    include_inactive: bool,
+) -> bool:
+    current = session_pointer(bundle, session_id)
+    selected = metadata_request_id(current)
     if not selected:
         return False
-    return not request_id or selected == request_id
+    if request_id and selected != request_id:
+        return False
+    return include_inactive or current_pointer_is_active(current)
+
+
+def session_pointer(root: Path, session_id: str) -> dict[str, Any]:
+    return read_json(root / ".simple" / "sessions" / safe(session_id) / "current.json")
+
+
+def current_pointer_is_active(current: dict[str, Any]) -> bool:
+    value = current.get("active", True)
+    return type(value) is bool and value
 
 
 def session_pointer_request_id(root: Path, session_id: str) -> str:
-    current = read_json(root / ".simple" / "sessions" / safe(session_id) / "current.json")
+    current = session_pointer(root, session_id)
+    if not current_pointer_is_active(current):
+        return ""
     return metadata_request_id(current)
 
 
@@ -532,8 +557,11 @@ def nearest_session_root(start: Path, session_id: str, request_id: str) -> Path 
         current_path = candidate / ".simple" / "sessions" / safe(session_id) / "current.json"
         if not current_path.is_file():
             continue
-        selected = session_pointer_request_id(candidate, session_id)
-        if selected and (not request_id or selected == request_id):
+        current = session_pointer(candidate, session_id)
+        selected = metadata_request_id(current)
+        if request_id and selected == request_id:
+            return candidate
+        if not request_id and selected and current_pointer_is_active(current):
             return candidate
     return None
 
@@ -664,6 +692,16 @@ def check_hook(
         return result
 
     current = read_json(current_path)
+    if create_goal_tool and not simple_goal_candidate:
+        result.update(status="PREPASS", severity="info", reason="create_goal objective is outside Simple Workflow scope")
+        return result
+    if "active" in current and type(current["active"]) is not bool:
+        return invalid_current(
+            event,
+            result,
+            "session current pointer `active` must be exact boolean `true` or `false`",
+            current_path=rel(root, current_path),
+        )
     request_id = metadata_request_id(current)
     if not request_id:
         if create_goal_tool and not simple_goal_candidate:
@@ -676,11 +714,25 @@ def check_hook(
             current_path=rel(root, current_path),
         )
 
-    if create_goal_tool and not simple_goal_candidate:
-        result.update(status="PREPASS", severity="info", reason="create_goal objective is outside Simple Workflow scope")
-        return result
     if simple_goal_candidate and objective_request_id != request_id:
         return block(result, "Simple Workflow create_goal objective must name the selected request id")
+
+    if current.get("active", True) is False:
+        result.update(
+            current_request_id=request_id,
+            current_source="session",
+            current_path=rel(root, current_path),
+            active=False,
+            preflight_required=False,
+        )
+        if simple_goal_candidate:
+            return block(result, "create_goal requires explicit reactivation of the inactive Simple Workflow request")
+        result.update(
+            status="PREPASS",
+            severity="info",
+            reason="inactive Simple Workflow request does not capture follow-up events",
+        )
+        return result
 
     duplicate = inspect_duplicate_requests(root, request_id) if (resolution or {}).get("is_bundle") else None
     if duplicate and duplicate["status"] != "none":

@@ -1,26 +1,35 @@
 ---
 name: simple-workflow
-description: "Use when the user explicitly asks to use Simple Workflow, simple-workflow, `.simple`, or the Simple Workflow plugin, or when an active `.simple` session pointer exists. Enforces a small plan-centered workflow: challenge inferred intent before confirmation, write `plan.md`, review it with a subagent, let the agent determine explicit user approval from conversation context, and structurally gate `create_goal` against the reviewed request."
+description: "Use when the user explicitly asks to use Simple Workflow, simple-workflow, `.simple`, or the Simple Workflow plugin, or when an active `.simple` session pointer exists. Runs a plan-centered workflow with Astra planning and coordination, one independent plan challenge, explicit approval, and bounded Sol implementation delegation."
 ---
 
 # Simple Workflow
 
-Use this skill to keep Codex work tied to a single human-readable plan while preserving an internal review record.
+Use this skill to keep Codex work tied to a single human-readable plan while preserving an internal review record. The default role split is `gpt-6-astra` for the main planner/coordinator and `gpt-5.6-sol` for an implementation subagent. Model names in these instructions do not change the model running an existing agent.
+
+## Role Routing
+
+Decide the role before resolving or activating any request:
+
+- A main agent owns planning, the independent plan challenge, user decisions, approval, Goal and `.simple` metadata, implementation dispatch, final reviews, and completion. Read [references/role-handoff.md](references/role-handoff.md) before planning or dispatching implementation.
+- An agent explicitly dispatched as the implementation worker must immediately follow the worker contract in [references/role-handoff.md](references/role-handoff.md) and stop reading this file as a coordinator procedure. An inherited active `.simple` pointer does not make that worker create or select a request, repeat planning, seek approval, manage a Goal, update workflow metadata, or certify completion.
+- An agent explicitly dispatched as an independent reviewer must immediately follow the reviewer contract in [references/role-handoff.md](references/role-handoff.md) and stop reading this file as a coordinator procedure. It inspects only the supplied request, plan, sources, diff or outputs, and evidence; it never activates nested workflow state or manages the Goal.
+
+Respect an explicit user model choice over these defaults. The skill cannot switch the already-running main agent to Astra: the user or host must start/select `gpt-6-astra`. If actual main-model identity is unavailable, say so once while establishing roles; do not claim Astra or repeatedly ask on every continuation. If exact requested role dispatch is unavailable, report the limitation and ask for a decision instead of silently substituting another model.
 
 ## Core Rule
 
 Follow exactly this sequence:
 
 1. Listen to the user's requirements.
-2. Inspect the project and infer the user's intent, expected outcome, boundaries, and assumptions.
-3. Before the first user intent confirmation, run the bounded `Intent Challenge Review`. Disclose every material finding, obtain the user's decision without silently changing the request, and repeat the review until no unresolved material finding remains.
-4. Ask the user to confirm or correct the challenged intent. Then ask any remaining clarification questions from broad to narrow: 대분류 before 중분류, and 중분류 before 소분류.
-5. Write `plan.md` from the confirmed intent and requirements, including the observable outcome, completion criteria, and planned completion evidence for every requirement.
-6. Review `plan.md` with a subagent and write internal `review.md`. The reviewer must check that the resolved Intent Challenge result, confirmed intent, and plan agree.
-7. If review fails only for a non-material plan defect, revise `plan.md` and repeat the subagent review until it passes. If the reviewer finds a new material requirement problem, return to the user-decision flow in step 3 instead of automatically changing the plan.
-8. When the agent determines from conversation context that the user clearly authorizes execution, first persist approval for the current reviewed fingerprint, then reconcile the Goal with `get_goal` and call `create_goal` at most once.
-9. Execute the approved `plan.md`, adapt implementation details only inside the approved goal and scope, and run its validation commands.
-10. Map every requirement to actual completion evidence, run both post-execution reviews, pass the completion pre-gate, complete the Goal, and then close the local request metadata.
+2. As the main planner/coordinator (`gpt-6-astra` by default), inspect the relevant original project sources and infer intent, outcome, boundaries, assumptions, critical alternatives, and uncertainties. Ask the user only about unresolved choices that can materially change the plan; decide reversible implementation details from evidence.
+3. Write `plan.md` from the resolved request. Include the observable outcome, completion criteria, evidence and rationale, change targets, execution order, validation, and conditions that require replanning. Describe outcomes and constraints without prescribing every implementation step.
+4. Run one bounded `Independent Plan Challenge` with a subagent. It covers intent quality, question depth, project fit, alternatives, risks, and plan completeness in one review, then records compatible results in `review.md`.
+5. For a non-material plan defect, revise and re-review. For a material requirement or scope issue, give the user the fact, impact, and decision needed; revise only after the decision and repeat the same independent review for the changed plan.
+6. If the requested deliverable is the plan itself, validate the reviewed plan, set only the selected session pointer's optional `active` field to exact boolean `false`, and verify that write before presenting the plan. Approval to finalize or accept a plan-only deliverable is not authorization to create a Goal or implement it.
+7. When the agent determines from conversation context that the user clearly authorizes execution of write work or a read-only analysis, first persist approval for the current reviewed fingerprint, then reconcile the Goal with `get_goal` and call `create_goal` at most once.
+8. For approved code-changing or other write work, dispatch one bounded implementation worker as actual `gpt-5.6-sol`; the worker chooses implementation mechanics, changes only its owned scope, tests the affected behavior, fixes in-scope failures, and returns evidence. For read-only requests, do not dispatch an implementation worker.
+9. The main agent inspects the result and original sources, maps every requirement to actual evidence, runs both post-execution review perspectives, drives any fix/revalidate cycle, passes the completion pre-gate, completes the Goal, and then closes local request metadata.
 
 Natural-language approval intent belongs to the agent applying this skill. Hooks must not classify approval with keyword or regular-expression matching. A `UserPromptSubmit` hook may report request readiness, while `PreToolUse(create_goal)` only enforces structural prerequisites after the agent has already determined that the user approved execution.
 
@@ -57,8 +66,10 @@ Use these modes and this precedence:
    use the plugin-bundled checker's read-only `--resolve-root --multi-repo --start <cwd>` mode. It
    may select a bundle automatically only from an exact `slot.path` in an ancestor
    `.stageflow-worktrees/slots.json`; if no valid exact match exists, require an explicit root.
-3. For a hook continuation from a child repository, use the same resolver. Select the manifest
-   bundle only when its `.simple/sessions/<session-id>/current.json` points to the same request.
+3. For automatic hook continuation from a child repository, use the same resolver. Select the
+   manifest bundle only when its `.simple/sessions/<session-id>/current.json` actively points to the
+   same request. An inactive pointer remains available only for explicit request selection or Goal
+   ownership checks and does not promote a new single-repository request to the bundle.
 4. Otherwise preserve the nearest single-repository root. Merely being inside a manifest-backed
    slot does not promote a new or pointerless single-repo request to the bundle.
 
@@ -66,6 +77,10 @@ Whenever the agent creates or selects a request, record the resolved canonical a
 `workflow_root` in that session's `current.json`. This optional field is a
 session-bound consistency assertion, not a discovery mechanism: the pointer lives under the root it describes. Existing
 pointers without the field remain valid. Hooks read but never backfill or rewrite it.
+
+`current.json.active` is also optional and must be exact JSON boolean when present. Missing or
+`true` means the pointer participates in automatic continuation. `false` preserves the selected
+request for explicit reuse while preventing it from capturing unrelated prompts or Stop events.
 
 Never infer a bundle from a path shape such as `worktrees/<name>` or from an individual
 repository's `git rev-parse --show-toplevel`. In a confirmed multi-repo request, the bundle root—not
@@ -81,7 +96,7 @@ align it manually, then allow the same canonical request and fingerprint to be r
 
 Allowed phases are `plan`, `review`, and `completed`.
 
-Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests use integer `workflow_version: 2`, exact integer `intent_challenge_version: 1`, `plan_approval_status: pending|approved`, and may record `goal_status` as `pending`, `active`, `completing`, or `completed`. The intent marker means the request must use the structured Intent Challenge review contract. Marker-free existing v2 and legacy requests retain their previous review schema; any other marker value is invalid. After Goal creation, `goal_plan_fingerprint` permanently identifies the plan fingerprint named in the original Goal objective, while `approved_plan_fingerprint` identifies the latest plan explicitly approved for execution. Requests without `workflow_version` are legacy requests; unknown versions are invalid. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
+Use `state.json` as the local workflow source of truth. `current.json` and the selected `index.json` request entry must mirror its phase. New requests use integer `workflow_version: 2`, exact integer `intent_challenge_version: 1`, `plan_approval_status: pending|approved`, and may record `goal_status` as `pending`, `active`, `completing`, or `completed`. The intent marker means the request must use the compatible structured results from the Independent Plan Challenge. Marker-free existing v2 and legacy requests retain their previous review schema; any other marker value is invalid. After Goal creation, `goal_plan_fingerprint` permanently identifies the plan fingerprint named in the original Goal objective, while `approved_plan_fingerprint` identifies the latest plan explicitly approved for execution. Requests without `workflow_version` are legacy requests; unknown versions are invalid. Readers must accept legacy `id`/`request_id` and `phase`/`status` key variants, but the selected request id and phase values must agree.
 
 The phase transitions are:
 
@@ -95,11 +110,11 @@ plan -> review -> completed
 
 ## Artifact Rules
 
-For `workflow_version: 2`, `plan.md` must include `# Plan`, `## Summary`, `## Outcome And Completion Criteria`, `## Requirements Coverage`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`. The outcome section must name the user-visible or system-visible final state and how it can be observed. The requirements table must use `Requirement | Plan | Completion Evidence`; every `REQ-###` needs a concrete execution plan and a concrete planned evidence source. Legacy requests keep their existing plan shape.
+For `workflow_version: 2`, `plan.md` must include `# Plan`, `## Summary`, `## Outcome And Completion Criteria`, `## Requirements Coverage`, `## Change Targets`, `## Flow Check`, `## Validation`, and `## Out Of Scope`. The outcome section must name the user-visible or system-visible final state and how it can be observed. The requirements table must use `Requirement | Plan | Completion Evidence`; every `REQ-###` needs a concrete execution plan and a concrete planned evidence source. The plan also captures evidence and rationale for material choices, useful execution order, and conditions that would require replanning. Legacy requests keep their existing plan shape.
 
 ## Shared Planning And Review Principles
 
-Use the same principles when writing `plan.md`, reviewing `plan.md` with a subagent, and reviewing the implemented code after changes are made:
+Use the same principles when writing `plan.md`, independently challenging it with a subagent, and reviewing implementation or read-only results:
 
 - Preserve the user's confirmed intent and the approved scope.
 - Give every `REQ-###` a concrete, verifiable execution plan.
@@ -111,7 +126,7 @@ Use the same principles when writing `plan.md`, reviewing `plan.md` with a subag
 
 `## Flow Check` in `plan.md` must state whether the affected product, feature, state, data, user, command, hook, and validation flows are coherent after considering the planned changes. It must tell the user about any relevant flow problem discovered during planning, even when the problem was pre-existing and was not caused by the requested change. Report flow breaks such as broken user journeys, inconsistent state transitions, missing failure or retry paths, contradictory behavior across entry points, data moving through the wrong owner, or a validation path that no longer proves the real flow. If a discovered problem is outside the requested scope, say so explicitly instead of hiding it.
 
-`review.md` is internal. It must include `# Review`, `## Reviewed Plan Fingerprint` with `Reviewed Plan Fingerprint: sha256:<hex>`, `## Reviewer`, `## Verdict` whose complete trimmed body is exactly `PASS`, `## Blocking Issues` with a blocking-specific no-issue value such as `No blocking issues`, `None`, or `차단 없음`, and non-empty `## Flow Check` and `## Question Depth Check` results. Requests with `intent_challenge_version: 1` additionally require `## Intent Challenge Check`: its `Finding | User Decision Or Resolution | Verdict` table records each material finding once with a unique `IC-###`, a substantive Korean decision or resolution, and exact `PASS`; when there were no material findings it contains one `NONE` row with the review basis. `### Intent Challenge Final Verdict` must be exact `PASS`. A non-blocking flow observation does not invalidate a passing plan review. The internal review must use `Shared Planning And Review Principles` and verify that the resolved Intent Challenge result, user-confirmed intent, and `plan.md` agree; its flow result must judge whether the plan exposes all relevant flow problems to the user and keeps the affected flow coherent, not merely whether the Simple Workflow procedure was followed.
+`review.md` is internal. It must include `# Review`, `## Reviewed Plan Fingerprint` with `Reviewed Plan Fingerprint: sha256:<hex>`, `## Reviewer`, `## Verdict` whose complete trimmed body is exactly `PASS`, `## Blocking Issues` with a blocking-specific no-issue value such as `No blocking issues`, `None`, or `차단 없음`, and non-empty `## Flow Check` and `## Question Depth Check` results. Requests with `intent_challenge_version: 1` additionally require `## Intent Challenge Check`: its `Finding | User Decision Or Resolution | Verdict` table records each material finding once with a unique `IC-###`, a substantive Korean decision or resolution, and exact `PASS`; when there were no material findings it contains one `NONE` row with the review basis. `### Intent Challenge Final Verdict` must be exact `PASS`. These existing headers and markers remain validator-compatible views of one Independent Plan Challenge, not separate intent and per-depth reviews. A non-blocking flow observation does not invalidate a passing plan review. The internal review must use `Shared Planning And Review Principles` and verify that user decisions, intent, original project evidence, and `plan.md` agree; its flow result must judge whether the plan exposes all relevant flow problems to the user and keeps the affected flow coherent, not merely whether the Simple Workflow procedure was followed.
 
 After execution reviews pass, append `## Completion Review` to the same `review.md`. It records the latest completion plan fingerprint, exactly one actual-evidence row and exact `PASS` verdict for every planned `REQ-###`, observable outcome evidence, and an exact final `PASS`. Do not create another evidence artifact.
 
@@ -125,48 +140,49 @@ Keep fixed validator contract tokens unchanged when needed: headings, table colu
 
 ## Operating Flow
 
-At the start of a Simple Workflow turn, resolve the workflow root using `Workflow Root Ownership`,
+At the start of a main-agent Simple Workflow turn, resolve the workflow root using `Workflow Root Ownership`,
 then inspect `<workflow-root>/.simple/sessions/<session-id>/current.json` when it exists. When the
-skill trigger applies and the pointer is missing, invalid, or completed, the skill-applying agent
+skill trigger applies and the pointer is missing, invalid, inactive, or completed, the skill-applying agent
 creates or selects a request under that same root, writes its canonical absolute `workflow_root` to
-the selected session pointer, and then continues. Hooks do not infer activation from prompt strings.
+the selected session pointer, sets `active: true`, and then continues. Hooks do not infer activation from prompt strings.
+An inactive pointer alone never triggers activation or creation. Keep it inactive for an unrelated
+follow-up or plan-finalization acknowledgement; an explicit reference to executing or resuming its
+stored plan may select that same request even without repeating the Simple Workflow name. An
+explicit Simple Workflow request for distinct work creates or selects a different request instead.
 
 If an active session pointer exists for a request in `plan` or `review` phase, treat follow-up user messages as Simple Workflow continuation even when the prompt does not mention the plugin again. Short answers, confirmations, corrections, and renewed requests such as `응`, `맞아`, `그렇게 해줘`, or `수정해줘` must continue from the active request and follow the same `plan.md`, internal review, validator, and approval rules. A completed request must not capture unrelated follow-up prompts; explicit Simple Workflow invocation starts or selects another request.
 
-Before asking the user to confirm the request, inspect the project enough to understand it and form a first inference of the intent, expected outcome, boundaries, assumptions, and notable affected-flow risks. Run the Intent Challenge Gate below against that first inference. Only after every material finding has a user decision or resolution and the gate passes, state the resulting intent and ask the user to confirm or correct it. Then apply the existing Question Depth Gate before writing `plan.md`.
+For a plan-only result, keep the reviewed request, `review|pending|pending` state, empty approval and
+Goal fingerprints, review, and index entry intact. After `--phase review` passes, confirm the same
+session, request, and canonical root; write only `current.json.active: false`; read it back as exact
+`false`; and rerun `--current --phase review`. Do not claim the session was deactivated if any write,
+identity check, read-back, or validation fails. `--request --phase review` may validate the preserved
+plan independently, but it does not read the session pointer and cannot prove deactivation.
 
-## Intent Challenge Gate
+An inactive pointer stays inactive for unrelated follow-ups. Reuse it only when the user explicitly
+selects that request or asks to execute that plan: write `active: true`, verify the current original
+sources, plan, review, and reviewed fingerprint, then determine explicit execution approval and use
+the existing Goal gate. Reactivation alone and ordinary approval of the plan as a deliverable are
+not execution approval.
 
-This gate is mandatory once for every new request with `intent_challenge_version: 1`, after project inspection and the main agent's first inference but before the first user intent confirmation. It is an initial requirements-quality check, not an approval check and not a second implementation-plan review. Do not replay it merely because a later material replan uses the existing re-review and reapproval flow.
+Before writing `plan.md`, inspect the relevant original project sources enough to understand the intent, expected outcome, boundaries, assumptions, affected-flow risks, and credible alternatives. Ask a question only when its answer can materially change the goal, scope, expected outcome, ownership, sequencing, irreversible risk, or validation standard. Infer reversible low-risk details from evidence and record a consequential assumption or rationale in the plan. Do not ask preference questions that only choose between behaviorally equivalent implementation details.
 
-Run a bounded subagent review using only the user's request, inspected project facts, the inferred intent, expected outcome, boundaries and assumptions, and plausible alternatives grounded in those facts. Ask the reviewer to challenge:
+## Independent Plan Challenge
 
-- whether the requested solution fits the underlying problem;
-- false assumptions, contradictions, omissions, and unclear success conditions;
-- affected users, systems, owners, and responsibility boundaries;
-- simpler or safer alternatives that preserve the intended outcome;
-- failure paths, edge cases, irreversible effects, and material risk; and
-- mismatches between the request or inference and the actual project.
+After drafting `plan.md`, run one bounded independent subagent review for that plan fingerprint. Give the reviewer the user's request and decisions, the candidate plan, the canonical project root, and relevant original source paths so it can verify facts directly. Do not give only the planner's conclusions. Ask it to challenge, in one pass:
 
-The reviewer identifies findings; it does not replace the user's intent or authorize a requirement change. For every material finding, the main agent must tell the user the supporting fact, likely impact, and decision needed. Never silently or automatically apply the reviewer's preferred alternative. Include the user's correction or explicit tradeoff acceptance in the next bounded review and repeat until the reviewer returns `PASS` with no unresolved material finding. Only then ask for the first intent confirmation and proceed to the Question Depth Gate.
+- whether the plan addresses the underlying problem and observable outcome;
+- false assumptions, contradictions, omissions, unclear success conditions, and project mismatches;
+- affected users, systems, owners, responsibility boundaries, sequencing, and state or data flow;
+- critical alternatives and whether the rationale for the chosen direction is supported;
+- failure paths, edge cases, irreversible effects, material risk, and validation quality; and
+- whether any unresolved user question could materially change the plan.
 
-Do not create a challenge artifact. Preserve the durable result later in the existing `review.md` under `## Intent Challenge Check`. Record every material finding as one unique `IC-###` row with the user's decision or resolution and exact `PASS`, or use one `NONE` row with a substantive Korean review basis when there was no material finding. The final verdict must be exact `PASS`.
+This is the sole pre-approval plan challenge. Do not run separate Intent Challenge, `대분류`, `중분류`, or `소분류` reviewer checkpoints. The reviewer identifies evidence-backed findings; it does not replace the user's intent, dictate code mechanics, or authorize a requirement change. A style preference or equivalent implementation choice is non-blocking.
 
-## Question Depth Gate
+For a material finding, the main agent tells the user the supporting fact, likely impact, critical alternatives, and decision needed. Never silently apply the reviewer's preferred alternative. After the user's correction or explicit tradeoff acceptance changes the candidate plan, repeat the same independent challenge for the new fingerprint. For a non-material plan defect, the main agent may repair and re-review it without another user round. A repeated finding with unchanged code, plan, or evidence requires the main agent to resolve the cited evidence or explain concretely why it is non-blocking; never force `PASS`, waive it arbitrarily, or stop only because an iteration quota was reached.
 
-Use three clarification depths:
-
-- `대분류`: request identity, purpose, top-level scope, target user or system surface, expected outcome, and explicit boundaries.
-- `중분류`: major behavior areas, ownership, sequencing, state or data responsibility, integration responsibility, and review/approval flow.
-- `소분류`: copy/text, exact fallback behavior, edge case detail, validation detail, and small acceptance refinements.
-
-Question depth is adaptive, not a quota. Ask a question only when its answer can materially change the goal, scope, expected outcome, ownership, sequencing, irreversible risk, or validation standard. Infer reversible low-risk details from inspected project facts and record the assumption in `plan.md` when it matters. A depth may have no user question when the bounded subagent check confirms that no decision at that depth can change the plan. Do not ask preference questions whose answers only choose between behaviorally equivalent implementation details.
-
-Before moving from `대분류` to `중분류`, run a bounded subagent check asking whether any unresolved `대분류` question remains. Before moving from `중분류` to `소분류`, run another bounded subagent check asking whether any unresolved `중분류` question remains. Give the subagent only the user's request, inspected project facts, answered questions, and the candidate next-depth questions. The subagent must return `PASS` only when no higher-level question is still needed for `plan.md`.
-
-If the subagent finds a missing higher-level question, ask that question before descending. Do not write `plan.md` while a broad or mid-level decision that can change the plan is still open. Do not create a new artifact for these checks; summarize the latest checkpoint to the user when asking the next batch and record the final result in `review.md` under `## Question Depth Check`.
-
-During the initial `plan.md` review, the reviewer must re-check the resolved Intent Challenge result, the user's confirmed intent, and the plan for consistency. If this review discovers a new material requirement problem, do not automatically revise the requirement or plan. Tell the user the new fact, impact, and decision needed; repeat the Intent Challenge Review with that decision, rerun any Question Depth checkpoints affected by it, rewrite and re-review the plan, and obtain execution approval for the final reviewed fingerprint.
+Do not create a challenge artifact. Preserve the result in the existing `review.md`: `## Intent Challenge Check` records material intent findings and their user decisions (or one substantive `NONE` row), while `## Question Depth Check` records whether any plan-changing question remains. These are compatibility fields populated by the same Independent Plan Challenge, not separate reviews. Keep every material finding as one unique `IC-###` row with a substantive Korean resolution and exact `PASS`; `### Intent Challenge Final Verdict` must be exact `PASS` only when none remains unresolved.
 
 Before moving to the next step, run the plugin-bundled validator against the target project root. The validator lives under the Simple Workflow plugin root, not under the target project's `scripts/` directory:
 
@@ -179,7 +195,7 @@ Treat validator failures as the next action. Fix the artifact or ask the user fo
 
 ## Goal Gate And Recovery
 
-After review passes, the agent—not the hook—decides whether the user's latest message clearly approves execution. Words such as `approve`, `proceed`, `승인`, `진행`, or `실행` are examples, not a regular-expression contract; negations, status questions, quoted text, and unrelated uses are not approval.
+After review passes, finish the plan-only deactivation sequence above and stop before this gate when the requested outcome is plan-only. Otherwise the agent—not the hook—decides whether the user's latest message clearly approves execution. Words such as `approve`, `proceed`, `승인`, `진행`, or `실행` are examples, not a regular-expression contract; negations, status questions, quoted text, and unrelated uses are not approval.
 
 Immediately after recognizing approval and before `get_goal` or `create_goal`, durably set `plan_approval_status: approved` and `approved_plan_fingerprint` to the current reviewed plan fingerprint. If that write fails, do not call `create_goal`. This `approved + pending` state is the retry-safe proof that the exact plan was authorized.
 
@@ -210,14 +226,25 @@ UserPromptSubmit and Stop keep their existing non-blocking cwd behavior.
 
 After `create_goal` succeeds for a v2 request, record the objective fingerprint as `goal_plan_fingerprint` and set `goal_status: active`; approval was already recorded and must not be rewritten. If `create_goal` fails, preserve `approved + pending` and retry with the same approval. If the post-success state write fails, use the matching active Goal request id and objective fingerprint returned by `get_goal` as authoritative on the next turn, repair `goal_plan_fingerprint` and Goal status, and never call `create_goal` again for recovery. Legacy requests keep the existing single-fingerprint behavior.
 
+## Implementation Handoff
+
+For an approved read-only request, the main agent performs the work and later applies the same evidence and completion gates without a Sol implementation dispatch.
+
+For approved write work, follow [references/role-handoff.md](references/role-handoff.md) and call the host's actual `spawn_agent` tool with `model: "gpt-5.6-sol"` plus `fork_turns: "none"` or a small positive turn count. Full-history forks cannot override the model. Preserve a user-selected effort setting and never hardcode maximum effort. If model-selectable dispatch is unavailable or the requested model cannot be created, report that fact and wait for the user's choice; do not silently substitute.
+
+Every first worker or reviewer handoff must include its explicit non-coordinator role and the canonical absolute path to `references/role-handoff.md` from the skill version the main agent actually loaded, with instructions to read the applicable contract before work. Resolve and verify that path directly; do not infer it from cwd, a relative path, or a guessed cache version. If it cannot be read, the delegated agent must stop and report the failure.
+
+Give the worker the approved plan and fingerprint, canonical root, bounded ownership, raw source paths, outcomes, constraints, validation evidence, and replanning triggers. The worker owns implementation mechanics within those boundaries. The main agent may inspect while it runs but must not write concurrently to worker-owned paths. After the worker returns, verify the actual diff and original sources. Use the same worker through `followup_task` for evidence-backed, in-scope fixes and revalidation instead of starting another worker or retransmitting full history. After a material replan, the resumed handoff names the new approved plan fingerprint and changed boundaries explicitly; do not present the immutable Goal fingerprint as the worker's expected plan hash.
+
 ## Adaptive Execution And Material Replan
 
 Keep execution flexible without silently changing the approved goal:
 
 - A method-only adaptation changes implementation mechanics but preserves every approved requirement, scope boundary, expected outcome, owner, and validation standard. Do not rewrite `plan.md` or ask for another approval. Explain the deviation and prove equivalent or better completion evidence in both post-execution reviews.
 - A material change modifies a requirement, scope boundary, expected outcome, ownership, irreversible risk, or validation standard. Stop before executing the changed work and tell the user what new fact was discovered plus the retry, goal-preserving fallback, or rescope choices.
+- Before revising a material plan while Sol is active, call the host's actual `interrupt_agent` capability and confirm the worker has stopped writing. Do not edit or redispatch against a new fingerprint while the worker may still be changing files under the superseded plan.
 - Before editing a material plan, obtain the user's decision about the change. Then durably set `plan_approval_status: pending`, revise `plan.md`, repeat the internal review and `--phase review` validation, summarize the revision, and ask for explicit execution approval again.
-- Do not repeat the initial Intent Challenge Gate during material replan, including its plan review. Use the existing material-change user decision, affected Question Depth checkpoints, plan review, and reapproval flow instead.
+- After a material replan decision, run the same single Independent Plan Challenge for the revised fingerprint; do not add separate intent or question-depth checkpoints.
 - While a v2 plan is pending approval, `UserPromptSubmit` readiness must say that execution is on hold. `Stop` must still allow Codex to send the reapproval request; hooks must not decide the user's answer.
 - After explicit reapproval, update only `approved_plan_fingerprint` to the current reviewed plan fingerprint, set `plan_approval_status: approved`, rerun `--phase review`, and continue the same active Goal. Never call `create_goal` again and never change the immutable `goal_plan_fingerprint`.
 
@@ -225,10 +252,12 @@ If the pending marker write succeeds but a later plan edit or review fails, rema
 
 ## Post-Implementation Review
 
-After approved work and validation commands are complete, run bounded subagent review from two perspectives before the final user response. Both reviews must use `Shared Planning And Review Principles`. This gate applies to code-changing and read-only work.
+After approved work and validation commands are complete, the main agent first inspects the actual diff or read-only outputs and the relevant original sources. Then dispatch bounded, read-only independent review covering the two perspectives below before the final user response. Both perspectives must use `Shared Planning And Review Principles`; one or more independent reviewers may cover them, but the implementation worker cannot self-certify completion. Reviewer handoffs include the canonical root, user decisions, approved plan, raw source paths, actual diff or outputs, and validation results. This gate applies to code-changing and read-only work.
 
-1. `Intent Compliance Review`: compare the confirmed user intent, latest approved `plan.md`, actual diff when code changed, or actual outputs and commands when work was read-only, plus validation results. Its response must list every `REQ-###` with the actual evidence that proves it and identify any method-only adaptation. If the work misses the intent, lacks evidence for a requirement, violates the approved goal or scope, introduces an in-scope regression, or leaves an expected validation failing, Codex must fix it automatically and repeat validation plus both post-implementation reviews.
-2. `Flow / Unexpected Issue Review`: inspect the affected user, state, data, failure or recovery, command, hook, and validator flows and independently challenge whether the evidence proves the observable outcome. Its response must cover every `REQ-###`; a test command alone is insufficient when it does not observe the real affected result. If a relevant issue is in scope or caused by the implementation, Codex must fix it automatically and repeat validation plus both post-implementation reviews. If the issue is outside the user's intent, pre-existing, or requires expanded scope, Codex must tell the user before changing it.
+1. `Intent Compliance Review`: compare the confirmed user intent, latest approved `plan.md`, actual diff when code changed, or actual outputs and commands when work was read-only, plus validation results. Its response must list every `REQ-###` with the actual evidence that proves it and identify any method-only adaptation. A missing requirement, scope violation, in-scope regression, or expected validation failure is blocking.
+2. `Flow / Unexpected Issue Review`: inspect the affected user, state, data, failure or recovery, command, hook, and validator flows and independently challenge whether the evidence proves the observable outcome. Its response must cover every `REQ-###`; a test command alone is insufficient when it does not observe the real affected result. An in-scope or implementation-caused issue is blocking. If an issue is outside the user's intent, pre-existing, or requires expanded scope, the main agent tells the user before changing it.
+
+For a blocking in-scope finding on write work, the main agent sends the evidence to the same Sol worker with `followup_task`, waits for its fix, verifies the changed diff, reruns affected validation, and repeats both perspectives. For read-only work, the main agent corrects the output and follows the same revalidation cycle. Do not rerun already-passing checks when neither relevant code nor evidence changed. A repeated identical finding is resolved against concrete requirement and source evidence; reviewer disagreement is not settled by an arbitrary waiver, forced `PASS`, or iteration quota.
 
 Keep requirement-to-evidence coverage in the bounded reviewer responses while reviewing. After both pass, the main agent consolidates their actual evidence into the existing `review.md` Completion Review; do not create a new artifact. A critical outcome that cannot be observed is a verification gap, not a pass. Obtain the smallest missing user-supplied evidence or present retry/fallback/rescope choices instead of claiming completion. Summarize the two review results in the final response. If an out-of-scope or pre-existing issue blocks safe completion, explain the blocker and wait for the user's decision.
 

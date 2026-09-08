@@ -20,7 +20,7 @@ class SkillContractTests(unittest.TestCase):
 
     def test_shared_planning_and_review_principles_are_the_common_contract(self) -> None:
         self.assertIn("## Shared Planning And Review Principles", self.text)
-        self.assertIn("Use the same principles when writing `plan.md`, reviewing `plan.md` with a subagent", self.text)
+        self.assertIn("independently challenging it with a subagent", self.text)
         self.assertIn("confirmed intent", self.text)
         self.assertIn("approved scope", self.text)
         self.assertIn("every `REQ-###`", self.text)
@@ -31,7 +31,7 @@ class SkillContractTests(unittest.TestCase):
 
     def test_reviews_refer_to_the_shared_principles(self) -> None:
         self.assertIn("The internal review must use `Shared Planning And Review Principles`", self.text)
-        self.assertIn("Both reviews must use `Shared Planning And Review Principles`", self.text)
+        self.assertIn("Both perspectives must use `Shared Planning And Review Principles`", self.text)
 
     def test_post_implementation_review_has_two_required_perspectives(self) -> None:
         self.assertIn("## Post-Implementation Review", self.text)
@@ -44,9 +44,10 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("affected user, state, data, failure or recovery, command, hook, and validator flows", self.text)
 
     def test_in_scope_issues_are_fixed_but_out_of_scope_issues_are_reported_first(self) -> None:
-        self.assertIn("Codex must fix it automatically and repeat validation plus both post-implementation reviews", self.text)
+        self.assertIn("same Sol worker with `followup_task`", self.text)
+        self.assertIn("reruns affected validation, and repeats both perspectives", self.text)
         self.assertIn("outside the user's intent, pre-existing, or requires expanded scope", self.text)
-        self.assertIn("Codex must tell the user before changing it", self.text)
+        self.assertIn("main agent tells the user before changing it", self.text)
 
     def test_post_implementation_review_does_not_create_extra_user_artifacts(self) -> None:
         self.assertIn("do not create a new artifact", self.text)
@@ -72,43 +73,45 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("planned and actual completion evidence", self.text)
         self.assertIn("Requests without `workflow_version` are legacy requests", self.text)
 
-    def test_question_depth_is_adaptive_to_material_decisions(self) -> None:
-        self.assertIn("Question depth is adaptive, not a quota", self.text)
+    def test_questions_are_limited_to_material_plan_decisions(self) -> None:
         self.assertIn("materially change the goal, scope, expected outcome", self.text)
-        self.assertIn("Infer reversible low-risk details", self.text)
+        self.assertIn("Infer reversible low-risk details from evidence", self.text)
         self.assertIn("behaviorally equivalent implementation details", self.text)
+        self.assertIn("whether any unresolved user question could materially change the plan", self.text)
 
-    def test_intent_challenge_precedes_confirmation_and_question_depth(self) -> None:
+    def test_one_independent_challenge_follows_plan_and_precedes_execution(self) -> None:
         core = self.text[self.text.index("## Core Rule"):self.text.index("## Request Storage")]
-        self.assertLess(core.index("run the bounded `Intent Challenge Review`"), core.index("Ask the user to confirm"))
-        self.assertLess(core.index("Ask the user to confirm"), core.index("Write `plan.md`"))
-        self.assertIn("after project inspection and the main agent's first inference but before the first user intent confirmation", self.text)
-        self.assertIn("Only then ask for the first intent confirmation and proceed to the Question Depth Gate", self.text)
+        self.assertLess(core.index("Write `plan.md`"), core.index("Run one bounded `Independent Plan Challenge`"))
+        self.assertLess(core.index("Run one bounded `Independent Plan Challenge`"), core.index("authorizes execution"))
+        self.assertIn("This is the sole pre-approval plan challenge", self.text)
+        self.assertNotIn("## Intent Challenge Gate", self.text)
+        self.assertNotIn("## Question Depth Gate", self.text)
 
-    def test_intent_challenge_is_bounded_and_covers_requirement_quality(self) -> None:
-        self.assertIn("using only the user's request, inspected project facts", self.text)
-        self.assertIn("inferred intent, expected outcome, boundaries and assumptions", self.text)
-        self.assertIn("plausible alternatives grounded in those facts", self.text)
+    def test_independent_challenge_is_bounded_and_covers_requirement_quality(self) -> None:
+        self.assertIn("run one bounded independent subagent review", self.text)
+        self.assertIn("relevant original source paths", self.text)
+        self.assertIn("Do not give only the planner's conclusions", self.text)
         for perspective in (
-            "whether the requested solution fits the underlying problem",
-            "false assumptions, contradictions, omissions",
+            "underlying problem and observable outcome",
+            "false assumptions, contradictions, omissions, unclear success conditions",
             "affected users, systems, owners",
-            "simpler or safer alternatives",
+            "critical alternatives",
             "failure paths, edge cases, irreversible effects",
-            "mismatches between the request or inference and the actual project",
+            "validation quality",
         ):
             self.assertIn(perspective, self.text)
-        self.assertIn("it does not replace the user's intent or authorize a requirement change", self.text)
+        self.assertIn("does not replace the user's intent", self.text)
+        self.assertIn("authorize a requirement change", self.text)
 
-    def test_material_intent_findings_require_user_decision_and_repeat(self) -> None:
-        self.assertIn("supporting fact, likely impact, and decision needed", self.text)
-        self.assertIn("Never silently or automatically apply", self.text)
+    def test_material_plan_findings_require_user_decision_and_evidence_resolution(self) -> None:
+        self.assertIn("supporting fact, likely impact, critical alternatives, and decision needed", self.text)
+        self.assertIn("Never silently apply", self.text)
         self.assertIn("user's correction or explicit tradeoff acceptance", self.text)
-        self.assertIn("repeat until the reviewer returns `PASS` with no unresolved material finding", self.text)
-        self.assertIn("do not automatically revise the requirement or plan", self.text)
-        self.assertIn("rerun any Question Depth checkpoints affected by it", self.text)
+        self.assertIn("repeat the same independent challenge for the new fingerprint", self.text)
+        self.assertIn("A repeated finding with unchanged code, plan, or evidence", self.text)
+        self.assertIn("never force `PASS`", self.text)
 
-    def test_intent_challenge_uses_marker_and_existing_review_artifact(self) -> None:
+    def test_independent_challenge_preserves_existing_review_schema(self) -> None:
         self.assertIn("exact integer `intent_challenge_version: 1`", self.text)
         self.assertIn("Marker-free existing v2 and legacy requests retain their previous review schema", self.text)
         self.assertIn("`Finding | User Decision Or Resolution | Verdict`", self.text)
@@ -116,9 +119,10 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("one `NONE` row", self.text)
         self.assertIn("`### Intent Challenge Final Verdict` must be exact `PASS`", self.text)
         self.assertIn("Do not create a challenge artifact", self.text)
-        self.assertIn("Do not repeat the initial Intent Challenge Gate during material replan", self.text)
+        self.assertIn("compatibility fields populated by the same Independent Plan Challenge", self.text)
+        self.assertIn("do not add separate intent or question-depth checkpoints", self.text)
         self.assertIn('"intent_challenge_version": 1', self.artifact_text)
-        self.assertIn("Existing v2 and legacy requests that", self.artifact_text)
+        self.assertIn("one Independent Plan Challenge, not separate reviewer", self.artifact_text)
         self.assertIn("## Intent Challenge Check", self.artifact_text)
 
     def test_material_replan_reuses_goal_and_requires_reapproval(self) -> None:

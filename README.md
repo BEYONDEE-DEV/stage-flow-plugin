@@ -64,6 +64,12 @@ stageflow@stage-flow  installed, enabled
 - Simple Workflow: use `Simple Workflow`, `simple-workflow`, or `.simple`.
 - Atomic Docs: use `atomic-docs`.
 
+### Simple Workflow Roles
+
+Simple Workflow defaults to `gpt-6-astra` as the main planner/coordinator and dispatches approved write work to a `gpt-5.6-sol` implementation subagent with an actual model-selectable agent tool. The main agent owns the plan, one independent plan challenge, user approval, Goal and workflow metadata, and final review; the Sol worker owns bounded code changes and affected tests.
+
+The skill cannot switch the model of an already-running main task. Select Astra when starting the task if that exact main role is required. Explicit user model choices take precedence, and an unavailable or unverifiable model is reported rather than silently substituted. Plan-only and read-only requests do not dispatch the Sol implementation worker. After delivering a reviewed plan-only result, the workflow preserves that plan but deactivates its session pointer so unrelated follow-ups are not captured; executing it later requires explicit reactivation and execution approval.
+
 ## Update
 
 For a local clone:

@@ -12,9 +12,11 @@ execution. `--root` is authoritative. Agent-confirmed multi-repo work uses
 `--resolve-root --multi-repo --start <cwd>` and succeeds automatically only when an ancestor
 `.stageflow-worktrees/slots.json` contains an exact `slot.path` that contains the start path; a
 missing or malformed manifest requires explicit `--root`. Without `--multi-repo`, a manifest-backed
-child remains at its nearest repository root unless the exact bundle has the same session/request
-pointer. No `worktrees/<name>` path heuristic or child `git rev-parse --show-toplevel` result can
-promote a multi-repo request.
+child remains at its nearest repository root unless the exact bundle has the same active
+session/request pointer. An inactive bundle pointer is available for an explicitly named request or
+absolute objective ownership check, but never promotes automatic continuation or a new child request.
+No `worktrees/<name>` path heuristic or child `git rev-parse --show-toplevel` result can promote a
+multi-repo request.
 
 For `PreToolUse(create_goal)`, a new Goal objective supplies one additional bootstrap that does not
 depend on hook cwd: exactly one canonical host-native absolute
@@ -42,6 +44,13 @@ It keeps the session pointer model:
 The skill-applying agent owns new request activation and semantic approval judgment. Hooks do not
 search prompt text for `simple workflow`, `.simple`, approval keywords, or any other activation
 pattern. Without an active session pointer, `UserPromptSubmit` prepasses.
+
+The optional `current.json.active` field must be exact JSON boolean. Missing or `true` preserves
+existing behavior. With `false`, `UserPromptSubmit` and `Stop` prepass without output and an in-scope
+`create_goal` is denied until the main agent explicitly reselects the stored request with
+`active: true`. Reactivation is not approval: the existing approval and fingerprint gate still runs.
+Invalid types such as `0` or `"false"` are never coerced; prompt and Stop remain non-blocking warnings,
+while an in-scope Goal is blocked.
 
 `UserPromptSubmit` emits valid hook wire output with `additionalContext` only when an active
 `plan` or `review` pointer needs continuation context. It reads pointer, phase, approval, and Goal

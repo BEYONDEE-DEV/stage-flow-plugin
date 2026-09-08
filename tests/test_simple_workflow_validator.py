@@ -93,6 +93,7 @@ class ValidatorTests(unittest.TestCase):
             stderr=subprocess.STDOUT,
         )
         self.assertIn('"workflow_root": "/absolute/path/to/project"', current.stdout)
+        self.assertIn('"active": true', current.stdout)
         self.assertIn("## Intent Challenge Check", review.stdout)
 
     def test_current_workflow_root_is_optional_and_must_match_canonical_root(self) -> None:
@@ -127,6 +128,27 @@ class ValidatorTests(unittest.TestCase):
             write_json(current_path, current)
             self.assertIn("symlink aliases", self.validate(root, "review", False).stdout)
             self.run_validator(root, "--request", REQUEST_ID, "--phase", "review")
+
+    def test_current_active_is_optional_exact_boolean_and_request_validation_is_independent(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", approval_status="pending", goal_status="pending")
+            current_path = root / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+
+            self.validate(root, "review")
+            for active in (True, False):
+                with self.subTest(active=active):
+                    current["active"] = active
+                    write_json(current_path, current)
+                    self.validate(root, "review")
+            self.run_validator(root, "--request", REQUEST_ID, "--phase", "review")
+
+            for invalid in (0, 1, "false", None, []):
+                with self.subTest(invalid=invalid):
+                    current["active"] = invalid
+                    write_json(current_path, current)
+                    self.assertIn("exact boolean", self.validate(root, "review", False).stdout)
+                    self.run_validator(root, "--request", REQUEST_ID, "--phase", "review")
 
     def test_plan_requires_sections_korean_and_exact_coverage_header(self) -> None:
         with temp_project() as td:

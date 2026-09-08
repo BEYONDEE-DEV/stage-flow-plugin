@@ -145,6 +145,61 @@ class HookCheckTests(unittest.TestCase):
             self.assertEqual(result["validation"]["status"], "SKIPPED")
             self.assertIn("lightweight state checks", result["validation"]["reason"])
 
+    def test_inactive_plan_only_pointer_prepasses_followups_and_blocks_goal_until_reapproved(self) -> None:
+        with temp_project() as td:
+            root = make_v2_project(Path(td), phase="review", approval_status="pending", goal_status="pending")
+            current_path = root / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["active"] = False
+            write_json(current_path, current)
+
+            prompt = self.run_hook(root, {"session_id": SESSION_ID, "prompt": "unrelated"})
+            self.assertEqual(prompt["status"], "PREPASS")
+            self.assertFalse(prompt["continuation_required"])
+            prompt_wire, _ = self.run_wire(root, {"session_id": SESSION_ID, "prompt": "unrelated"}, "user_prompt_submit")
+            self.assertEqual(prompt_wire, {})
+
+            stop = self.run_hook(root, {"session_id": SESSION_ID}, "stop")
+            self.assertEqual(stop["status"], "PREPASS")
+            stop_wire, stop_stderr = self.run_wire(root, {"session_id": SESSION_ID}, "stop")
+            self.assertEqual(stop_wire, {})
+            self.assertEqual(stop_stderr, "")
+
+            inactive_goal = self.run_hook(root, goal_payload(root), "pre_tool_use")
+            self.assertEqual(inactive_goal["status"], "BLOCKED")
+            self.assertIn("reactivation", inactive_goal["reason"])
+
+            current["active"] = True
+            write_json(current_path, current)
+            reactivated_only = self.run_hook(root, goal_payload(root), "pre_tool_use")
+            self.assertEqual(reactivated_only["status"], "BLOCKED")
+            self.assertIn("recorded user approval", reactivated_only["reason"])
+
+            state_path = root / ".simple" / "requests" / REQUEST_ID / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["plan_approval_status"] = "approved"
+            state["approved_plan_fingerprint"] = "sha256:" + sha256(root / ".simple" / "requests" / REQUEST_ID / "plan.md")
+            write_json(state_path, state)
+            approved = self.run_hook(root, goal_payload(root), "pre_tool_use")
+            self.assertEqual(approved["status"], "CREATE_GOAL_ALLOWED")
+
+    def test_invalid_active_pointer_is_not_coerced_by_hook(self) -> None:
+        for invalid in (0, 1, "false", None):
+            with self.subTest(invalid=invalid), temp_project() as td:
+                root = make_v2_project(Path(td), phase="review", approval_status="approved", goal_status="pending")
+                current_path = root / ".simple" / "sessions" / SESSION_ID / "current.json"
+                current = json.loads(current_path.read_text(encoding="utf-8"))
+                current["active"] = invalid
+                write_json(current_path, current)
+
+                prompt = self.run_hook(root, {"session_id": SESSION_ID, "prompt": "status"})
+                self.assertEqual(prompt["status"], "INVALID_CURRENT")
+                stop = self.run_hook(root, {"session_id": SESSION_ID}, "stop")
+                self.assertEqual(stop["status"], "INVALID_CURRENT")
+                goal = self.run_hook(root, goal_payload(root), "pre_tool_use")
+                self.assertEqual(goal["status"], "INVALID_CURRENT")
+                self.assertEqual(goal["decision"], "block")
+
     def test_pending_approval_and_approved_pending_are_reported_from_state(self) -> None:
         with temp_project() as td:
             root = make_v2_project(Path(td), phase="review", approval_status="pending", goal_status="pending")
@@ -467,6 +522,43 @@ class HookCheckTests(unittest.TestCase):
             pointerless = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "상태"})
             self.assertEqual(pointerless["status"], "PREPASS")
             self.assertEqual(pointerless["workflow_root"], str(child))
+
+    def test_inactive_bundle_pointer_is_not_automatic_continuation_but_explicit_request_is_preserved(self) -> None:
+        with temp_project() as td:
+            _, bundle, child = make_slot_fixture(Path(td))
+            make_v2_project(bundle, phase="review", approval_status="pending", goal_status="pending")
+            current_path = bundle / ".simple" / "sessions" / SESSION_ID / "current.json"
+            current = json.loads(current_path.read_text(encoding="utf-8"))
+            current["active"] = False
+            current["workflow_root"] = str(bundle)
+            write_json(current_path, current)
+
+            automatic = self.run_resolver(child, "--session-id", SESSION_ID)
+            self.assertEqual(automatic["workflow_root"], str(child))
+            self.assertEqual(automatic["source"], "single_repo")
+
+            explicit_request = self.run_resolver(
+                child,
+                "--session-id",
+                SESSION_ID,
+                "--request-id",
+                REQUEST_ID,
+            )
+            self.assertEqual(explicit_request["workflow_root"], str(bundle))
+            self.assertEqual(explicit_request["source"], "slot_manifest_continuation")
+
+            prompt = self.run_discovered_hook(child, {"session_id": SESSION_ID, "prompt": "new work"})
+            self.assertEqual(prompt["status"], "PREPASS")
+            self.assertEqual(prompt["workflow_root"], str(child))
+
+            blocked = self.run_discovered_hook(child, absolute_goal_payload(bundle), "pre_tool_use")
+            self.assertEqual(blocked["status"], "BLOCKED")
+            self.assertIn("reactivation", blocked["reason"])
+
+            make_v2_project(child, phase="review", approval_status="pending", goal_status="pending")
+            active_child = self.run_resolver(child, "--session-id", SESSION_ID)
+            self.assertEqual(active_child["workflow_root"], str(child))
+            self.assertEqual(active_child["source"], "session_continuation")
 
     def test_child_session_wins_when_bundle_session_points_to_another_request(self) -> None:
         for bundle_phase in ("review", "completed"):

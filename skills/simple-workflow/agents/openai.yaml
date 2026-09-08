@@ -1,6 +1,6 @@
 interface:
   display_name: "Simple Workflow"
-  short_description: "Challenge intent before confirming and executing a plan."
-  default_prompt: "Use $simple-workflow to challenge inferred intent before confirmation, write plan.md, review it, and prepare goal execution."
+  short_description: "Plan with Astra and implement approved changes with Sol."
+  default_prompt: "Use $simple-workflow to plan and coordinate with Astra, independently challenge plan.md once, and delegate approved write work to Sol."
 policy:
   allow_implicit_invocation: true

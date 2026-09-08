@@ -43,6 +43,7 @@ copy; unrelated Goal calls prepass. The plugin never moves, merges, aligns, or d
   "request_id": "20260609-1120-simple-workflow-plugin",
   "phase": "plan",
   "activated_by": "explicit_skill_invocation",
+  "active": true,
   "workflow_root": "/absolute/path/to/project"
 }
 ```
@@ -54,6 +55,21 @@ session locator. `--current` validation accepts a missing legacy field, but when
 canonical absolute path text equal to the validator root; relative values, another root, symlink
 aliases, and non-canonical spellings are invalid. `--request` validation does not read or require a
 session pointer. Hooks never migrate or rewrite this field.
+
+`active` is optional and accepts only exact JSON boolean `true` or `false`; missing preserves the
+legacy active behavior. `false` deactivates only this session pointer after a plan-only result. It
+does not change the preserved request's `review` phase, pending approval and Goal status, empty
+fingerprints, plan, review, state, or index entry. `UserPromptSubmit` and `Stop` prepass an inactive
+pointer, and an in-scope `create_goal` is blocked until explicit reactivation. An explicit request
+selection may still locate the preserved owner; automatic continuation and bundle promotion may
+not use the inactive pointer.
+
+To finish a plan-only delivery, first pass review validation, confirm the pointer still names the
+same session, request, and canonical root, write only `active: false`, read it back as exact `false`,
+then pass `--current --phase review`. `--request --phase review` remains useful for validating the
+preserved artifacts, but it intentionally ignores `current.json` and cannot prove deactivation.
+Reactivation sets exact `true` only for an explicit request to resume or execute the stored plan;
+it does not itself record execution approval.
 
 `.simple/requests/<request-id>/state.json`
 
@@ -83,10 +99,12 @@ Missing `workflow_version` identifies a legacy request. New requests use integer
 before initial approval or during material replan, and `approved` only while the current plan is
 authorized for execution.
 
-New requests also use exact integer `intent_challenge_version: 1`. This marker requires the
-structured `## Intent Challenge Check` review contract below. Existing v2 and legacy requests that
-do not have the marker keep their previous review schema. A marker with any other value is invalid,
-and the marker is invalid without `workflow_version: 2`.
+New requests also use exact integer `intent_challenge_version: 1`. This compatibility marker
+requires the structured `## Intent Challenge Check` result below. That result and
+`## Question Depth Check` are populated by one Independent Plan Challenge, not separate reviewer
+checkpoints. Existing v2 and legacy requests that do not have the marker keep their previous review
+schema. A marker with any other value is invalid, and the marker is invalid without
+`workflow_version: 2`.
 
 `goal_status` is optional for legacy requests. New requests use `pending`, change it to `active`
 only after `create_goal` succeeds, set `completing` immediately before requesting Goal completion,
@@ -156,6 +174,8 @@ material replan waits for approval.
 The outcome must be observable rather than a generic completion claim. Each v2 requirement row
 must name evidence that can prove the affected result, such as a test, command output, state,
 response, file, or user-flow observation. Empty, deferred, or placeholder evidence is invalid.
+The existing sections should also make material evidence and rationale, useful execution order,
+worker-owned change boundaries, and replan conditions clear without prescribing every code edit.
 
 During material replan, set `plan_approval_status: pending` before editing `plan.md`. Keep
 `goal_plan_fingerprint` unchanged, replace `review.md` with a passing review of the revised plan,
@@ -191,7 +211,7 @@ PASS
 
 ## Question Depth Check
 
-상위 질문 없음
+동일한 독립 계획 검토에서 계획을 바꿀 미해결 질문이 없음을 확인했다.
 
 ## Intent Challenge Check
 
@@ -199,7 +219,7 @@ PASS
 
 | Finding | User Decision Or Resolution | Verdict |
 | --- | --- | --- |
-| NONE | 요구사항 타당성과 대안을 검토했으며 사용자 결정이 필요한 material finding이 없다. | PASS |
+| NONE | 동일한 독립 계획 검토에서 요구사항 타당성, 근거, 대안을 확인했으며 사용자 결정이 필요한 material finding이 없다. | PASS |
 
 ### Intent Challenge Final Verdict
 
@@ -213,17 +233,19 @@ PASS
 The complete trimmed `## Verdict` body must equal `PASS`; containing the word `PASS` inside a
 different verdict is invalid. `## Blocking Issues` uses blocking-specific no-issue vocabulary.
 `## Flow Check` and `## Question Depth Check` require non-empty review results and may record a
-non-blocking observation without invalidating the passing verdict.
+non-blocking observation without invalidating the passing verdict. `## Question Depth Check`
+records the question-quality result of the same Independent Plan Challenge; it does not imply
+separate reviews for broad, middle, and narrow question categories.
 
 For a request with `intent_challenge_version: 1`, `## Intent Challenge Check` records the durable
-result of the bounded review that ran before the first user intent confirmation. The Findings table
-header is exactly `Finding | User Decision Or Resolution | Verdict` and contains at least one row.
+intent-quality result of the Independent Plan Challenge for the reviewed plan fingerprint. The
+Findings table header is exactly `Finding | User Decision Or Resolution | Verdict` and contains at least one row.
 Each material finding uses a unique `IC-###`, substantive Korean decision or resolution text, and
 exact `PASS`. If there were no material findings, exactly one `NONE` row records the Korean review
 basis. `NONE` cannot be combined with another row. Every row and
 `### Intent Challenge Final Verdict` must be exact uppercase `PASS`, proving that no material
-finding remains unresolved. The plan reviewer also checks that these resolutions, the confirmed
-intent, and the current plan agree.
+finding remains unresolved. The same independent reviewer also checks question depth, original
+project evidence, user decisions, and the current plan for agreement.
 
 After both post-execution reviews pass, the main agent appends this internal section to the same
 `review.md`:

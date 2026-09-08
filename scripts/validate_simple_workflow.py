@@ -63,6 +63,7 @@ VALIDATOR_TEMPLATES = {
   "request_id": "20260609-1120-simple-workflow-plugin",
   "phase": "plan",
   "activated_by": "explicit_skill_invocation",
+  "active": true,
   "workflow_root": "/absolute/path/to/project"
 }\n''',
     "state": '''{
@@ -209,6 +210,7 @@ def resolve(root: Path, current: bool, req: str | None, session_id: str, errors:
         cur_path = simple / "sessions" / safe(session_id) / "current.json"
         cur = read_json(cur_path, f"`{rel(root, cur_path)}`", errors)
         validate_current_workflow_root(cur, root, errors)
+        validate_current_active(cur, errors)
         request_id = metadata_request_id(cur)
         validate_request_id_aliases(cur, "current.json", errors)
         if not request_id:
@@ -269,6 +271,11 @@ def validate_current_workflow_root(current: dict[str, Any], root: Path, errors: 
         return
     if path != root.resolve():
         errors.append("`current.json` workflow_root must match the validator root")
+
+
+def validate_current_active(current: dict[str, Any], errors: list[str]) -> None:
+    if "active" in current and type(current["active"]) is not bool:
+        errors.append("`current.json` active must be exact boolean `true` or `false` when present")
 
 
 def validate(ctx: Ctx, phase: str, errors: list[str]) -> None:
