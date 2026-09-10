@@ -210,6 +210,8 @@ Exact retry leaves correct clean results and fills only missing worktrees. A cha
 
 ## Submit Common Phase
 
+For ordinary submit, use `scripts/submit_bundle.py` following `submit-runner.md`; the sections below define its invariants and the exceptional/manual correction path, not a second sequence to execute after the runner. Its preflight replaces separate inspector/manifest/PR queries. Publication diff verification is centralized in `scripts/verify_pr.py`.
+
 Acquire the slot operation lock only after read-only classification. Classifications belong to repositories, not the batch:
 
 - `NONE`: generation 0, no PR/submission, no conflicting open PR for active branch.
@@ -221,12 +223,12 @@ Allow any mix. An OPEN repository waiting behind its PR is a successful wait, no
 Inspect staged, unstaged, and non-ignored untracked content. In `submit`, stage only exact task paths and use Korean commit text:
 
 ```bash
-git -C "<development-worktree>" add -A -- "<task-path-1>" "<task-path-2>"
+git -C "<development-worktree>" add -A -- ":(literal)<task-path-1>" ":(literal)<task-path-2>"
 git -C "<development-worktree>" diff --cached --check
 git -C "<development-worktree>" commit -m "<generated-Korean-commit-message>"
 ```
 
-Never use `git add .`, amend, stash, reset, force-add, or bypass hooks for user task commits. In an ordinary submit, clearly future-work changes in an OPEN repository may be committed locally with Korean text under the same task-path rules, but they are never pushed while that PR remains open. Explicit correction mode first separates correction content from future work and never stages the combined development tree as a correction.
+Before staging, reject any unrelated already-staged paths: plain `git commit` includes the entire index. Include both sides of a rename in the reviewed path set, but do not re-add an old name already deleted from the index. The runner enforces these checks and binds the worktree/index fingerprint to the reviewed plan. Never use `git add .`, amend, stash, reset, force-add, or bypass hooks for user task commits. In an ordinary submit, clearly future-work changes in an OPEN repository may be committed locally with Korean text under the same task-path rules, but they are never pushed while that PR remains open. Explicit correction mode first separates correction content from future work and never stages the combined development tree as a correction.
 
 ## Submit NONE
 

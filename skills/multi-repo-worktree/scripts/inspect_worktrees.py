@@ -298,6 +298,83 @@ def select_bundles(bundles: list[dict[str, Any]], selector: str | None) -> list[
     ]
 
 
+def resolve_bundle(root: Path, selector: str) -> tuple[Path, str | None, dict[str, Any]]:
+    """Resolve the manifest before doing any Git discovery; never guess a slot binding."""
+    from slot_manifest import load_manifest, manifest_path, ManifestError
+
+    root = root.resolve()
+    value = selector.replace("\\", "/").rstrip("/")
+    candidate = Path(value).expanduser()
+    candidates = {candidate.resolve()} if candidate.is_absolute() else {
+        (root / value).resolve(), (root / "worktrees" / value).resolve(),
+    }
+    if value in {root.name, f"worktrees/{root.name}"}:
+        candidates.add(root)
+    path = manifest_path(root)
+    if path.exists():
+        slots = load_manifest(path)["slots"]
+        matches = [(name, slot) for name, slot in slots.items()
+                   if name == value or Path(slot["path"]).resolve() in candidates]
+        if len(matches) != 1:
+            raise ManifestError("bundle must match exactly one manifest slot")
+        name, slot = matches[0]
+        return Path(slot["path"]).resolve(), name, slot["repositories"]
+    existing = [path for path in candidates if path.is_dir() and path.is_relative_to(root)]
+    if len(existing) != 1:
+        raise ManifestError("bundle must resolve to one directory under the workspace")
+    return existing[0], None, {}
+
+
+def inspect_bundle(root: Path, selector: str, max_depth: int = 4) -> dict[str, Any]:
+    base, slot_name, bindings = resolve_bundle(root, selector)
+    repos = [base / name for name in bindings] if slot_name else discover_candidates(base, max_depth)
+    groups: dict[str, dict[str, Any]] = {}
+    conflicts: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for repo in repos:
+        if repo.resolve() != repo or not repo.is_relative_to(base):
+            errors.append(f"repository path escapes or aliases its bundle: {repo}")
+            continue
+        top = run_git(repo, ["rev-parse", "--show-toplevel"])
+        common = git_common_dir(repo) if top and Path(top).resolve() == repo else None
+        if common is None:
+            errors.append(f"missing or mismatched repository: {repo}")
+            continue
+        worktrees = parse_worktree_list(repo)
+        branch = current_branch(repo)
+        binding = bindings.get(repo.name, {})
+        rotation = binding.get("rotation", {})
+        expected = rotation.get("target_branch") if rotation.get("phase") in {"switched", "retired"} else binding.get("branch")
+        for wt in worktrees:
+            if wt.get("branch") in {branch, expected} and Path(wt["path"]).resolve() != repo:
+                conflicts.append({"repository": repo.name, "branch": wt["branch"], "path": wt["path"]})
+        item = {"path": str(repo), "branch": branch, "head": short_head(repo),
+                "upstream": upstream(repo), "dirty": dirty_state(repo),
+                "operation_state": operation_state(repo)}
+        # Other worktrees supply branch occupancy/inference only: never run status in them.
+        item["source_branch"] = binding.get("source_branch") or source_branch_for(
+            root.resolve(), {"worktrees": worktrees}, repo)
+        group = groups.setdefault(str(common), {"common_git_dir": str(common),
+                                               "discovered_from": str(repo), "worktrees": []})
+        group["worktrees"].append(item)
+    data = {"root": str(root.resolve()), "repository_group_count": len(groups),
+            "worktree_count": sum(len(g["worktrees"]) for g in groups.values()),
+            "groups": list(groups.values()), "conflicts": conflicts, "errors": errors,
+            "discovery": "manifest" if slot_name else "bundle", "slot": slot_name}
+    items = [{**wt, "repo": Path(wt["path"]).name,
+              "folder": Path(wt["path"]).relative_to(base).as_posix(),
+              "common_git_dir": group["common_git_dir"]}
+             for group in groups.values() for wt in group["worktrees"]]
+    data["bundles"] = [{"name": (base.relative_to(root.resolve()).as_posix()
+                                  if base != root.resolve() and base.is_relative_to(root.resolve())
+                                  else f"worktrees/{base.name}"),
+                        "base": str(base), "items": items,
+                        "source_branches": [item["source_branch"] for item in items
+                                            if item["source_branch"] != "확인 필요"],
+                        "source_unknown": any(item["source_branch"] == "확인 필요" for item in items)}]
+    return data
+
+
 def print_status_block(bundle: dict[str, Any]) -> None:
     source_branches = sorted(set(bundle["source_branches"]))
     if bundle.get("source_unknown"):
@@ -332,14 +409,22 @@ def main() -> int:
     parser.add_argument("--root", required=True, help="Workspace root to inspect.")
     parser.add_argument("--max-depth", type=int, default=4, help="Directory scan depth.")
     parser.add_argument("--bundle", help="Show only this bundle name or absolute bundle path.")
+    parser.add_argument("--all-worktrees", action="store_true", help="Explicit workspace-wide diagnostics, even with --bundle.")
     parser.add_argument("--json", action="store_true", help="Print JSON instead of status text.")
     args = parser.parse_args()
 
     root = Path(args.root)
     if not root.is_dir():
         parser.error(f"--root is not a directory: {root}")
-    data = inspect(root, args.max_depth)
-    bundles = select_bundles(build_bundles(data), args.bundle)
+    if args.bundle and not args.all_worktrees:
+        try:
+            data = inspect_bundle(root, args.bundle, args.max_depth)
+        except (ValueError, RuntimeError, OSError) as exc:
+            parser.error(str(exc))
+        bundles = data["bundles"]
+    else:
+        data = inspect(root, args.max_depth)
+        bundles = select_bundles(build_bundles(data), args.bundle)
     if args.bundle and not bundles:
         parser.error(f"--bundle did not match a discovered bundle: {args.bundle}")
     if args.json:
@@ -347,7 +432,11 @@ def main() -> int:
         print(json.dumps(data, indent=2, sort_keys=True))
     else:
         print_status(bundles)
-    return 0
+        for error in data.get("errors", []):
+            print(f"확인 필요: {error}")
+        for conflict in data.get("conflicts", []):
+            print(f"브랜치 점유 충돌: {conflict['repository']} / {conflict['branch']} / {conflict['path']}")
+    return int(bool(data.get("errors") or data.get("conflicts")))
 
 
 if __name__ == "__main__":
