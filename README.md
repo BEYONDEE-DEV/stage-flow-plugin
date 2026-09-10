@@ -66,9 +66,9 @@ stageflow@stage-flow  installed, enabled
 
 ### Simple Workflow Roles
 
-Simple Workflow defaults to `gpt-6-astra` as the main planner/coordinator and dispatches approved write work to a `gpt-5.6-sol` implementation subagent with an actual model-selectable agent tool. The main agent owns the plan, one independent plan challenge, user approval, Goal and workflow metadata, and final review; the Sol worker owns bounded code changes and affected tests.
+Simple Workflow defaults to `gpt-6-astra` as the main planner/coordinator at its existing effort and dispatches approved write work to a separate `gpt-6-astra` implementation subagent with explicit `reasoning_effort: "low"` (Astra Light). Independent reviewers inherit the main agent's model and effort; they do not use the implementation worker's Light setting. The main agent owns the plan, one independent plan challenge, user approval, Goal and workflow metadata, and final review; the implementation worker owns bounded code changes and affected tests, retaining its model/effort through fix and revalidation rounds.
 
-The skill cannot switch the model of an already-running main task. Select Astra when starting the task if that exact main role is required. Explicit user model choices take precedence, and an unavailable or unverifiable model is reported rather than silently substituted. Plan-only and read-only requests do not dispatch the Sol implementation worker. After delivering a reviewed plan-only result, the workflow preserves that plan but deactivates its session pointer so unrelated follow-ups are not captured; executing it later requires explicit reactivation and execution approval.
+The skill cannot switch the model of an already-running main task. Select Astra when starting the task if that exact main role is required. Explicit user role-specific model/effort choices take precedence, and unavailable or unverifiable settings are reported rather than silently substituted. Plan-only and read-only requests do not dispatch the implementation worker. After delivering a reviewed plan-only result, the workflow preserves that plan but deactivates its session pointer so unrelated follow-ups are not captured; executing it later requires explicit reactivation and execution approval.
 
 ## Update
 

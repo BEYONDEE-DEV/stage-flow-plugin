@@ -44,7 +44,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertIn("affected user, state, data, failure or recovery, command, hook, and validator flows", self.text)
 
     def test_in_scope_issues_are_fixed_but_out_of_scope_issues_are_reported_first(self) -> None:
-        self.assertIn("same Sol worker with `followup_task`", self.text)
+        self.assertIn("same implementation worker with `followup_task`", self.text)
         self.assertIn("reruns affected validation, and repeats both perspectives", self.text)
         self.assertIn("outside the user's intent, pre-existing, or requires expanded scope", self.text)
         self.assertIn("main agent tells the user before changing it", self.text)
