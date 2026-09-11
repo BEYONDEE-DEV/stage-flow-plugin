@@ -427,6 +427,8 @@ Do not use plain `git pull`, merge commits, rebase, reset, branch switching, or 
 
 ## Sync
 
+For ordinary sync, use `scripts/sync_bundle.py` following `sync-runner.md`. It owns scoped preflight, operation locking, per-repository fetch/classification, common rotation, exact current/pending merged-ref cleanup, and compact timing/retry results. The rules below are its invariants and exceptional recovery reference, not a second manual command sequence. A pending unrecorded submit publication must be recovered by submit before sync may rotate or clean that repository.
+
 `sync` runs only in the requested development bundle. It never invokes `pull` and never changes the original worktree's checked-out state. Classify cleanliness per repository: leave each dirty repository unchanged and continue with every independently clean sibling. Fetch and pin each eligible repository's stored remote source, then apply repository-local state rules:
 
 - **NONE**: use `branch_base_sha` as boundary. If pinned source equals branch base, no-op. If advanced, rotate net unsubmitted work to the next local branch generation; do not push or create a PR.

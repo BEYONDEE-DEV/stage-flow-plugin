@@ -183,7 +183,7 @@ class Runner:
             raise SubmitError("active branch has an unrecorded PR; exact publication recovery required")
         return state
 
-    def preflight(self) -> dict:
+    def preflight(self, *, content_snapshot: bool = True, skip_dirty: bool = False) -> dict:
         started = time.monotonic()
         self.load_receipts()
         scan = inspector.inspect_bundle(self.root, self.bundle)
@@ -200,6 +200,10 @@ class Runner:
             name, repo = item["repo"], Path(item["path"])
             row = {"repository": name, "path": str(repo), "dirty": item["dirty"]}
             try:
+                if skip_dirty and item["dirty"] != "clean":
+                    row.update(state="DIRTY", changed_paths=sorted(changed_paths(repo)))
+                    rows.append(row)
+                    continue
                 identity = self.identity(name)
                 if any(conflict["repository"] == name for conflict in scan["conflicts"]):
                     raise SubmitError("active branch is occupied by another worktree")
@@ -222,8 +226,9 @@ class Runner:
                            source_sha=source, github_repository=repository, remote_key=remote_key,
                            identity_fingerprint=digest(identity),
                            changed_paths=sorted(changed_paths(repo)), rotation=rotation.get("phase"),
-                           worktree_fingerprint=worktree_fingerprint(repo),
                            remote_head_sha=heads.get(branch))
+                if content_snapshot:
+                    row["worktree_fingerprint"] = worktree_fingerprint(repo)
             except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
                 row.update(state="BLOCKED", error=str(exc))
             rows.append(row)
@@ -335,10 +340,14 @@ class Runner:
             self.mutate(lambda data: manifest.advance_rotation(data, self.slot, name, "planned", "branch-created", created["target_sha"]))
             rotation = self.identity(name)["rotation"]
         if rotation["phase"] == "branch-created":
-            generation.verify(args)
+            verified = generation.verify(args)
+            if "target_head_sha" not in rotation:
+                self.mutate(lambda data: manifest.advance_rotation(data, self.slot, name,
+                    "planned", "branch-created", verified["target_sha"]))
+                rotation = self.identity(name)["rotation"]
             branch = g(repo, "branch", "--show-current")
             if branch == rotation["from_branch"] and g(repo, "rev-parse", "HEAD") == rotation["from_head_sha"]:
-                g(repo, "switch", "--", rotation["target_branch"])
+                g(repo, "switch", "--no-overwrite-ignore", "--", rotation["target_branch"])
             elif branch != rotation["target_branch"]:
                 raise SubmitError("rotation checkout moved")
             clean(repo)

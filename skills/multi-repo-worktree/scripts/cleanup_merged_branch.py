@@ -8,7 +8,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from slot_manifest import (
     ManifestError,
@@ -272,7 +272,8 @@ def select_cleanup(
     return matches[0]
 
 
-def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any]) -> dict[str, Any]:
+def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any],
+                   before_delete: Callable[[], Any] | None = None) -> dict[str, Any]:
     if not args.execute:
         raise CleanupError("merged branch cleanup is destructive and requires --execute")
     repo, identity = repository_context(args, data)
@@ -311,10 +312,18 @@ def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any]) -
         )
     if local_head is not None:
         require_local_transfer_proof(repo, identity, receipt, submission, old_branch, local_head)
+    locations = checked_out_branches(repo).get(old_branch, [])
+    if locations:
+        raise CleanupError(f"merged branch remains checked out; refs preserved: {', '.join(locations)}")
 
     remote_deleted = remote_head is None
     local_deleted = local_head is None
     if remote_head is not None:
+        if before_delete is not None:
+            before_delete()
+        require_clean_development_state(repo, active_branch, active_head)
+        if checked_out_branches(repo).get(old_branch):
+            raise CleanupError("merged branch became checked out; refs preserved")
         lease = f"--force-with-lease=refs/heads/{old_branch}:{expected_remote_head}"
         deleted = git(repo, "push", lease, remote, f":refs/heads/{old_branch}", check=False)
         remaining = remote_branch_target(repo, remote, old_branch)
@@ -324,6 +333,12 @@ def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any]) -
         remote_deleted = True
 
     if local_head is not None:
+        try:
+            if before_delete is not None:
+                before_delete()
+            require_clean_development_state(repo, active_branch, active_head)
+        except RuntimeError as exc:
+            raise CleanupError(f"remote branch is absent but local branch was preserved: {exc}") from exc
         locations = checked_out_branches(repo).get(old_branch, [])
         if locations:
             raise CleanupError(
@@ -361,11 +376,11 @@ def cleanup_locked(args: argparse.Namespace, path: Path, data: dict[str, Any]) -
     }
 
 
-def cleanup(args: argparse.Namespace) -> dict[str, Any]:
+def cleanup(args: argparse.Namespace, *, before_delete: Callable[[], Any] | None = None) -> dict[str, Any]:
     path = manifest_path(args.root)
     with manifest_lock(path):
         data = load_manifest(path)
-        return cleanup_locked(args, path, data)
+        return cleanup_locked(args, path, data, before_delete)
 
 
 def parser() -> argparse.ArgumentParser:

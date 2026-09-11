@@ -30,7 +30,9 @@ Without a keyword, show help and ask which keyword to use. Do not accept or adve
 
 For ordinary `submit`, read `references/submit-runner.md` and use its Python preflight/execution path. It already inspects the complete selected bundle, manifest, and GitHub state; do not repeat those queries or manually orchestrate routine Git/PR steps. Read the relevant sections of `references/worktree-operations.md` only for explicit PR correction, legacy recovery, or an exception the runner reports.
 
-For `status`, `create`, `pull`, and `sync`:
+For `sync`, read `references/sync-runner.md` and use its Python preflight/execution path. Reuse the scoped inspection and journaled rotation helpers; do not manually chain routine fetch, PR classification, rotation, and cleanup commands. Read `references/worktree-operations.md` only for an unsupported legacy or conflict-recovery exception.
+
+For `status`, `create`, and `pull`:
 
 1. Read `references/worktree-operations.md` from this skill directory completely.
 2. Resolve `<skill-dir>` from the loaded `SKILL.md`; do not assume cwd is the plugin root.
@@ -43,7 +45,7 @@ python3 "<skill-dir>/scripts/inspect_worktrees.py" --root "<workspace-root>" --j
 Use `--bundle "worktrees/<bundle-name>"` when known. Never infer that a workspace or bundle folder is a Git repository.
 The bundle selector resolves manifest repositories before Git inspection and returns only those worktrees. Other registered worktrees are checked internally for relevant branch occupancy. Use `--all-worktrees` only for explicitly needed workspace-wide diagnostics.
 
-For slot-backed operations, read the manifest without changing Git:
+For these slot-backed operations, read the manifest without changing Git (submit/sync runners already include this):
 
 ```bash
 python3 "<skill-dir>/scripts/slot_manifest.py" --root "<workspace-root>" status
