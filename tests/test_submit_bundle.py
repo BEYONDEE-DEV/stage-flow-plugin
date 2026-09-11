@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import re
 import subprocess
@@ -34,8 +35,8 @@ class FakeGitHub:
     def view(self, repository, number):
         pr = copy.deepcopy(self.prs[(repository, number)])
         repo = self.repos[repository]
-        pr["base"]["sha"] = submit.remote_heads(repo, "origin", pr["base"]["ref"])[pr["base"]["ref"]]
         if not pr.get("merged_at"):
+            pr["base"]["sha"] = submit.remote_heads(repo, "origin", pr["base"]["ref"])[pr["base"]["ref"]]
             heads = submit.remote_heads(repo, "origin", pr["head"]["ref"])
             pr["head"]["sha"] = heads.get(pr["head"]["ref"], pr["head"]["sha"])
         return pr
@@ -63,12 +64,20 @@ class FakeGitHub:
         return self.prs[(repository, number)]["html_url"]
 
     def api(self, endpoint, *, paginate=False, diff=False):
+        commit_match = re.fullmatch(r"repos/(.+)/git/commits/([0-9a-f]+)", endpoint)
+        if commit_match:
+            repository, oid = commit_match.groups()
+            return {"sha": oid, "tree": {"sha": git(self.repos[repository], "rev-parse", oid + "^{tree}")}}
         match = re.match(r"repos/(.+)/pulls/(\d+)", endpoint)
         repository, number = match[1], int(match[2])
         pr = self.view(repository, number)
         repo, base, head = self.repos[repository], pr["base"]["sha"], pr["head"]["sha"]
         if diff:
-            patch = verifier.local_diff(repo, base, head)
+            # Independently generate GitHub's display representation: binary changes
+            # have a summary, never --binary literals. Do not call verifier.local_diff.
+            patch = subprocess.check_output(["git", "-C", str(repo), "-c", "diff.algorithm=myers",
+                "-c", "diff.indentHeuristic=true", "diff", "--no-ext-diff", "--no-textconv",
+                "--no-color", "--find-renames=50%", "--unified=3", f"{base}...{head}", "--"])
             if self.corrupt_patch:
                 patch += b"corrupt\n"
             # A realistic presentation-only difference from local Git output.
@@ -400,8 +409,9 @@ class SubmitTests(unittest.TestCase):
         self.change()
         self.change("api")
         self.api.corrupt_patch = False
-        results = self.runner().execute({"web": self.plan(), "api": self.plan("api", validation=[[sys.executable, "-c", "raise SystemExit(1)"]])})
+        results = self.runner().execute({"web": self.plan(), "api": self.plan("api", validation_mode="always", validation=[[sys.executable, "-c", "raise SystemExit(1)"]])})
         self.assertEqual([r["state"] for r in results["repositories"]], ["SUBMITTED", "FAILED"])
+        self.assertEqual(results["repositories"][1]["error_code"], "VALIDATION_FAILED")
         self.assertEqual(self.runner().identity("web")["generation"], 1)
         self.assertEqual(self.runner().identity("api")["generation"], 0)
 
@@ -461,24 +471,230 @@ class SubmitTests(unittest.TestCase):
         self.assertEqual(git(self.repos["web"], "diff", "--name-only", f"{merged_sha}...HEAD"), "next.txt")
         self.assertIn("task", submit.remote_heads(self.repos["web"], "origin", "task"))
 
-    def test_exact_validation_reuse_requires_optin_context_and_same_basis(self):
-        runner = self.runner(reuse_validation=True)
-        name, repo = "web", self.repos["web"]
-        plan = self.plan(validation_context="fixture-toolchain-v1")
-        manifest.acquire_operation_lock(self.root, runner.slot, runner.token)
-        self.addCleanup(manifest.release_operation_lock, self.root, runner.slot, runner.token)
-        head = git(repo, "rev-parse", "HEAD")
+    def test_default_submit_does_not_rerun_development_validation(self):
+        self.change()
         with mock.patch.object(verifier, "command", wraps=verifier.command) as command:
-            for _ in range(2):
-                with runner.phase("validation"):
-                    runner.validate(name, repo, head, plan, head)
-            invocations = [c for c in command.call_args_list if c.args[0][0] == sys.executable]
-            self.assertEqual(len(invocations), 1)
-            plan["validation_context"] = "fixture-toolchain-v2"
-            with runner.phase("validation"):
-                runner.validate(name, repo, head, plan, head)
-            self.assertFalse(runner.timings[-1]["reused"])
-        self.assertTrue(runner.timings[1]["reused"])
+            result = self.run_plan(self.plan(validation=[[sys.executable, "-c", "raise SystemExit(99)"]]))
+        self.assertState(result, "SUBMITTED")
+        self.assertFalse(any(c.args[0][0] == sys.executable for c in command.call_args_list))
+        phase = next(p for p in result["phases"] if p["phase"] == "validation")
+        self.assertFalse(phase["executed"])
+
+    def test_default_submit_needs_no_test_commands_or_cache_context(self):
+        self.change()
+        plan = self.plan()
+        plan.pop("validation")
+        self.assertState(self.run_plan(plan), "SUBMITTED")
+
+    def test_explicit_test_request_executes_commands(self):
+        self.change()
+        with mock.patch.object(verifier, "command", wraps=verifier.command) as command:
+            result = self.runner(test=True).execute({"web": self.plan()})["repositories"][0]
+        self.assertState(result, "SUBMITTED")
+        self.assertEqual(sum(c.args[0][0] == sys.executable for c in command.call_args_list), 1)
+
+    def advance_source(self):
+        source = self.sources["web"]
+        (source / "source.txt").write_text("source change\n")
+        git(source, "add", "source.txt")
+        git(source, "commit", "-m", "원본 변경")
+        git(source, "push", "origin", "main")
+
+    def test_changed_tree_requires_revalidation_and_retry_cannot_silently_skip_it(self):
+        self.change()
+        self.advance_source()
+        result = self.run_plan(self.plan(validation=[]))
+        self.assertState(result, "FAILED")
+        self.assertEqual(result["error_code"], "REVALIDATION_REQUIRED")
+        self.assertEqual(self.api.create_calls, 0)
+        self.assertState(self.run_plan(self.plan(validation=[])), "FAILED")
+        with mock.patch.object(verifier, "command", wraps=verifier.command) as command:
+            result = self.run_plan()
+        self.assertState(result, "SUBMITTED")
+        self.assertEqual(sum(c.args[0][0] == sys.executable for c in command.call_args_list), 1)
+
+    def test_commit_id_only_change_does_not_trigger_validation(self):
+        self.change()
+        source = self.sources["web"]
+        git(source, "commit", "--allow-empty", "-m", "메타데이터만 변경")
+        git(source, "push", "origin", "main")
+        result = self.run_plan(self.plan(validation=[]))
+        self.assertState(result, "SUBMITTED")
+        self.assertEqual(self.runner().identity("web")["branch"], "task-stageflow-g2")
+        self.assertFalse(next(p for p in result["phases"] if p["phase"] == "validation")["executed"])
+
+    def test_prepare_generates_snapshot_and_skips_unselected_clean_remote_queries(self):
+        self.add_repo("api")
+        self.change()
+        with mock.patch.object(self.api, "find", wraps=self.api.find) as find:
+            result = self.runner().prepare()
+        generated = json.loads(Path(result["plan_path"]).read_text())["repositories"]
+        self.assertEqual(set(generated), {"web"})
+        self.assertEqual(generated["web"]["expected_head"], self.plan()["expected_head"])
+        self.assertEqual(generated["web"]["paths"], ["feature.txt"])
+        self.assertFalse(any(c.args[0] == "owner/api" for c in find.call_args_list))
+        again = self.runner().prepare()
+        self.assertNotEqual(result["plan_path"], again["plan_path"])
+        self.assertEqual(Path(result["plan_path"]).read_text(), Path(again["plan_path"]).read_text())
+
+    def test_execute_preflight_is_local_and_does_not_query_sibling_remote(self):
+        self.add_repo("api")
+        self.change()
+        runner = self.runner()
+        with mock.patch.object(submit, "remote_heads", wraps=submit.remote_heads) as heads, \
+                mock.patch.object(self.api, "find", wraps=self.api.find) as find:
+            runner.preflight(local_only=True, repositories={"web"})
+        heads.assert_not_called()
+        find.assert_not_called()
+        with mock.patch.object(submit, "remote_heads", wraps=submit.remote_heads) as heads:
+            self.assertState(self.run_plan(), "SUBMITTED")
+        self.assertFalse(any(c.args[0] == self.repos["api"] for c in heads.call_args_list))
+
+    def test_failure_after_creation_returns_pr_url(self):
+        self.change()
+        self.api.corrupt_patch = True
+        result = self.run_plan()
+        self.assertState(result, "FAILED")
+        self.assertEqual(result["pr"], "https://github.com/owner/web/pull/1")
+        self.assertEqual(result["failed_phase"], "verify_pr")
+        self.assertEqual(result["error_code"], "VERIFICATION_FAILED")
+
+    def test_two_binary_additions_accept_github_summary_and_verify_full_tree(self):
+        repo = self.repos["web"]
+        (repo / "card.jpg").write_bytes(b"\xff\xd8\x00card\xff\xd9")
+        (repo / "cuty.jpg").write_bytes(b"\xff\xd8\x00cuty\xff\xd9")
+        with mock.patch.object(self.api, "api", wraps=self.api.api) as api:
+            result = self.run_plan()
+        self.assertState(result, "SUBMITTED")
+        self.assertEqual(result["files"], 2)
+        self.assertEqual(result["tree_sha"], git(repo, "rev-parse", "HEAD^{tree}"))
+        self.assertEqual(sum('/git/commits/' in c.args[0] for c in api.call_args_list), 2)
+        raw = self.api.api("repos/owner/web/pulls/1", diff=True)
+        self.assertNotIn(b"GIT binary patch", raw)
+        self.assertEqual(raw.count(b"Binary files "), 2)
+
+    def test_binary_replace_delete_rename_and_mode_changes(self):
+        repo = self.repos["web"]
+        for name in ("replace.bin", "delete.bin", "old.bin", "mode.bin"):
+            (repo / name).write_bytes(b"\0original binary " + name.encode())
+        git(repo, "add", ".")
+        git(repo, "commit", "-m", "바이너리 기준")
+        # Publish this baseline to source, then exercise all operations in one PR.
+        git(self.sources["web"], "merge", "--ff-only", "task")
+        git(self.sources["web"], "push", "origin", "main")
+        self.data["slots"]["slot-3"]["repositories"]["web"]["branch_base_sha"] = git(repo, "rev-parse", "HEAD")
+        manifest.write_manifest(manifest.manifest_path(self.root), self.data)
+        (repo / "replace.bin").write_bytes(b"\0replacement binary")
+        git(repo, "rm", "delete.bin")
+        git(repo, "mv", "old.bin", "new.bin")
+        (repo / "mode.bin").chmod(0o755)
+        result = self.run_plan()
+        self.assertState(result, "SUBMITTED")
+        self.assertEqual(result["files"], 4)
+
+    def test_binary_proof_rejects_wrong_or_incomplete_tree_even_when_patch_matches(self):
+        repo = self.repos["web"]
+        (repo / "image.bin").write_bytes(b"\0binary")
+        self.assertState(self.run_plan(), "SUBMITTED")
+        head = git(repo, "rev-parse", "HEAD")
+        source = git(self.sources["web"], "rev-parse", "HEAD")
+        original = self.api.api
+        for incomplete in (False, True):
+            def bad_tree(endpoint, **kwargs):
+                response = original(endpoint, **kwargs)
+                if '/git/commits/' in endpoint:
+                    response['tree'] = {} if incomplete else {'sha': '0' * 40}
+                return response
+            with self.subTest(incomplete=incomplete), mock.patch.object(self.api, "api", side_effect=bad_tree), \
+                    self.assertRaisesRegex(verifier.VerificationError, "tree mismatch"):
+                verifier.verify(repo, "owner/web", 1, "main", "task", source, head, self.api)
+
+    def test_binary_summary_does_not_allow_truncated_patch(self):
+        (self.repos["web"] / "image.bin").write_bytes(b"\0binary")
+        self.api.corrupt_patch = True
+        result = self.run_plan()
+        self.assertState(result, "FAILED")
+        self.assertEqual(result["error_code"], "VERIFICATION_FAILED")
+        self.assertEqual(self.runner().identity("web")["generation"], 0)
+
+    def test_failure_between_rotation_and_validation_does_not_lose_required_recheck(self):
+        self.change()
+        self.advance_source()
+        first = self.run_plan(self.plan(validation=[], pr_title=""))
+        self.assertState(first, "FAILED")
+        self.assertEqual(self.runner().identity("web")["branch"], "task-stageflow-g2")
+        second = self.run_plan(self.plan(validation=[]))
+        self.assertState(second, "FAILED")
+        self.assertEqual(second["error_code"], "REVALIDATION_REQUIRED")
+        self.assertEqual(self.api.create_calls, 0)
+
+    def test_no_diff_does_not_force_tests_for_the_next_development_change(self):
+        self.change()
+        source = self.sources["web"]
+        (source / "feature.txt").write_text("new feature\n")
+        self.advance_source()  # Commits source.txt; include the same task work separately.
+        git(source, "add", "feature.txt")
+        git(source, "commit", "-m", "동일 기능 이미 반영")
+        git(source, "push", "origin", "main")
+        self.assertState(self.run_plan(self.plan(validation=[])), "NO_DIFF")
+        self.change(filename="next.ts")
+        self.assertState(self.run_plan(self.plan(validation=[])), "SUBMITTED")
+
+    def test_prepare_reports_committed_work_even_when_dirty_paths_are_empty(self):
+        self.change()
+        repo = self.repos["web"]
+        git(repo, "add", "feature.txt")
+        git(repo, "commit", "-m", "개발 단계 커밋")
+        row = self.runner().prepare()["repositories"][0]
+        self.assertEqual(row["changed_paths"], [])
+        self.assertEqual(row["committed_review"]["changed_paths"], ["feature.txt"])
+
+    def test_cli_prepare_review_execute_roundtrip_without_tests(self):
+        self.change()
+        runner_type = submit.Runner
+        def runner(root, bundle, test=False):
+            return runner_type(root, bundle, api=self.api, test=test)
+        args = ["submit_bundle.py", "--root", str(self.root), "--bundle", "worktrees/slot-3"]
+        output = io.StringIO()
+        with mock.patch.object(submit, "Runner", side_effect=runner), \
+                mock.patch.object(sys, "argv", args + ["--prepare"]), \
+                mock.patch.object(sys, "stdout", output):
+            self.assertEqual(submit.main(), 0)
+        path = Path(json.loads(output.getvalue())["plan_path"])
+        document = json.loads(path.read_text())
+        document["repositories"]["web"].update(commit_message="기능 추가", transfer_subject="기능 추가",
+            pr_title="기능 추가", pr_body="개발 단계에서 검증한 기능입니다.")
+        path.write_text(json.dumps(document))
+        output = io.StringIO()
+        with mock.patch.object(submit, "Runner", side_effect=runner), \
+                mock.patch.object(sys, "argv", args + ["--execute", "--plan", str(path)]), \
+                mock.patch.object(sys, "stdout", output):
+            self.assertEqual(submit.main(), 0)
+        result = json.loads(output.getvalue())["repositories"][0]
+        self.assertState(result, "SUBMITTED")
+        self.assertFalse(next(p for p in result["phases"] if p["phase"] == "validation")["executed"])
+
+    def test_merged_pending_recovers_even_with_deleted_remote_branch_and_dirty_continuation(self):
+        self.change()
+        self.api.corrupt_patch = True
+        self.assertState(self.run_plan(), "FAILED")
+        saved = git(self.repos["web"], "rev-parse", "HEAD")
+        source = self.sources["web"]
+        git(source, "merge", "--squash", "task")
+        git(source, "commit", "-m", "기능 병합")
+        git(source, "push", "origin", "main")
+        self.api.prs[("owner/web", 1)].update(state="closed", merged_at="2026-09-11T00:00:00Z",
+            merge_commit_sha=git(source, "rev-parse", "HEAD"))
+        git(self.remotes["web"], "update-ref", "-d", "refs/heads/task")
+        self.change(filename="next.txt")
+        self.api.corrupt_patch = False
+        result = self.run_plan()
+        self.assertState(result, "RECORDED")
+        self.assertEqual(result["pr_state"], "MERGED")
+        self.assertEqual(self.api.create_calls, 1)
+        self.assertEqual(self.runner().identity("web")["submission"]["continuation_boundary_sha"], saved)
+        self.assertIn("?? next.txt", git(self.repos["web"], "status", "--porcelain"))
+        self.assertNotIn("task", submit.remote_heads(self.repos["web"], "origin", "task"))
 
 
 class PatchTests(unittest.TestCase):

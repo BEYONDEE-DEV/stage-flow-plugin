@@ -29,6 +29,10 @@ class SubmitError(RuntimeError):
     pass
 
 
+class RevalidationRequired(SubmitError):
+    pass
+
+
 def digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
 
@@ -111,7 +115,7 @@ def korean(value: Any, label: str) -> str:
 
 class Runner:
     def __init__(self, root: Path, bundle: str, api: verifier.GitHub | None = None,
-                 reuse_validation: bool = False):
+                 test: bool = False):
         self.root = root.resolve()
         self.base, self.slot, _ = inspector.resolve_bundle(self.root, bundle)
         if self.slot is None:
@@ -121,7 +125,8 @@ class Runner:
         self.receipt_path = self.root / ".stageflow-worktrees" / "submissions" / (digest(self.slot) + ".json")
         self.api = api or verifier.GitHub()
         self.token = uuid.uuid4().hex
-        self.reuse_validation = reuse_validation
+        self.test = test
+        self.validation_trees: dict[str, str] = {}
         self.receipts: dict[str, Any] = {}
         self.timings: list[dict] = []
 
@@ -183,7 +188,9 @@ class Runner:
             raise SubmitError("active branch has an unrecorded PR; exact publication recovery required")
         return state
 
-    def preflight(self, *, content_snapshot: bool = True, skip_dirty: bool = False) -> dict:
+    def preflight(self, *, content_snapshot: bool = True, skip_dirty: bool = False,
+                  repositories: set[str] | None = None, local_only: bool = False,
+                  candidates_only: bool = False) -> dict:
         started = time.monotonic()
         self.load_receipts()
         scan = inspector.inspect_bundle(self.root, self.bundle)
@@ -217,23 +224,69 @@ class Runner:
                 if branch not in allowed:
                     raise SubmitError("checked-out branch disagrees with manifest")
                 repository, remote_key = remote_identity(repo, identity["remote"])
+                head = g(repo, "rev-parse", "HEAD")
+                submission = identity.get("submission") or {}
+                boundary = (submission.get("observed_head_sha") if branch == submission.get("head_branch")
+                            else identity["branch_base_sha"])
+                candidate = (item["dirty"] != "clean" or head != boundary or bool(rotation) or
+                             bool(self.receipts.get(name, {}).get("pending")))
+                row.update(branch=branch, head_sha=head, generation=identity["generation"],
+                           github_repository=repository, remote_key=remote_key,
+                           identity_fingerprint=digest(identity), rotation=rotation.get("phase"))
+                if (repositories is not None and name not in repositories) or (
+                        repositories is None and candidates_only and not candidate):
+                    row.update(state="LOCAL_ONLY", reason="not selected for publication")
+                    rows.append(row)
+                    continue
+                if local_only:
+                    row.update(state="READY")
+                    rows.append(row)
+                    continue
                 heads = remote_heads(repo, identity["remote"], identity["source_branch"], branch)
                 source = heads.get(identity["source_branch"])
                 if not source:
                     raise SubmitError("bound remote source is missing")
                 row.update(state=self.classify(name, identity, repository), branch=branch,
-                           head_sha=g(repo, "rev-parse", "HEAD"), generation=identity["generation"],
+                           head_sha=head, generation=identity["generation"],
                            source_sha=source, github_repository=repository, remote_key=remote_key,
                            identity_fingerprint=digest(identity),
                            changed_paths=sorted(changed_paths(repo)), rotation=rotation.get("phase"),
                            remote_head_sha=heads.get(branch))
                 if content_snapshot:
                     row["worktree_fingerprint"] = worktree_fingerprint(repo)
+                    review_boundary = rotation.get("boundary_sha") or (
+                        submission.get("continuation_boundary_sha") if branch == submission.get("head_branch")
+                        else identity["branch_base_sha"])
+                    review_head = rotation.get("from_head_sha", head)
+                    committed_paths = verifier.git(repo, "diff", "--name-only", "--no-renames", "-z",
+                                                   review_boundary, review_head, "--")
+                    row["committed_review"] = {"boundary_sha": review_boundary, "head_sha": review_head,
+                        "changed_paths": [p for p in committed_paths.decode(errors="surrogateescape").split("\0") if p]}
+                    row["plan"] = {"expected_head": head, "expected_generation": identity["generation"],
+                        "expected_branch": branch, "expected_worktree": row["worktree_fingerprint"],
+                        "expected_remote": remote_key, "expected_identity": digest(identity),
+                        "paths": row["changed_paths"], "commit_message": "", "transfer_subject": "",
+                        "pr_title": "", "pr_body": ""}
             except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
                 row.update(state="BLOCKED", error=str(exc))
             rows.append(row)
         return {"mode": "preflight", "slot": self.slot, "bundle": str(self.base),
                 "repositories": rows, "errors": missing, "seconds": round(time.monotonic() - started, 3)}
+
+    def prepare(self, repositories: set[str] | None = None) -> dict:
+        result = self.preflight(repositories=repositories, candidates_only=True)
+        plans = {row["repository"]: row["plan"] for row in result["repositories"] if "plan" in row}
+        if plans:
+            path = self.root / ".stageflow-worktrees" / "submit-plans" / (uuid.uuid4().hex + ".json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("x", encoding="utf-8") as stream:
+                json.dump({"repositories": plans}, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+            result["plan_path"] = str(path)
+        # Snapshot fields are already in the file; keep the human-facing report compact.
+        for row in result["repositories"]:
+            row.pop("plan", None)
+        return result
 
     def bound(self, name: str, identity: dict, remote_key: str) -> Path:
         manifest.require_operation_lock(self.root, self.slot, self.token)
@@ -308,7 +361,8 @@ class Runner:
             g(repo, "merge-base", "--is-ancestor", pr["merge_commit_sha"], source)
         return source
 
-    def rotate(self, name: str, source: str, subject: str | None, expected_head: str) -> str:
+    def rotate(self, name: str, source: str, subject: str | None, expected_head: str,
+               *, before_change=None) -> str:
         identity, repo = self.identity(name), self.base / name
         clean(repo)
         if g(repo, "rev-parse", "HEAD") != expected_head:
@@ -328,6 +382,8 @@ class Runner:
                 identity["branch_generation"], a["from_head_sha"], boundary, source, a["source_tree_sha"],
                 a["target_branch"], a["target_branch_generation"], a["result_tree_sha"], transfer, str(temporary))], self.root))
             rotation = self.identity(name)["rotation"]
+        if before_change is not None:
+            before_change(rotation["result_tree_sha"])
         args = argparse.Namespace(repo=repo, source=rotation["source_sha"], source_tree=rotation["source_tree_sha"],
             result_tree=rotation["result_tree_sha"], branch_family=identity["branch_family"],
             target_generation=rotation["target_branch_generation"], message=rotation["transfer_subject"],
@@ -364,42 +420,63 @@ class Runner:
             rotation["target_head_sha"], rotation["result_tree_sha"]))
         return rotation["target_head_sha"]
 
+    def rotate_for_submit(self, name: str, source: str, subject: str | None, expected_head: str) -> str:
+        def mark_changed(tree):
+            if tree != self.validation_trees[name]:
+                self.receipts.setdefault(name, {})["revalidation_required"] = True
+                self.save()  # Persist BEFORE branch creation/switch, including crash recovery.
+        return self.rotate(name, source, subject, expected_head, before_change=mark_changed)
+
+    def no_diff(self, name: str, branch: str) -> dict:
+        # Nothing remains to publish; do not make a future independent development
+        # change inherit a recheck requirement from this now-empty submission.
+        self.receipts.setdefault(name, {}).pop("revalidation_required", None)
+        self.save()
+        return {"state": "NO_DIFF", "branch": branch}
+
     def validate(self, name: str, repo: Path, source: str, plan: dict, expected_head: str) -> None:
-        commands = plan.get("validation")
-        if not isinstance(commands, list) or any(not isinstance(cmd, list) or not cmd or
-                any(not isinstance(arg, str) or not arg for arg in cmd) for cmd in commands):
-            raise SubmitError("validation must be a list of argv arrays (no shell strings)")
-        if not commands and not plan.get("validation_not_applicable"):
-            raise SubmitError("supply validation commands or an explicit not-applicable reason")
-        timeout = plan.get("validation_timeout_seconds", 900)
-        if type(timeout) is not int or not 1 <= timeout <= 3600:
-            raise SubmitError("validation_timeout_seconds must be between 1 and 3600")
         clean(repo)
         if g(repo, "rev-parse", "HEAD") != expected_head:
             raise SubmitError("HEAD changed before validation")
-        fingerprint = digest({"head": expected_head, "source": source,
-            "commands": commands, "context": plan.get("validation_context"),
-            "environment": dict(os.environ),
-            "config": g(repo, "config", "--null", "--list")})
+        tree = g(repo, "rev-parse", expected_head + "^{tree}")
+        mode = plan.get("validation_mode", "if-changed")
+        if mode not in {"if-changed", "always"}:
+            raise SubmitError("validation_mode must be if-changed or always")
         receipt = self.receipts.setdefault(name, {})
-        reused = bool(self.reuse_validation and plan.get("validation_context") and
-                      receipt.get("validation_fingerprint") == fingerprint)
-        if not reused:
-            receipt.pop("validation_fingerprint", None)
-            self.save()
-            for command in commands:
-                verifier.command(command, cwd=repo, timeout=timeout)
-            clean(repo)
-            if fingerprint != digest({"head": g(repo, "rev-parse", "HEAD"), "source": source,
-                    "commands": commands, "context": plan.get("validation_context"),
-                    "environment": dict(os.environ),
-                    "config": g(repo, "config", "--null", "--list")}):
-                raise SubmitError("validation changed its input basis")
-            receipt["validation_fingerprint"] = fingerprint
-            self.save()
-        self.timings[-1]["reused"] = reused
+        changed = self.validation_trees.get(name) != tree
+        required = changed or bool(receipt.get("revalidation_required"))
+        item = self.timings[-1]
+        item.update(mode=mode, tree_changed=changed)
+        if not self.test and mode != "always" and not required:
+            item.update(executed=False, reason="development validation assumed; submitted tree unchanged")
+            return
+        # Keep an interrupted/failed required recheck from becoming "already tested"
+        # merely because the next attempt starts on the rotated commit.
+        receipt["revalidation_required"] = True
+        self.save()
+        commands = plan.get("validation", [])
+        if not isinstance(commands, list) or any(not isinstance(cmd, list) or not cmd or
+                any(not isinstance(arg, str) or not arg for arg in cmd) for cmd in commands):
+            raise SubmitError("validation must be a list of argv arrays (no shell strings)")
+        if not commands:
+            item.update(executed=False, reason="changed tree or explicit test request needs validation commands")
+            raise RevalidationRequired("REVALIDATION_REQUIRED: provide focused validation commands for the changed tree "
+                                       "(or the explicit test request); no PR was published")
+        timeout = plan.get("validation_timeout_seconds", 900)
+        if type(timeout) is not int or not 1 <= timeout <= 3600:
+            raise SubmitError("validation_timeout_seconds must be between 1 and 3600")
+        item.update(executed=True, reason="explicit request" if self.test or mode == "always" else "submitted tree changed")
+        for command in commands:
+            verifier.command(command, cwd=repo, timeout=timeout)
+        clean(repo)
+        if g(repo, "rev-parse", "HEAD") != expected_head:
+            raise SubmitError("validation changed its input basis")
+        self.validation_trees[name] = tree
+        receipt.pop("revalidation_required", None)
+        self.save()
 
-    def check_publication(self, name: str, pending: dict, *, recovering: bool) -> Path:
+    def check_publication(self, name: str, pending: dict, *, recovering: bool,
+                          source_sha: str | None = None) -> tuple[Path, dict[str, str]]:
         identity = self.identity(name)
         if identity != pending["identity"]:
             raise SubmitError("publication manifest basis changed; preserve receipt for exact recovery")
@@ -414,14 +491,13 @@ class Runner:
             if g(repo, "rev-parse", "HEAD") != pending["head_sha"]:
                 raise SubmitError("publication HEAD changed")
         heads = remote_heads(repo, identity["remote"], identity["source_branch"], pending["branch"])
-        if heads.get(identity["source_branch"]) != pending["source_sha"]:
+        if heads.get(identity["source_branch"]) != (source_sha or pending["source_sha"]):
             raise SubmitError("source advanced at publication boundary; pending submission preserved, no automatic rewrite")
         if heads.get(pending["branch"]) not in {None, pending["head_sha"]}:
             raise SubmitError("remote head differs; no overwrite or force push")
-        return repo
+        return repo, heads
 
     def publish(self, name: str, pending: dict, *, recovering: bool = False) -> dict:
-        repo = self.check_publication(name, pending, recovering=recovering)
         repository, branch, identity = pending["repository"], pending["branch"], pending["identity"]
         matches = self.api.find(repository, branch)
         if len(matches) > 1:
@@ -431,9 +507,9 @@ class Runner:
             verifier.check_identity(pr, repository, identity["source_branch"], branch,
                                     pending["head_sha"], source_sha=pending["source_sha"])
         else:
-            heads = remote_heads(repo, identity["remote"], branch)
+            # Reuse the source+head query from the immediately-before-push guard.
+            repo, heads = self.check_publication(name, pending, recovering=recovering)
             if not heads.get(branch):
-                self.check_publication(name, pending, recovering=recovering)
                 # Empty expected ref is a create-only lease; even a raced ancestor is not overwritten.
                 with self.phase("push"):
                     g(repo, "push", "--force-with-lease=refs/heads/" + branch + ":", identity["remote"],
@@ -449,10 +525,17 @@ class Runner:
                 with self.phase("create_pr"):
                     url = self.api.create(repository, identity["source_branch"], branch, pending["title"], pending["body"])
                 pr = {"number": verifier.pr_number(url, repository)}
+        pending["pr_url"] = f"https://github.com/{repository}/pull/{pr['number']}"
+        self.save()  # Creation succeeded even when the following verification fails.
+        repo = self.base / name
         with self.phase("verify_pr"):
             result = verifier.verify(repo, repository, pr["number"], identity["source_branch"], branch,
                                      pending["source_sha"], pending["head_sha"], self.api)
         self.check_publication(name, pending, recovering=recovering)
+        return self.record_publication(name, pending, result)
+
+    def record_publication(self, name: str, pending: dict, result: dict) -> dict:
+        identity, branch = pending["identity"], pending["branch"]
         with self.phase("record"):
             pending["verified_pr"] = result
             self.save()
@@ -464,7 +547,36 @@ class Runner:
             self.mutate(record)
             self.receipts[name].pop("pending", None)
             self.save()
-        return {"state": "SUBMITTED", **result}
+        return {"state": "RECORDED" if result.get("pr_state") == "MERGED" else "SUBMITTED", **result}
+
+    def recover_merged(self, name: str, pending: dict) -> dict | None:
+        """Record exactly the saved submission if the user merged it before recovery.
+
+        No branch recreation, continuation commit, test run, or history rewrite.
+        GitHub's merge evidence and the saved pre-merge patch are both required.
+        """
+        matches = self.api.find(pending["repository"], pending["branch"])
+        if len(matches) > 1:
+            raise SubmitError("multiple PRs for the pending publication")
+        if not matches or not matches[0].get("merged_at"):
+            return None
+        pr, identity = matches[0], pending["identity"]
+        verifier.check_identity(pr, pending["repository"], identity["source_branch"], pending["branch"],
+                                pending["head_sha"], state="MERGED")
+        pending["pr_url"] = pr["html_url"]
+        self.save()
+        repo = self.bound(name, identity, pending["remote_key"])
+        source = self.fetch_source(repo, identity)
+        g(repo, "merge-base", "--is-ancestor", pending["source_sha"], source)
+        g(repo, "merge-base", "--is-ancestor", pr["merge_commit_sha"], source)
+        basis = pr["base"]["sha"]
+        if verifier.local_diff(repo, pending["source_sha"], pending["head_sha"]) != \
+                verifier.local_diff(repo, basis, pending["head_sha"]):
+            raise SubmitError("merged recovery changed the saved submission patch")
+        result = verifier.verify(repo, pending["repository"], pr["number"], identity["source_branch"],
+                                 pending["branch"], basis, pending["head_sha"], self.api, state="MERGED")
+        self.check_publication(name, pending, recovering=True, source_sha=source)
+        return self.record_publication(name, pending, result)
 
     def recover_source(self, name: str, pending: dict) -> bool:
         """Return True only when an unpublished intent can safely be replanned without B."""
@@ -519,6 +631,9 @@ class Runner:
                 self.save()
                 return {"state": "RECORDED", **result}
             with self.phase("recover_publication"):
+                merged = self.recover_merged(name, pending)
+                if merged:
+                    return merged
                 if self.recover_source(name, pending):
                     # No remote publication and no continuation: the saved reviewed commit
                     # remains the sole work input. Replan it once using the normal path.
@@ -539,23 +654,27 @@ class Runner:
             raise SubmitError("reviewed plan snapshot no longer matches HEAD/branch/generation; refresh preflight")
         state = self.classify(name, identity, row["github_repository"])
         expected_head = plan["expected_head"]
+        reviewed_head = identity.get("rotation", {}).get("from_head_sha", expected_head)
+        self.validation_trees[name] = g(repo, "rev-parse", reviewed_head + "^{tree}")
         if identity.get("rotation"):
             with self.phase("resume_rotation"):
-                expected_head = self.rotate(name, identity["rotation"]["source_sha"], None, expected_head)
+                expected_head = self.rotate_for_submit(name, identity["rotation"]["source_sha"], None, expected_head)
             if changed_paths(repo):
                 raise SubmitError("rotation recovery cannot consume new dirty work")
         else:
             with self.phase("commit"):
                 expected_head = self.commit(repo, plan)
+            reviewed_head = expected_head
+        self.validation_trees[name] = g(repo, "rev-parse", reviewed_head + "^{tree}")
         if state == "OPEN":
             return {"state": "WAITING", "pr": identity["pr"], "pushed": False}
         with self.phase("fetch_and_rotate"):
             identity = self.identity(name)
             source = self.fetch_source(repo, identity)
-            expected_head = self.rotate(name, source, plan.get("transfer_subject"), expected_head)
+            expected_head = self.rotate_for_submit(name, source, plan.get("transfer_subject"), expected_head)
         identity = self.identity(name)
         if not verifier.git(repo, "diff", "--name-only", f"{source}...HEAD", "--"):
-            return {"state": "NO_DIFF", "branch": identity["branch"]}
+            return self.no_diff(name, identity["branch"])
         title, body = korean(plan.get("pr_title"), "pr_title"), korean(plan.get("pr_body"), "pr_body")
         with self.phase("validation"):
             self.validate(name, repo, source, plan, expected_head)
@@ -564,10 +683,10 @@ class Runner:
             with self.phase("source_replan"):
                 refreshed = self.fetch_source(repo, identity)
                 g(repo, "merge-base", "--is-ancestor", source, refreshed)
-                expected_head = self.rotate(name, refreshed, plan.get("transfer_subject"), expected_head)
+                expected_head = self.rotate_for_submit(name, refreshed, plan.get("transfer_subject"), expected_head)
                 source, identity = refreshed, self.identity(name)
             if not verifier.git(repo, "diff", "--name-only", f"{source}...HEAD", "--"):
-                return {"state": "NO_DIFF", "branch": identity["branch"]}
+                return self.no_diff(name, identity["branch"])
             with self.phase("validation"):
                 self.validate(name, repo, source, plan, expected_head)
         pending = {"identity": identity, "repository": row["github_repository"],
@@ -582,11 +701,13 @@ class Runner:
             return self.publish(name, pending)
 
     def execute(self, plans: dict[str, dict]) -> dict:
-        preflight = self.preflight()  # Complete selected bundle before the first routine write.
-        rows = {row["repository"]: row for row in preflight["repositories"]}
         bindings = manifest.require_slot(manifest.load_manifest(self.path), self.slot)["repositories"]
         if not isinstance(plans, dict) or not plans or set(plans) - set(bindings):
             raise SubmitError("plan must select one or more exact manifest repositories")
+        # All bundle paths/occupancy still get checked; expensive remote queries run
+        # only for selected repositories at their actual mutation boundaries.
+        preflight = self.preflight(repositories=set(plans), local_only=True, content_snapshot=False)
+        rows = {row["repository"]: row for row in preflight["repositories"]}
         results = []
         manifest.acquire_operation_lock(self.root, self.slot, self.token)
         try:
@@ -603,8 +724,14 @@ class Runner:
                         raise SubmitError("manifest repository is missing/mismatched in bundle inspection")
                     result = self.execute_one(name, plan, rows[name])
                 except (RuntimeError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+                    failed_phase = next((p["phase"] for p in reversed(self.timings) if not p["ok"]), None)
                     result = {"state": "FAILED", "error": str(exc)[-2000:],
-                              "recovery_pending": bool(receipt.get("pending"))}
+                              "recovery_pending": bool(receipt.get("pending")),
+                              "pr": (receipt.get("pending") or {}).get("pr_url"),
+                              "error_code": "REVALIDATION_REQUIRED" if isinstance(exc, RevalidationRequired) else
+                                            "VERIFICATION_FAILED" if failed_phase == "verify_pr" else
+                                            "VALIDATION_FAILED" if failed_phase == "validation" else "SUBMIT_FAILED",
+                              "failed_phase": failed_phase}
                 result.update(repository=name, seconds=round(time.monotonic() - started, 3),
                               attempts=receipt["attempts"], retry_count=receipt["attempts"] - 1, phases=self.timings)
                 receipt["last_result"] = result
@@ -623,16 +750,30 @@ def main() -> int:
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--plan", type=Path, help="Reviewed JSON object with repositories mapping")
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--reuse-validation", action="store_true", help="Exact-basis reuse; requires validation_context")
+    parser.add_argument("--prepare", action="store_true", help="Create a new snapshot plan; never overwrite an existing plan")
+    parser.add_argument("--repository", action="append", help="Limit remote preflight to exact manifest repository names")
+    parser.add_argument("--test", action="store_true", help="Explicitly run the plan's validation commands during submit")
     args = parser.parse_args()
     try:
-        runner = Runner(args.root, args.bundle, reuse_validation=args.reuse_validation)
+        runner = Runner(args.root, args.bundle, test=args.test)
+        if args.prepare and args.execute:
+            raise SubmitError("--prepare and --execute are separate operations")
+        selected = set(args.repository) if args.repository else None
+        if selected and selected - set(manifest.require_slot(manifest.load_manifest(runner.path), runner.slot)["repositories"]):
+            raise SubmitError("--repository must name exact manifest repositories")
+        if (args.test or args.plan) and not args.execute:
+            raise SubmitError("--test and --plan require --execute")
         if args.execute:
             if not args.plan:
                 raise SubmitError("--execute requires --plan")
-            result = runner.execute(json.loads(args.plan.read_text())["repositories"])
+            plans = json.loads(args.plan.read_text())["repositories"]
+            if selected and set(plans) != selected:
+                raise SubmitError("--repository must match the reviewed plan selection")
+            result = runner.execute(plans)
+        elif args.prepare:
+            result = runner.prepare(selected)
         else:
-            result = runner.preflight()
+            result = runner.preflight(repositories=selected, candidates_only=True)
         print(json.dumps(result, ensure_ascii=False))
         return int(bool(result["errors"]) or any(row["state"] in {"FAILED", "BLOCKED"} for row in result["repositories"]))
     except (RuntimeError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:

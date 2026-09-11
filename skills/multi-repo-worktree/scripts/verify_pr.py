@@ -110,40 +110,66 @@ def compare_patches(local: bytes, remote: bytes) -> None:
         raise VerificationError(f"PR patch differs at line {number}; code/paths/modes are not normalized")
 
 
-def local_diff(repo: Path, source: str, head: str) -> bytes:
+def local_diff(repo: Path, source: str, head: str, *, binary: bool = True) -> bytes:
     return git(repo, "-c", "diff.algorithm=myers", "-c", "diff.indentHeuristic=true",
-               "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--full-index", "--binary",
+               "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--full-index",
+               *(["--binary"] if binary else []),
                "--find-renames=50%", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/",
                "--unified=3", "--inter-hunk-context=0", f"{source}...{head}", "--")
 
 
+def verify_tree(repo: Path, repository: str, commit: str, api: GitHub) -> str:
+    """A full root-tree OID binds every path, mode, type and blob, including binary data.
+
+    Reading the commit's tree ID avoids downloading binary payloads or recursive tree
+    listings (which can be truncated). Never accept abbreviated object IDs here.
+    """
+    expected = git(repo, "rev-parse", commit + "^{tree}").decode().strip()
+    remote = api.api(f"repos/{repository}/git/commits/{commit}")
+    if remote.get("sha") != commit or (remote.get("tree") or {}).get("sha") != expected:
+        raise VerificationError("PR Git tree mismatch or incomplete commit response")
+    return expected
+
+
 def verify(repo: Path, repository: str, number: int, base: str, head: str,
-           source_sha: str, head_sha: str, api: GitHub | None = None) -> dict[str, Any]:
+           source_sha: str, head_sha: str, api: GitHub | None = None, *,
+           state: str = "OPEN") -> dict[str, Any]:
     api = api or GitHub()
     pr = api.view(repository, number)
-    check_identity(pr, repository, base, head, head_sha, source_sha=source_sha)
+    check_identity(pr, repository, base, head, head_sha, source_sha=source_sha, state=state)
     expected = set(git(repo, "diff", "--name-only", "-z", "--find-renames=50%",
                        f"{source_sha}...{head_sha}", "--").decode(errors="surrogateescape").split("\0")) - {""}
     files = api.api(f"repos/{repository}/pulls/{number}/files?per_page=100", paginate=True)
     paths = [item["filename"] for item in files]
     if len(paths) != len(set(paths)) or len(paths) != pr.get("changed_files") or set(paths) != expected:
         raise VerificationError("PR changed-files mismatch or incomplete GitHub file response")
-    patch = local_diff(repo, source_sha, head_sha)
+    # GitHub renders binary changes as summaries, not Git binary patch literals.
+    # Prove old/new contents first; text whitespace, modes and rename headers still
+    # undergo the existing strict patch comparison. A missing patch is NOT "binary".
+    merge_base = git(repo, "merge-base", source_sha, head_sha).decode().strip()
+    before_tree = verify_tree(repo, repository, merge_base, api)
+    after_tree = verify_tree(repo, repository, head_sha, api)
+    patch = local_diff(repo, source_sha, head_sha, binary=False)
     compare_patches(patch, api.api(f"repos/{repository}/pulls/{number}", diff=True))
     # Detect a moving PR between the metadata, file-list and patch requests.
-    check_identity(api.view(repository, number), repository, base, head, head_sha, source_sha=source_sha)
+    after = api.view(repository, number)
+    check_identity(after, repository, base, head, head_sha, source_sha=source_sha, state=state)
+    if state == "MERGED" and after.get("merge_commit_sha") != pr.get("merge_commit_sha"):
+        raise VerificationError("PR merge evidence changed during verification")
     return {"verified": True, "pr": pr["html_url"], "head_sha": head_sha,
-            "source_sha": source_sha, "files": len(paths), "patch_sha256": hashlib.sha256(patch).hexdigest()}
+            "source_sha": source_sha, "files": len(paths), "patch_sha256": hashlib.sha256(patch).hexdigest(),
+            "before_tree_sha": before_tree, "tree_sha": after_tree, "pr_state": state}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("repo", "repository", "pr", "base", "head", "source-sha", "head-sha"):
         parser.add_argument("--" + name, required=True)
+    parser.add_argument("--state", choices=("OPEN", "MERGED"), default="OPEN", help="Expected PR state for read-only verification")
     args = parser.parse_args()
     try:
         result = verify(Path(args.repo).resolve(), args.repository, pr_number(args.pr, args.repository),
-                        args.base, args.head, args.source_sha, args.head_sha)
+                        args.base, args.head, args.source_sha, args.head_sha, state=args.state)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except (VerificationError, OSError, ValueError, subprocess.SubprocessError) as exc:
